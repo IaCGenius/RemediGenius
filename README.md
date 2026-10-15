@@ -15,6 +15,9 @@ You can also run that native Hermes profile in local Docker with the same AWS
 collector/S3 design. [Workstation acceptance](docs/WORKSTATION-ACCEPTANCE.md)
 records the real AWS/Qwen and recovery tests. Neither deployment is fully offline.
 
+Read [the preview setup and credential contract](docs/PREVIEW-ONBOARDING.md) for required inputs,
+regions, model access, storage, and what this preview does not provide.
+
 ## Start here
 
 - [Current offering and architecture](docs/CURRENT-CE-OFFERING.md): a diagram,

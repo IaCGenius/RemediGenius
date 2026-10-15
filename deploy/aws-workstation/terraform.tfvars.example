@@ -1,6 +1,12 @@
+# YOUR provisioning account/region. The example region is configurable.
 account_id = "REPLACE_ACCOUNT_ID"
 region = "us-east-1"
+# Exact IAM user/role allowed to assume the limited CE invocation role.
 operator_arn = "arn:aws:iam::REPLACE_ACCOUNT_ID:role/REPLACE_OPERATOR_ROLE"
 name = "rgce-workstation"
+# Continues running in AWS even when local Docker is stopped.
 schedule_enabled = true
 schedule_interval_hours = 24
+
+# Model credentials belong in your launcher environment or Secrets Manager, not here.
+# Full input meanings: docs/PREVIEW-ONBOARDING.md

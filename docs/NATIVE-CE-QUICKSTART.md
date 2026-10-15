@@ -10,11 +10,11 @@ subnet and adds Spot compute with retained EBS.
 
 ## Prerequisites and scope
 
-For the existing deployment, show the dashboard username/password and open the
+From your cloned repository, show the dashboard username/password and open the
 tunnel together from your private PowerShell terminal:
 
 ```powershell
-C:\work\remedigenius-community\tools\open-native-hermes.ps1 -WithLogin
+.\tools\open-native-hermes.ps1 -Region YOUR_REGION -Name YOUR_STACK_NAME -WithLogin
 ```
 
 Open http://127.0.0.1:9121 and leave that terminal running. The script retrieves

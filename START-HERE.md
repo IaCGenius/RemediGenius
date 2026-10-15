@@ -7,6 +7,9 @@ and return later to reassess. This is a single-operator community preview.
 See [current offering and release gates](docs/CURRENT-CE-OFFERING.md) and the
 [current architecture diagram](docs/diagrams/ce-current-offering.html).
 
+Read [the preview setup and credential contract](docs/PREVIEW-ONBOARDING.md) for required inputs,
+regions, model access, storage, and what this preview does not provide.
+
 ## Choose where Hermes runs
 
 | | Your workstation | Your AWS account |
