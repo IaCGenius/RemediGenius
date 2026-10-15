@@ -98,6 +98,30 @@ region for this preview. Security service availability and enabled coverage vary
 - Default Spot pool: `t3.medium` / `t3a.medium`, configurable compatible x86 Nitro
   types. Retained EBS ties the runtime to one Availability Zone.
 
+## Choose a capable model
+
+Use a model with strong security reasoning, reliable multi-step tool calling and
+instruction following. A compatible endpoint alone is insufficient. It must handle
+the supplied skills, AWS evidence and bounded critic packet within its context
+window; an undersized context can fail even when a simple chat succeeds.
+
+The model must preserve account/region/time scope, distinguish missing evidence
+from healthy posture, apply scoped exceptions without inventing policy, and prepare
+technically accurate proposals. Skills and deterministic controls help, but cannot
+make every small/fast model equally reliable. A "reasoning" product label or high
+reasoning-effort setting alone does not establish suitability.
+
+Before adopting another model, run a real bounded AWS read, a knowledge/exception
+question and a remediation proposal with review; inspect receipts and actual critic
+model/context. Qwen 3.8 Max is the tested baseline. [DeepSeek smoke results](DEEPSEEK-SMOKE-ACCEPTANCE.md)
+record two targeted checks on the operator's compatible endpoint. Alternative model smoke tests
+are not full release qualification. Keep provider/model selection in Hermes rather
+than adding model-specific CE code. Use the same operator-owned credentials model.
+
+For local AWS credentials, follow [the authentication steps](WORKSTATION-HERMES.md#authenticate-to-aws-first):
+SSO is preferred; long-lived access keys are optional, and temporary credentials
+need a session token. AWS credentials and the model API key are separate.
+
 ## Your model and credentials
 
 The preview's first-run contract is deliberately narrow: a **custom compatible

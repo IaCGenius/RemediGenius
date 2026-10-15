@@ -13,6 +13,61 @@ Hermes's own cleanup preserves saved conversations in the Docker volume. Finish
 an active run before starting another chat. The overlay must be reviewed when
 updating the official image; a changed source hash stops preparation explicitly.
 
+## Authenticate to AWS first
+
+You need an authenticated AWS operator identity, **not necessarily long-lived
+access keys**. Prefer your organization's IAM Identity Center (SSO) profile:
+
+```sh
+aws configure sso --profile ce-operator
+aws sso login --profile ce-operator
+aws sts get-caller-identity --profile ce-operator
+```
+
+Use your actual SSO details. Confirm the returned account matches Terraform's
+`account_id`. Set `"aws_profile": "ce-operator"` in workstation JSON. Before running
+Terraform, select that same profile in its terminal:
+
+```powershell
+$env:AWS_PROFILE = "ce-operator"
+```
+
+For bash/zsh, use `export AWS_PROFILE=ce-operator`. Reauthenticate with `aws sso
+login --profile ce-operator` when your organization session expires; the launcher
+cannot renew a revoked/expired operator login on your behalf.
+
+If your organization supplies an IAM user's access keys instead, configure a
+named profile privately with `aws configure --profile ce-operator`. This asks for
+an **access key ID and secret access key**, plus region/output settings. They stay
+in the workstation's AWS credential store, not the CE JSON or Terraform inputs.
+Temporary STS credentials additionally require **aws_session_token**; a temporary
+access/secret pair without its token will fail. Use your organization's temporary
+credential tooling/profile configuration. Never use root access keys or paste
+AWS credentials into Hermes chat. The model API key is a different credential.
+
+The provisioning identity needs permission to create the documented AWS backend.
+After provisioning, the runtime operator needs `sts:AssumeRole` for the generated
+`reader_role_arn` and must match its trust policy. `operator_arn` is the stable IAM
+role/user ARN, not the `arn:...:sts::...:assumed-role/.../session` returned for an
+assumed session. Your AWS administrator can supply the correct IAM role ARN.
+If model credentials come from Secrets Manager, add the separate secret-read/KMS
+permissions described in [preview onboarding](PREVIEW-ONBOARDING.md).
+
+Connection flow:
+
+`your AWS profile -> local launcher -> STS limited invoker role -> Hermes -> Lambda collector -> scoped AWS reads -> S3 receipts`
+
+The launcher gives Docker temporary access-key/secret/session-token credentials
+for collector invocation and evidence reads. It refreshes them every 20 minutes;
+the session lasts one hour. Full operator credentials and the `.aws` directory
+are not mounted in Hermes. The Lambda execution role performs collection using
+its configured operations, target accounts and region restrictions.
+
+See AWS's [SSO setup](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html)
+and [temporary credential requirements](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_use-resources.html).
+SSO is supported through the normal SDK profile chain; our existing acceptance
+run does not constitute a separate end-to-end test of your organization's SSO setup.
+
 ## Prepare the AWS backend
 
 Prerequisites: Docker with Linux containers, Python 3.11 or later with boto3,
