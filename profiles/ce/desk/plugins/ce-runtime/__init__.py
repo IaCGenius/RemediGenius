@@ -10,13 +10,14 @@ import sys
 import threading
 import time
 import uuid
+import urllib.request
 from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 HELPER = ROOT / 'skills/ce-aws-read/scripts/aws_read.py'
 KNOWLEDGE = Path('/opt/data/shared/knowledge')
-ADMITTED_TOOLS = ('ce_aws','ce_knowledge','ce_review','ce_case','skill_view','skills_list','clarify')
+ADMITTED_TOOLS = ('ce_aws','ce_knowledge','ce_review','ce_case','ce_validate','skill_view','skills_list','clarify')
 RULES = '''Use only observed scope and evidence. A failed Config control does not prove all
 change history is absent. Missing Config is a gap in Config-recorded history ONLY; it says
 nothing about other inventory, deployment or change-history sources. LookupEvents returns
@@ -275,6 +276,7 @@ class Runtime:
             checked_manifest()
             if name == 'ce_aws': result = self.aws(state, params)
             elif name == 'ce_knowledge': result = self.knowledge(params)
+            elif name == 'ce_validate': result = self.validate(state, params)
             elif name == 'ce_case':
                 import importlib.util
                 spec = importlib.util.spec_from_file_location('ce_native_cases', HERE/'cases.py')
@@ -291,7 +293,11 @@ class Runtime:
                                            if k.endswith('count') or k.endswith('counts')}
                         facts['request'] = params
                         state.setdefault('collections',[]).append(facts)
-                    state['evidence'].append(json.dumps({'tool':name,'arguments':params,'result':result})[:18000])
+                    evidence_params, evidence_result = params, result
+                    if name == 'ce_validate':
+                        evidence_params = {'format':params.get('format'),'input_sha256':result.get('input_sha256')}
+                        evidence_result = {k:v for k,v in result.items() if k != 'files'}
+                    state['evidence'].append(json.dumps({'tool':name,'arguments':evidence_params,'result':evidence_result})[:18000])
                     state['evidence'] = state['evidence'][-12:]
                     self.persist_evidence(state)
             self.audit('tool_result', session=key[0], turn=key[1], tool=name,
@@ -301,6 +307,39 @@ class Runtime:
             self.audit('tool_error', session=key[0], turn=key[1], tool=name, error=type(exc).__name__)
             return json.dumps({'status':'BLOCKED','reason':str(exc)[:350],
                                'next':'Report the limitation; do not build a replacement tool.'})
+
+    def validate(self, state, params):
+        action = params.get('action','validate')
+        if action == 'capabilities':
+            if set(params) != {'action'}: raise ValueError('Capabilities takes only action')
+            request = urllib.request.Request('http://ce-validator:9130/health')
+        else:
+            if action != 'validate' or set(params)-{'action','format','files','argv'}:
+                raise ValueError('Unknown validation request')
+            kind = params.get('format')
+            if kind not in ('terraform','cloudformation','aws-cli'): raise ValueError('Unsupported format')
+            with self.lock:
+                attempts = state.setdefault('validation_attempts',{})
+                limit = self.policy.get('max_validation_attempts_per_format',3)
+                if attempts.get(kind,0) >= limit:
+                    raise ValueError('Validation attempt limit reached; return the remaining tool errors')
+                attempts[kind] = attempts.get(kind,0)+1
+            body = json.dumps({k:v for k,v in params.items() if k != 'action'}).encode()
+            if len(body)>128000: raise ValueError('Validation input too large')
+            request = urllib.request.Request('http://ce-validator:9130/validate',data=body,
+                headers={'Content-Type':'application/json'})
+        try:
+            with urllib.request.urlopen(request,timeout=85 if action=='validate' else 3) as response:
+                body=response.read(250001)
+                if len(body)>250000: raise ValueError('Validation output too large')
+                result=json.loads(body)
+        except (OSError, ValueError):
+            result={'status':'BLOCKED','reason':'Linux validator unavailable; no validation pass. Operator must start the configured validator.'}
+        if action=='validate':
+            result.update(format=kind,attempt=attempts[kind],attempt_limit=limit)
+            state.setdefault('validations',{})[kind]={k:result.get(k) for k in
+                ('status','format','validated_sha256','attempt','attempt_limit','toolchain')}
+        return result
 
     def aws(self, state, params):
         if params.get('action') == 'read':
@@ -445,6 +484,10 @@ class Runtime:
              'Requested max_pages is the call limit; configured max_pages is a ceiling, not the actual request. '
              'An error_events preview is a subset: never infer every event of that type failed from a smaller error list. '
              'Do not replace a precise supported claim with a guess. Cite the specific evidence for each proposed correction. '
+             'For remediation, inspect the actual code in the draft against supplied schemas/references: exact fields, required inputs, types, prerequisites and format-specific placement. '
+             'SDK schema evidence supports API JSON members, not CLI flags or Terraform/CloudFormation fields. Do not infer one format from another. '
+             'If no relevant syntax source is supplied, mark syntax NOT_VERIFIABLE_IN_THIS_REVIEW; do not invent a correction or certify it. '
+             'A current empty configuration result does not establish that historical records never existed. '
              'loaded_skill_results are the actual native skill_view results supplied to Hermes, including referenced files. '
              'They can substantiate documented CE workflows and operator-side commands, but are not AWS observations or authority to execute. '
              'Do not call a workflow unsupported merely because it is not a runtime tool: check these results. '
@@ -506,6 +549,12 @@ class Runtime:
                             + ' · more results: ' + ('yes' if item.get('has_more') else 'no')
                             + ' · observed `' + cell(item.get('observed_at','unknown')) + '`')
         summary = ('**Collection receipts — runtime reported**\n' + '\n'.join(receipts) + '\n\n') if receipts else ''
+        validations=[]
+        for kind,item in state.get('validations',{}).items():
+            validations.append('- '+kind+' · '+str(item['status'])+' · attempt '+str(item['attempt'])+'/'+str(item['attempt_limit'])
+                +' · artifact `'+str(item.get('validated_sha256') or 'none')[:16]+'`')
+        if validations:
+            summary += '**Tool validation — Linux; syntax/schema only, not deployment approval**\n'+'\n'.join(validations)+'\n\n'
         return summary + '**AI interpretation — '+review['status']+'; verify proposals before acting.**\n\n'+body
 
 
@@ -523,6 +572,9 @@ def register(ctx):
          {'path':{'type':'string'},'offset':{'type':'integer'},'limit':{'type':'integer'}},[]),
         ('ce_case','Native Hermes tracking board. list/show read cases; create/comment/wait/verify/close/archive save local case activity only after operator request. No cloud changes. identity must contain exact scope and source finding/resource IDs.',
          {**{k:{'type':'string'} for k in ('action','id','identity','title','body','note','disposition','evidence','review_date')},'include_archived':{'type':'boolean'}},['action']),
+        ('ce_validate','Deterministic Linux tools: Terraform fmt/init without backend/validate; cfn-lint; AWS CLI skeleton output validation, never execution. First capabilities returns pinned versions. validate takes format and files (filename to text), plus argv for aws-cli without aws executable. At most three attempts per format; correct from actual diagnostics. Returned files include Terraform formatting. No credentials/network/plan/apply.',
+         {'action':{'type':'string','enum':['capabilities','validate']},'format':{'type':'string','enum':['terraform','cloudformation','aws-cli']},
+          'files':{'type':'object','additionalProperties':{'type':'string'}},'argv':{'type':'array','items':{'type':'string'}}},['action']),
         ('ce_review','Review one concise answer draft against actual tool evidence using the configured Hermes model. One call per turn. Apply critique before final answer; no certification.',{'draft':{'type':'string'}},['draft'])]:
         ctx.register_tool(name=name,toolset='ce_runtime',schema={'name':name,'description':description,
             'parameters':{'type':'object','properties':properties,'required':required,'additionalProperties':False}},

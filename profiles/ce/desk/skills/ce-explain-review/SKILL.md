@@ -20,7 +20,9 @@ what is available, or whether something passed:
 
 ## Attempts and cost
 
-One initial tool operation plus at most one justified retry. Permission denied,
+For ce_validate, allow at most three validation attempts per format, using
+actual diagnostics; this is not permission to execute fixes. For other tools:
+one initial tool operation plus at most one justified retry. Permission denied,
 missing source/tool/authentication and unknown scope stop immediately. One retry
 is allowed for a transient fault or a clearly understood argument correction.
 Do not change tool, shell or code repeatedly to evade the same blocked operation.

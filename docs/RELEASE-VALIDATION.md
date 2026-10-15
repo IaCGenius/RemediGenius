@@ -1,4 +1,42 @@
-# v0.1.1 validation
+# Current main: deterministic remediation validation
+
+This addition follows v0.1.1; the existing release tag and downloads are unchanged.
+Native package SHA-256:
+`03adabba2ca146263950a3d2593c40b0fe3277a50b4fb2b8092e48a1bb8c727f`.
+See [the pinned toolchain and scope](REMEDIATION-VALIDATION.md).
+
+- Local and clean-export suites: 104 passed. The initial run with an outdated
+  system boto3 failed four storage tests; the established CE virtual environment
+  passed. Those failed runs were not treated as acceptance.
+- Six direct real-tool checks: invalid and corrected CLI, Terraform and
+  CloudFormation artifacts produced the expected FAIL/PASS results. These were
+  explicitly constructed artifacts, not fabricated AWS findings.
+- Local Qwen: the previous invalid Config CLI proposal was corrected and passed
+  actual CLI parsing; fresh AWS evidence still showed unmet live prerequisites.
+- Local Qwen: Terraform and CloudFormation both exercised actual FAIL → diagnostic
+  → correction → PASS cycles in two attempts. A standalone Terraform proposal also
+  passed with provider 6.68.0. The Terraform loop passed again after restarting onto
+  the final package. Audit used actual tool results, not just model summaries.
+- Spot Qwen: CLI validation passed; Terraform and CloudFormation each returned
+  FAIL then PASS on attempt 2/3, confirmed from actual tool records. Both runtimes
+  used the final package above. Retained-state replacement completed, authenticated
+  chat/board passed, all 90 integrity entries matched, and prior knowledge files
+  and conversation history remained present.
+- Runtime boundary: a fourth validation attempt is rejected before worker contact.
+  A failing tool result remains FAIL in the runtime-owned heading even if prose
+  says otherwise. No arbitrary shell, plan or apply is exposed.
+- Container inspection: read-only root, no data mounts, no credentials, dropped
+  capabilities; connections to internet and instance metadata failed.
+
+A tool PASS does not certify model prose. One CloudFormation response incorrectly
+claimed a default S3 Retain deletion policy despite the critic disputing it. That
+claim is wrong: set deletion/replace policies explicitly according to the intended
+lifecycle. The template's syntax pass did not validate that narrative. No proposed
+customer-cloud changes were executed. This distinction is intentional and is shown
+in the runtime heading: syntax/schema validation is separate from security impact,
+resource existence and deployment approval.
+
+## Historical v0.1.1 validation
 
 Qualified scope: AWS us-east-1, Qwen 3.8 Max, one ce-desk profile. This release
 includes the ten reviewed community skills; their source branch was merged,

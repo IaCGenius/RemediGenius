@@ -1,0 +1,8 @@
+{
+  "platform": "linux/amd64",
+  "terraform": "1.16.4",
+  "aws_provider": "6.68.0",
+  "aws_cli": "2.37.13",
+  "cfn_lint": "1.57.2",
+  "python_image": "python:3.12-slim"
+}

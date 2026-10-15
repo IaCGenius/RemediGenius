@@ -163,3 +163,9 @@ Review retains a bounded 64,000-character skill context within the existing
 90,000-character review request ceiling. If captured guidance is omitted, the
 runtime displays `AI_CRITIQUED_LIMITED_CONTEXT`; neither that label nor
 `AI_CRITIQUED` certifies proposal correctness.
+
+## Tool-backed remediation checks
+
+The `ce-validate-fix` skill uses `ce_validate` for actual Linux Terraform,
+CloudFormation and CLI validation, separate from AI critique. See
+[toolchain, deployment and limits](REMEDIATION-VALIDATION.md).

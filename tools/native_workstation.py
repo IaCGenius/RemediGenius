@@ -12,6 +12,7 @@ import zipfile
 import boto3
 from package_native_hermes import package
 from native_session_limits import prepare as prepare_session_limits
+import native_validator
 
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE = 'nousresearch/hermes-agent:stable@sha256:444b42594e7f467425872fc35e077a227d377f0fe0726bc818706d62175fad8b'
@@ -71,6 +72,7 @@ class Workstation:
 
     def stop(self):
         if self.owned(): command('docker','stop','-t','30',self.name)
+        native_validator.stop(self.name)
         (self.root/'runtime.env').unlink(missing_ok=True)
         print('Stopped local compute. Named volume and AWS evidence retained; daily AWS schedule unchanged.')
 
@@ -110,6 +112,7 @@ class Workstation:
             raise ValueError('Missing/invalid model credential or login value; no values logged')
         env=self.root/'runtime.env'; env.write_text(''.join(k+'='+v+'\n' for k,v in values.items()),encoding='utf-8')
         overlay=prepare_session_limits(IMAGE,self.root/'web_server_chat.py')
+        validation_network=native_validator.start(self.name)
         args=['docker','run','-d','--rm','--name',self.name,'--label','com.remedigenius.ce=workstation',
               '--memory','3072m','--pids-limit','1024','--env-file',str(env),'-p',f'127.0.0.1:{self.port}:9120',
               '--mount',f'type=volume,src={self.volume},dst=/opt/data',
@@ -121,6 +124,7 @@ class Workstation:
             args += ['--mount',f'type=bind,src={Path(knowledge).resolve()},dst=/opt/data/shared/knowledge,readonly']
         try:
             command(*args,IMAGE,'gateway','run')
+            command('docker','network','connect',validation_network,self.name)
             for _ in range(30):
                 ready=subprocess.run(['docker','exec',self.name,'test','-f','/opt/data/config.yaml'],capture_output=True)
                 if ready.returncode==0: break

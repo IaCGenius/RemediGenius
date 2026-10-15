@@ -26,7 +26,9 @@ Reuse the established evidence and selected knowledge; refresh configuration whe
 needed for a concrete change. Do not restart a broad assessment or create a new
 adapter. Read [Fix preparation](references/ce-fix-preparation.md) when the user
 wants commands, Terraform, CloudFormation, repository edits or verification of a fix.
-This is one workflow with different output formats, not separate agents.
+Load ce-validate-fix for concrete artifacts: use actual Linux validation tools,
+then correct from diagnostics up to three attempts. This is one workflow with
+different output formats, not separate agents.
 
 For a follow-up proposal, reread the exact stored finding and relevant configuration
 with compact `ce_aws show` projections before review. This gives the bounded critic

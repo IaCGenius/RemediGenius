@@ -12,8 +12,8 @@ Use when the operator requests Terraform instead of CLI. Start from a receipt th
 
 1. **Frame** — Name the resource type, identifier, and receipt.
 2. **Inspect** — Extract current configuration fields.
-3. **Guided checks** — Select the matching snippet from `references/snippets.md`.
-4. **Interpret** — Adapt the snippet with the exact resource name/ID from the receipt. Cite the snippet section.
+3. **Guided checks** — Load ce-aws-security fix-preparation guidance, then select only the relevant snippet from `references/snippets.md`. Confirm the operator’s provider version and ownership; a snippet is not a provider schema.
+4. **Interpret** — Adapt to supplied source/module conventions. Preserve provider constraints, use typed/described variables for missing inputs, and keep dependencies explicit. Do not upgrade provider major versions as a side effect. Cite the snippet section and distinguish inspected provider documentation from unverified assumptions.
 5. **Propose** — Output the adapted Terraform. Label “AI-generated — operator review required”. Include a verification note.
 6. **Review** — Call `ce_review`.
 

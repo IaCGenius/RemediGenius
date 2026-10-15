@@ -28,3 +28,24 @@ API to distinguish configuration from current recording. API semantics checked
 against https://docs.aws.amazon.com/config/latest/APIReference/API_DescribeConfigurationRecorderStatus.html.
 The deterministic executor admits that read through its operation manifest;
 no new collector, generated code or customer-cloud write is introduced.
+
+2026-10-15 follow-up: original CE guidance now uses the existing offline SDK
+schema capability before drafting API inputs and AWS CLI JSON input conventions.
+Reviewed HashiCorp terraform-style-guide at commit
+f706481af9b8fedb66de909f6243ad29601afa0c (MPL-2.0;
+https://github.com/hashicorp/agent-skills/tree/f706481af9b8fedb66de909f6243ad29601afa0c/plugins/terraform/skills/terraform-style-guide).
+No upstream file or code is copied. CE retains its existing Apache-2.0 authored
+workflow; compatible principles are provider-version awareness, declared inputs,
+formatting and explicit validation status. Upstream latest-major upgrade advice
+and execution assumptions are not adopted: CE preserves user constraints and
+has no terminal/apply permission. terraform-test is not installed because its
+execution workflow is outside this read-only runtime. Official AWS CLI input-file
+documentation is linked in the fix guide; schemas are not treated as proof of
+live state or cross-format validity.
+
+2026-10-15 deterministic validation: ce-validate-fix now routes artifacts to
+actual pinned Linux tools. The wrapper only selects fixed commands, enforces
+bounds and returns their diagnostics; it does not implement another Terraform
+or CloudFormation parser. Provider 6.x validation supersedes the earlier 5.x-only
+example baseline for new standalone proposals; existing source constraints remain
+operator-owned. No cloud apply permission was added.

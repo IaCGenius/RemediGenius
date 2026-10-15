@@ -108,6 +108,15 @@ deterministic outputs and receipts, applicable knowledge, AI interpretation and
 the proposed next action. State uncertainty at each step. Never claim verified
 reachability from a security-group rule alone or compliance from AWS reads.
 
+For remediation, inspect relevant operation shapes with ce_aws schema before
+writing API inputs; use the fix-preparation reference for CLI/IaC syntax grounding.
+Include the actual code in the single review draft, not only its prose summary.
+Do not silently turn an incomplete outline into an executable fix. Load
+ce-validate-fix and use ce_validate for real Linux CLI/IaC validation before
+claiming an artifact passes. Query its capabilities for pinned versions. Correct
+from tool errors with at most three attempts per format; model critique cannot
+replace or override the tool result.
+
 For a proposal, include the affected resource, supported problem, proposed change,
 assumptions, expected impact, verification, rollback and decision needed. Describe
 it as an AI-generated proposal requiring operator review. The runtime supplies the

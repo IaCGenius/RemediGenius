@@ -119,6 +119,9 @@ def network():
 
 
 def install():
+    sys.path.insert(0,str(SOURCE/'tools'))
+    import native_validator
+    native_validator.start('rgce-native')
     run('python3',str(SOURCE/'tools/native_session_limits.py'),'--image',CFG['image'],
         '--output',str(ROOT/'web_server_chat.py'))
     profiles = ROOT / 'profiles'
@@ -140,7 +143,7 @@ After=docker.service
 Requires=docker.service
 [Service]
 ExecStartPre=-/usr/bin/docker rm -f rgce-native
-ExecStart=/usr/bin/docker run --rm --name rgce-native --network rgce-native --env-file /run/rgce-native/model.env -p 127.0.0.1:9120:9120 -v /data/hermes:/opt/data -v /data/shared:/opt/data/shared:ro -v /run/rgce-native-reader:/opt/ce-reader:ro -v /opt/rgce-native/profiles:/opt/rg-profiles:ro -v /opt/rgce-native/profiles/desk:/opt/ce-package:ro -v /opt/rgce-native/web_server_chat.py:/opt/hermes/hermes_cli/web_server_chat.py:ro --memory ''' + str(int(CFG.get('container_memory_mb', 3072))) + '''m --pids-limit 1024 ''' + CFG['image'] + ''' gateway run
+ExecStart=/usr/bin/docker run --rm --name rgce-native --network rgce-native --network rgce-native-validation --env-file /run/rgce-native/model.env -p 127.0.0.1:9120:9120 -v /data/hermes:/opt/data -v /data/shared:/opt/data/shared:ro -v /run/rgce-native-reader:/opt/ce-reader:ro -v /opt/rgce-native/profiles:/opt/rg-profiles:ro -v /opt/rgce-native/profiles/desk:/opt/ce-package:ro -v /opt/rgce-native/web_server_chat.py:/opt/hermes/hermes_cli/web_server_chat.py:ro --memory ''' + str(int(CFG.get('container_memory_mb', 3072))) + '''m --pids-limit 1024 ''' + CFG['image'] + ''' gateway run
 ExecStop=/usr/bin/docker stop -t 30 rgce-native
 Restart=always
 RestartSec=10
@@ -153,6 +156,7 @@ After=docker.service network-online.target
 Requires=docker.service
 [Service]
 Type=oneshot
+TimeoutStartSec=900
 ExecStart=/usr/bin/python3 /opt/rgce-native/source/deploy/aws-native/host.py
 RemainAfterExit=yes
 [Install]

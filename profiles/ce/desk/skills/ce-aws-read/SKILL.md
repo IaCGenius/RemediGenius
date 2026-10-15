@@ -18,7 +18,10 @@ AWS SDK input fields, not CLI options. Supply target and region for each read.
 
 - `capabilities`: refresh configured scope if needed; preflight normally provides it.
 - `schema`: supply service, operation, and optional field path to inspect installed
-  botocore input definitions. Use this when uncertain; never guess an API shape.
+  botocore input definitions. Use before drafting API inputs; never guess a shape.
+  This is local metadata inspection, including write-operation shapes, not an AWS
+  request or permission to execute them. It proves SDK field names/types only,
+  not CLI flag spellings, Terraform arguments or CloudFormation properties.
 - `read`: service, operation, target, region, parameters and max_pages. Preserve
   the user's filters and page budget. Omitted max_pages collects one page. For a
   one-page request use max_pages=1; MaxResults controls items per page, not pages.

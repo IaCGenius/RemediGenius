@@ -50,3 +50,12 @@ above the model's interpretation. PARTIAL means the collected sample is incomple
 it is not a healthy result or an exhaustive assessment. These bounds fix the
 previous silent three-page default; they do not guarantee the model interprets
 every natural-language instruction correctly.
+
+### Generated artifact checks
+
+Current source supports isolated Linux Terraform/AWS CLI/CloudFormation tools
+with one pinned toolchain and up to three attempts per format. A tool PASS applies
+to the identified artifact and the specific syntax/schema checks, not to resource
+existence, security impact, rollback, permissions or model narrative. No plan/apply
+is executed. Unsupported versions/modules are explicit gaps. See
+[validation details](REMEDIATION-VALIDATION.md).

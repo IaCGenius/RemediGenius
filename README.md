@@ -73,7 +73,8 @@ model key or cloud deployment. [What this demo shows](docs/DEMO.md). This is not
 | CLI-first remediation proposals | Ask for Terraform/CloudFormation alternatives or source-specific edits; drafts need operator review |
 | Saved findings and reassessment | Native manual Kanban and fresh evidence; no automatic closure |
 | Configurable daily collection | Deterministic AWS checks, independent of agent compute; no unattended model investigation |
-| Bounded AI critique | Same loaded references and bounded evidence; not a guarantee of correctness |
+| Linux tool validation (current source) | Pinned Terraform/AWS provider, AWS CLI and cfn-lint; real diagnostics and up to three correction attempts; no deployment |
+| Bounded AI critique | Same loaded references and bounded evidence; not a substitute for tool validation |
 
 See [scope and limits](docs/LIMITS.md) for what is not included and [model/data choices](docs/MODELS.md) before connecting your account.
 
@@ -104,3 +105,7 @@ See [scope and limits](docs/LIMITS.md) for what is not included and [model/data 
 | Launchers and verification | `tools` / `tests` |
 
 Validation is scoped to the documented release baseline. Never include credentials, Terraform state, private policies or unredacted transcripts in public issues.
+
+The current source includes [deterministic remediation validation](docs/REMEDIATION-VALIDATION.md).
+The published v0.1.1 archives predate this addition; use the reviewed main source
+for the validator capability.
