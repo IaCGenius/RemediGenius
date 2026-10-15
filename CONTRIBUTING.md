@@ -22,6 +22,12 @@ channel; do not paste the credential into an issue.
 
 ## Make a focused change
 
+Contributions require a [Developer Certificate of Origin 1.1](https://developercertificate.org/)
+sign-off. Use `git commit -s` with your own identity after reading the certificate.
+Maintainers check sign-offs during review; no automated DCO check is claimed.
+Do not sign on behalf of someone else. Contributions remain under Apache-2.0;
+the DCO does not transfer copyright or grant blanket relicensing rights.
+
 1. Read `START-HERE.md` and the relevant skill/module before editing.
 2. Keep changes scoped; explain user impact and why native Hermes functionality
    or an existing dependency was insufficient if adding code.

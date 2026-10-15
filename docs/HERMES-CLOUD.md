@@ -67,6 +67,6 @@ The worker cannot reach host metadata, but the trusted host-network console shar
 
 ## Acceptance before sharing
 
-See [rc10 cloud acceptance](RC10-CLOUD-ACCEPTANCE.md) for actual results and outstanding checks.
+See [rc10 cloud acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/RC10-CLOUD-ACCEPTANCE.md) for actual results and outstanding checks.
 
 Verify the actual pinned images, model identity, and Hermes upstream revision. Run a selected synthetic investigation through console → persisted request → broker → real Hermes/model → persisted result → console. Check citations, deterministic-versus-AI labels, cancellation/time limits and provider failure. Attempt metadata, host-console and private-network access from a worker and prove denial; prove ordinary model HTTPS works. Terminate the dedicated test instance and verify replacement recovers knowledge and completed results without reporting interrupted jobs as successful. Finally scale the ASG to zero and record the exact versions, results and remaining storage. Simulated adapters alone do not satisfy these acceptance checks.

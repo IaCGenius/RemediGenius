@@ -213,7 +213,7 @@ To stop compute, set `running=false` and apply the plan. Stopping EC2 alone caus
 ASG replacement. S3 evidence, the session EBS volume and secrets remain and can
 incur charges. Keep backups according to your needs; no session snapshot schedule
 or cross-region recovery is configured. Do not delete the retained EBS volume to
-repair startup. Read [acceptance results](CE-RUNTIME-ACCEPTANCE.md) before sharing.
+repair startup. Read [acceptance results](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/CE-RUNTIME-ACCEPTANCE.md) before sharing.
 
 During onboarding, choose whether to enable daily collection. It is separately opt-in: set `schedule_enabled=true` and
 `schedule_interval_hours=24`, then review/apply. Lower the interval for more frequent

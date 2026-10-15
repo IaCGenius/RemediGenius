@@ -4,7 +4,7 @@ Baseline: **AWS us-east-1, Qwen 3.8 Max, native Hermes ce-desk**. This report
 records a targeted preview qualification, not an exhaustive service/model matrix.
 Earlier acceptance reports retain their failures, retries and limitations.
 
-The subsequent [skill evaluation](SKILL-EVALUATION-2026-10-15.md) records rejected
+The subsequent [skill evaluation](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/SKILL-EVALUATION-2026-10-15.md) records rejected
 broad rewrites and four focused Markdown improvements. Its eight focused native
 Qwen runs and 36 targeted contract checks supplement the baseline below; the
 earlier full-suite counts are not claimed as a rerun of the later Markdown change.
@@ -91,7 +91,7 @@ The walkthrough includes an inspected identifier-free crop of these decisions.
 One historical S3-case follow-up was not rerun: automatic approval review blocked
 reading it into the model because it contains an access-key identifier. This is
 an explicit test limitation, not a pass. Earlier correction acceptance remains
-in [the operating-loop report](OPERATING-LOOP-ACCEPTANCE.md).
+in [the operating-loop report](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/OPERATING-LOOP-ACCEPTANCE.md).
 
 ## Preview limits
 

@@ -1,6 +1,6 @@
 # Implemented CE architecture: start here
 
-> This diagram records the rc10 implementation, which the owner subsequently rejected as the CE product architecture. It is preserved for understanding and reuse. See [the corrected Hermes-first direction](../HERMES-FIRST-REALIGNMENT.md).
+> This diagram records the rc10 implementation, which the owner subsequently rejected as the CE product architecture. It is preserved for understanding and reuse. See [the corrected Hermes-first direction](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/HERMES-FIRST-REALIGNMENT.md).
 
 Open [the interactive architecture diagram](ce-brain.html). This describes the cloud CE implementation at code checkpoint `b11e455`, not a future product design. The diagram simplifies supporting IAM, networking and secret delivery; these remain documented in [the cloud operations guide](../HERMES-CLOUD.md).
 

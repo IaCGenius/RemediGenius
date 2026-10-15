@@ -94,7 +94,7 @@ The host mounts selected knowledge
 to `/opt/data/shared/knowledge`, read-only to Hermes. CE operating guidance is
 explicitly scoped to tool behavior, never a customer security baseline. The owner
 has separately supplied a real S3 policy for acceptance testing; it is not shipped
-as a default rule for other organizations. See [the policy test](ORG-EXCEPTION-ACCEPTANCE.md).
+as a default rule for other organizations. See [the policy test](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/ORG-EXCEPTION-ACCEPTANCE.md).
 
 Compute can be replaced: source records and selected knowledge remain in S3.
 Native Hermes sessions/profile state currently survive on retained encrypted EBS,
@@ -140,7 +140,7 @@ The operator authorized the real Qwen test. Its first run exhausted the iteratio
 limit without an answer; a later run completed but still made unsupported next-step
 and coverage claims. It is not counted as a full pass. See
 [the skills and execution review](HERMES-SKILLS-AND-EXECUTION-CONTRACT.md) for the
-instruction corrections. The subsequent [five-workflow Qwen retest](QWEN-SKILL-RETEST-2026-10-13.md)
+instruction corrections. The subsequent [five-workflow Qwen retest](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/QWEN-SKILL-RETEST-2026-10-13.md)
 verified real reads and source counts but still found interpretation, scratch-script
 steering and pagination-sensitive comparison defects; it is not a clean acceptance
 pass. Broader central-log querying, automatic onboarding,

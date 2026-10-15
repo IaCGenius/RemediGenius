@@ -60,27 +60,27 @@ applicability is resolved. Refresh means re-importing changed originals and
 publishing a new selected view. Explicit `--replaces` excludes an old revision from new views while preserving
 its original and prior views. Automatic sync or authority decisions are not implemented.
 See [the knowledge quickstart](NATIVE-KNOWLEDGE-QUICKSTART.md).
-The [knowledge usability acceptance](OKF-USABILITY-ACCEPTANCE.md) records the newer
+The [knowledge usability acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/OKF-USABILITY-ACCEPTANCE.md) records the newer
 guided-onboarding deployment, inventory/refresh checks and real Qwen result.
-The operator [preview-and-publish workflow](KNOWLEDGE-PUBLICATION-ACCEPTANCE.md)
+The operator [preview-and-publish workflow](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/KNOWLEDGE-PUBLICATION-ACCEPTANCE.md)
 now verifies and publishes selected views to S3. Activation remains explicit.
 
 ## Release gates
 
-- Preserve [UI rerun](UI-RERUN-2026-10-15.md) partial results and the real
-  [organization-policy test](ORG-EXCEPTION-ACCEPTANCE.md).
+- Preserve [UI rerun](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/UI-RERUN-2026-10-15.md) partial results and the real
+  [organization-policy test](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/ORG-EXCEPTION-ACCEPTANCE.md).
 - Updated skills/provenance and session overlay are deployed: repository suite
   latest critic-context acceptance records 207 passed/4 Windows skips; kiosk suite 30 passed in its recorded run. Eight UI terminal generations
   and saved-chat resume passed with memory below 1.4 GiB of the 3 GiB limit.
 - Real Qwen knowledge onboarding/provenance passed; broad assessment interpretation
-  remains partial. See [the detailed acceptance](LAYERED-ASSESSMENT-ACCEPTANCE.md).
+  remains partial. See [the detailed acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/LAYERED-ASSESSMENT-ACCEPTANCE.md).
 - Final proposal format-consistency retest passed. CloudTrail counts and bounds
   independently matched AWS after projection corrections (RECOVERED); narrative
   attribution remained imperfect. These are operator-reviewed draft outputs.
 - The current source ZIP and checksum are delivered under `dist/native-preview/`.
   Consult its `RELEASE.json` for the exact commit; older ZIPs are historical.
 - Public source is published at [IaCGenius/RemediGenius](https://github.com/IaCGenius/RemediGenius). See [release gates](V0.1-RELEASE-PLAN.md) for current preview completion work and CI execution limitations.
-- Critic reference sharing and its targeted Qwen retest are recorded in [critic context acceptance](CRITIC-CONTEXT-ACCEPTANCE.md). Older counts/results above describe their specific runs, not a claim that every case was rerun.
+- Critic reference sharing and its targeted Qwen retest are recorded in [critic context acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/CRITIC-CONTEXT-ACCEPTANCE.md). Older counts/results above describe their specific runs, not a claim that every case was rerun.
 
 ## Session compatibility overlay
 

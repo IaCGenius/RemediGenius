@@ -99,7 +99,7 @@ profile upgrade. Real Qwen UI retesting found that correct skill loading did not
 eliminate interpretation errors or improvised scratch analysis. The deterministic
 comparison also treats a rotated pagination token as a changed response.
 
-See [the live retest record](QWEN-SKILL-RETEST-2026-10-13.md) for exact scope,
+See [the live retest record](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/QWEN-SKILL-RETEST-2026-10-13.md) for exact scope,
 receipts, successes and failures. Product executable code was not changed during
 this review/retest. Existing scratch-analysis permission in SOUL conflicts with
 the security skill's stronger workflow restriction; skill loading alone does not

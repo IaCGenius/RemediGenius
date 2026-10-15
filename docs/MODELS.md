@@ -1,41 +1,15 @@
-# Models: bring your own key
+# Bring your own model
 
-The agents use one OpenAI-compatible endpoint: `model_base_url` + `model_name` in `terraform.tfvars`, and the key in
-Secrets Manager (`set_model_key` output). Nothing else in the stack depends on the provider.
+Use a capable reasoning model with reliable tool calling. Qwen 3.8 Max is the tested preview baseline, not a requirement to use that provider. No subscription, API key or model credits are included.
 
-## Choose a plan that allows what you run
+The native profile uses Hermes's custom provider with a model ID, OpenAI-compatible base URL and MODEL_API_KEY. Configure the workstation launcher or AWS Terraform inputs in the [setup guide](../START-HERE.md). Cloud keys come from your Secrets Manager secret; workstation mode supports a local environment variable or your Secrets Manager secret. Never commit keys.
 
-| Use | Interactive? |
-|---|---|
-| You chat with the desk agent in Hermes Desktop | Yes |
-| `schedule_enabled = true` (collector + daily agent jobs) | **No.** Scheduled, unattended |
-| Scripts that drive an agent (`hermes chat -q` from cron or CI) | **No** |
+Selected AWS evidence, resource identifiers, knowledge and drafts can reach the reasoning/critic model. Choose a provider, endpoint, region and retention policy your organization permits. Self-hosting does not imply local inference.
 
-Some subscription plans allow **interactive use only**. Alibaba's Token Plan, for example: "Not permitted for
-automated scripts or application backends"
-([Personal](https://www.alibabacloud.com/help/en/model-studio/token-plan-personal-overview),
-[Team](https://www.alibabacloud.com/help/en/model-studio/token-plan-team-overview)). Use such a plan only with the
-schedule off, and switch to pay-as-you-go before turning it on.
+## Bedrock qualification
 
-## Options
+Bedrock is the proposed AWS-native model path, **not yet a validated CE default**. Changing a URL alone does not establish authentication, model/API support, tool calling, auxiliary critique, retention or regional routing. Test these through pinned Hermes before promoting a concrete configuration. Never silently switch providers or fall back outside the operator's policy.
 
-| Provider | `model_base_url` | Notes |
-|---|---|---|
-| Alibaba Model Studio, pay-as-you-go (international) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | Qwen models. Alibaba's international terms say member content is not used to train models without consent. Data is processed in the Singapore region (cross-border for most users) |
-| Amazon Bedrock (OpenAI-compatible endpoint, or a gateway) | your Bedrock endpoint | Qwen3 and DeepSeek in several regions. Prompts stay in AWS; model providers have no access to them ([Bedrock data protection](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html)) |
-| Self-hosted open weights (vLLM, Ollama, ...) | your server, e.g. `http://10.0.0.5:8000/v1` | Qwen3 is Apache-2.0, DeepSeek-R1 is MIT; check each model's licence. The host security group allows outbound 443/80 only: add a rule for your port |
-| Any other OpenAI-compatible provider | its `/v1` URL | Check that its terms allow automated use if you schedule jobs |
+Bedrock supports specific [API/endpoint combinations](https://docs.aws.amazon.com/bedrock/latest/userguide/apis.html). AWS describes inference in AWS-operated model deployment accounts, not solely inside the customer's account. Do not promise “data never leaves your AWS account.” Check [data protection](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html) and [retention](https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html) for the selected model and routing configuration.
 
-Agents work best with a strong tool-using model. The checks themselves do not depend on the model: rules decide
-findings and severities.
-
-## What the model sees
-
-Configuration facts from your account: resource names, policy documents, security group rules, counts. It never sees
-stored data (the read-only role denies reading it) and never sees your keys. Choose a provider whose data terms fit
-your rules.
-
-## Changing the model
-
-Edit `model_base_url` / `model_name`, `terraform apply`, then reconcile the profiles: `./refresh.sh`. To rotate the key, put a new value with `set_model_key`, then on the host
-run `sudo systemctl start rg-hermes-secrets` (restarts the agents with the new key).
+CE's daily deterministic collection does not call a model. Interactive reasoning and automated evaluation are separate workloads; use a model plan that permits the workload. Historical console model/scheduling instructions do not describe native CE.

@@ -3,7 +3,7 @@
 Reviewed against the repository on 2026-10-14. **Implemented** means present in
 the native Hermes candidate; **preserved** means older code exists but is not
 connected to that runtime; **proposed** means a design, not a shipped endpoint.
-See [acceptance results](CE-RUNTIME-ACCEPTANCE.md) for what was actually tested.
+See [acceptance results](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/CE-RUNTIME-ACCEPTANCE.md) for what was actually tested.
 
 ## 1. The offering beyond third-party Hermes
 

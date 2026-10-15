@@ -1,6 +1,8 @@
 # RemediGenius Community Edition
 
-**Turn your existing AWS security data into an investigation, a practical fix proposal, and a follow-up you can return to.**
+**Reimagine security with an agent that turns existing cloud evidence and your organizational knowledge into prioritized decisions, practical fixes and reassessment.**
+
+**AWS today. Azure/GCP next (planned).** Current live validation: AWS `us-east-1`.
 
 Self-hosted · one native Hermes `ce-desk` profile · Apache-2.0 · **v0.1 preview**
 
@@ -9,6 +11,17 @@ Self-hosted · one native Hermes `ce-desk` profile · Apache-2.0 · **v0.1 previ
 ![CE architecture: user and selected knowledge through Hermes, scoped execution, durable evidence and follow-up](docs/diagrams/ce-mvp-architecture.png)
 
 [Explore the architecture](docs/diagrams/ce-mvp-architecture.html) · [Architecture and capability detail](docs/CURRENT-CE-OFFERING.md)
+
+## Try it in 60 seconds
+
+```sh
+python -m pip install -e .
+python tools/demo.py
+```
+
+A clearly labeled synthetic evidence loop, using Python 3.11+ with no AWS credentials,
+model key or cloud deployment. [What this demo shows](docs/DEMO.md). For the live agent,
+choose workstation or AWS setup below.
 
 ## Start with a useful question
 
@@ -42,7 +55,7 @@ Both paths use your AWS and model accounts and incur their charges. Local means 
 | Configurable daily collection | Deterministic AWS checks, independent of agent compute; no unattended model investigation |
 | Bounded AI critique | Same loaded references and bounded evidence; not a guarantee of correctness |
 
-Not included: autonomous remediation, automatic organization enrollment, universal repository OAuth, live Confluence sync, Security Lake record analytics, Azure/GCP collectors, hosted multi-tenancy, or a public production MCP/API/A2A service. The older custom console is preserved in source; root Compose does **not** start native CE.
+See [scope and limits](docs/LIMITS.md) for what is not included and [model/data choices](docs/MODELS.md) before connecting your account.
 
 [Illustrated first-use walkthrough](docs/MVP-WALKTHROUGH.md) · [Login and profile screenshots](docs/NATIVE-CE-QUICKSTART.md#3-retrieve-your-login-open-the-tunnel-and-select-ce-desk)
 
@@ -57,9 +70,9 @@ Not included: autonomous remediation, automatic organization enrollment, univers
 
 - [Release checklist and known limits](docs/V0.1-RELEASE-PLAN.md)
 - [MVP acceptance: Windows workstation, Windows/Linux source tests and live Qwen](docs/MVP-ACCEPTANCE.md)
-- [Skill improvements: broader Pi evaluation and native Qwen retests](docs/SKILL-EVALUATION-2026-10-15.md)
+- [Skill improvements: broader Pi evaluation and native Qwen retests](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/SKILL-EVALUATION-2026-10-15.md)
 - [AWS capabilities and scope](docs/AWS-READ-EXECUTION.md)
-- [Workstation acceptance](docs/WORKSTATION-ACCEPTANCE.md), [critic context acceptance](docs/CRITIC-CONTEXT-ACCEPTANCE.md), [remediation acceptance](docs/REMEDIATION-SKILL-ACCEPTANCE.md)
+- [Workstation acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/WORKSTATION-ACCEPTANCE.md), [critic context acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/CRITIC-CONTEXT-ACCEPTANCE.md), [remediation acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/REMEDIATION-SKILL-ACCEPTANCE.md)
 - [Runtime controls and extension boundaries](docs/CE-RUNTIME.md)
 - [What CE adds to Hermes](docs/CE-PRODUCT-AND-INTEGRATION-CONTRACT.md)
 - [Contributing and reporting issues](CONTRIBUTING.md)

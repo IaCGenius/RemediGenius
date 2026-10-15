@@ -1,4 +1,4 @@
-# Security and private-preview boundaries
+# Security
 
 ## Current native Hermes boundary — 2026-10-14
 
@@ -30,4 +30,10 @@ Prompt injection and incorrect model proposals remain possible. See current
 
 ## Reporting a problem
 
-For this private preview, contact the person who shared the bundle with you through your existing private channel. Include the version, affected workflow, expected/actual behavior and a minimal reproduction using synthetic data. Do not send credentials, Terraform state, account exports or customer documents. There is no public security mailbox or response-time guarantee advertised yet. Please do not disclose a suspected vulnerability in a public issue before contacting the maintainer.
+Use [GitHub private vulnerability reporting](https://github.com/IaCGenius/RemediGenius/security/advisories/new).
+It is enabled for this repository. Include the version, affected workflow,
+expected/actual behavior and a minimal redacted reproduction. Do not send keys,
+Terraform state, account exports or customer documents. Do not report suspected
+vulnerabilities in public issues or Discussions. No security email address or
+response-time guarantee is advertised. Ordinary bugs belong in
+[Issues](https://github.com/IaCGenius/RemediGenius/issues).

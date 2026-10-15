@@ -1,6 +1,10 @@
-# Private-preview feedback
+# Community feedback
 
-Send a copy through your existing private conversation with the person who shared RemediGenius. There is no need to upload your workspace, logs, Terraform state, account identifiers or documents. Use synthetic examples and redact screenshots.
+Use [Discussions](https://github.com/IaCGenius/RemediGenius/discussions) for questions,
+ideas and experience reports; use [Issues](https://github.com/IaCGenius/RemediGenius/issues)
+for reproducible bugs. Do not upload your workspace, logs, Terraform state,
+account identifiers or private documents. Use clearly labeled synthetic examples
+and redact screenshots.
 
 - Version / image tag:
 - OS and runtime (Docker Linux containers or native Python):
@@ -14,4 +18,5 @@ Send a copy through your existing private conversation with the person who share
 
 A helpful first review asks: Can I trace a proposal to its evidence? Can I see which guidance applies and why? Can I tell a model opinion from a fixed rule? Can I export this to my existing agent without granting it AWS access?
 
-For a suspected security issue, contact the maintainer privately first. See `SECURITY.md`; no public report or automated evidence upload is required.
+For suspected vulnerabilities, use [private reporting](https://github.com/IaCGenius/RemediGenius/security/advisories/new).
+See [SECURITY.md](../SECURITY.md). CE has no adoption telemetry; sharing feedback is optional.

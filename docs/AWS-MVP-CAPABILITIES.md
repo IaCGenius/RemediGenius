@@ -89,15 +89,15 @@ context; CE adds provenance and review assistance, not another approval committe
   live Qwen knowledge use, independently checked Config definition/status empty
   responses, workstation runtime and Spot update.
 
-- [Native runtime acceptance](CE-RUNTIME-ACCEPTANCE.md): real-source checks and
+- [Native runtime acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/CE-RUNTIME-ACCEPTANCE.md): real-source checks and
   execution boundaries.
-- [Native preview acceptance](NATIVE-PREVIEW-ACCEPTANCE.md): deployment,
+- [Native preview acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/NATIVE-PREVIEW-ACCEPTANCE.md): deployment,
   proposals, saved cases and corrections.
-- [Layered assessment acceptance](LAYERED-ASSESSMENT-ACCEPTANCE.md): framework
+- [Layered assessment acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/LAYERED-ASSESSMENT-ACCEPTANCE.md): framework
   grouping and knowledge use, including preserved partial results.
-- [Organization exception acceptance](ORG-EXCEPTION-ACCEPTANCE.md): real
+- [Organization exception acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/ORG-EXCEPTION-ACCEPTANCE.md): real
   operator policy, conditional applicability and explicit unknowns.
-- [Critic context acceptance](CRITIC-CONTEXT-ACCEPTANCE.md): shared captured
+- [Critic context acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/CRITIC-CONTEXT-ACCEPTANCE.md): shared captured
   skill results and bounded evidence; not an infallible review gate.
 
 SDK boundary unit tests use constructed responses to check error handling and
