@@ -85,11 +85,15 @@ def reader_credentials():
     creds = aws('sts','assume-role','--role-arn',CFG['reader_invoker_role'],
                 '--role-session-name','ce-reader-invoker','--duration-seconds','3600')['Credentials']
     directory=Path('/run/rgce-native-reader')
-    directory.mkdir(mode=0o755,exist_ok=True)
+    directory.mkdir(mode=0o750,exist_ok=True)
+    os.chown(directory, 0, 10000)
+    os.chmod(directory, 0o750)
     value='[default]\naws_access_key_id='+creds['AccessKeyId']+'\naws_secret_access_key='+creds['SecretAccessKey']+'\naws_session_token='+creds['SessionToken']+'\n'
     pending=directory/'credentials.pending'
-    pending.write_text(value); os.chmod(pending,0o444); os.replace(pending,directory/'credentials')
-    (directory/'config.json').write_text(json.dumps({'function':CFG['reader_function'],'region':CFG['region'],'expires':creds['Expiration'],'bucket':CFG['bucket'],'prefix':CFG['prefix']}))
+    pending.write_text(value); os.chown(pending,0,10000); os.chmod(pending,0o440); os.replace(pending,directory/'credentials')
+    pending=directory/'config.pending'
+    pending.write_text(json.dumps({'function':CFG['reader_function'],'region':CFG['region'],'expires':creds['Expiration'],'bucket':CFG['bucket'],'prefix':CFG['prefix']}))
+    os.chown(pending,0,10000); os.chmod(pending,0o440); os.replace(pending,directory/'config.json')
 
 
 def network():

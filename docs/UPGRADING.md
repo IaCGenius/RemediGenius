@@ -51,3 +51,18 @@ and a fresh bounded read. See [AWS setup](NATIVE-CE-QUICKSTART.md).
 For rollback, restore the prior input/archive references and profile backup using
 the same state and volume, review a new plan, and verify again. Do not delete
 state or the retained volume to repair an upgrade.
+
+## Post-v0.1.0 network and reader changes
+
+New AWS deployments default `associate_public_ip = false`. Supply a subnet with
+NAT or equivalent access to required AWS APIs, model endpoints and package/image
+registries. For an existing public-subnet deployment without NAT, explicitly set
+`associate_public_ip = true` before applying. The private-subnet path has not yet
+received end-to-end live qualification. Port 80 host egress remains for compatibility;
+removing it has not been validated. Container outbound controls are unchanged.
+
+Reader credentials and metadata now use root:10000 ownership, directory 0750 and
+files 0440. The uid/gid 10000 container retains read access. Skills added to the
+package are included in integrity checks and require an explicit profile upgrade.
+
+The historical `native-hermes-sketch` Purpose tag is retained for compatibility; the source paths and user-facing product names use CE.

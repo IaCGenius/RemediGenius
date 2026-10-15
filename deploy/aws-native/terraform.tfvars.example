@@ -26,4 +26,7 @@ knowledge_view        = ""
 schedule_enabled = false
 schedule_interval_hours = 24
 # With named aws_read_targets, supply scheduled_checks using those aliases/regions.
-# Full input meanings: docs/PREVIEW-ONBOARDING.md
+# Full input meanings: docs/ONBOARDING.md
+
+# false requires private-subnet outbound connectivity; true for public subnet without NAT.
+associate_public_ip = false

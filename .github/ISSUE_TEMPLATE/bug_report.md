@@ -1,5 +1,5 @@
 ---
-name: Preview bug report
+name: Bug report
 about: Report a reproducible CE problem without sharing private evidence
 labels: bug
 ---
@@ -7,8 +7,8 @@ labels: bug
 ## Environment
 - Commit/version:
 - Workstation or AWS Spot:
-- Region (preview baseline: us-east-1):
-- Model name (preview baseline: Qwen 3.8 Max; no keys/endpoints with tokens):
+- Region (tested configuration: us-east-1):
+- Model name (tested configuration: Qwen 3.8 Max; no keys/endpoints with tokens):
 
 ## Expected and actual behavior
 

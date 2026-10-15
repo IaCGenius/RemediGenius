@@ -1,27 +1,29 @@
 # RemediGenius Community Edition
 
-**Reimagine security with an agent that turns existing cloud evidence and your organizational knowledge into prioritized decisions, practical fixes and reassessment.**
+**Your cloud's native security tools are powerful. RemediGenius makes them usable.**
 
-**AWS today. Azure/GCP next (planned).** Current live validation: AWS `us-east-1`.
+Ask questions about your AWS security findings in plain language. Get prioritized,
+evidence-backed answers and fix proposals informed by your own policies, then
+reassess after your change window.
 
-Self-hosted · one native Hermes `ce-desk` profile · Apache-2.0 · **[v0.1.0](https://github.com/IaCGenius/RemediGenius/releases/tag/v0.1.0)**
+By design, the agent requests bounded reads from a separate collector with a
+configured allowlist. Fixes are proposals you review and apply yourself.
 
-**Validated baseline: AWS `us-east-1` and Qwen 3.8 Max.** Bring your own AWS account and model access. Other regions and providers are configurable, but are outside this release's validated baseline.
+AWS today · Azure/GCP planned · Self-hosted · Apache-2.0 · [v0.1.0](https://github.com/IaCGenius/RemediGenius/releases/tag/v0.1.0)
+
+Provided as-is. You choose your model provider and AWS backend and are responsible
+for their configuration, data handling and charges. See [your responsibility](docs/LIMITS.md#your-responsibility).
+Validated configuration: AWS us-east-1 and Qwen 3.8 Max. Other supported models are your choice.
+
+![Agent helps identify the decisions needed before preparing a fix](docs/images/hermes-remediation-decisions.jpg)
+
+[![CI](https://github.com/IaCGenius/RemediGenius/actions/workflows/community.yml/badge.svg)](https://github.com/IaCGenius/RemediGenius/actions/workflows/community.yml)
+[![Release](https://img.shields.io/github/v/release/IaCGenius/RemediGenius)](https://github.com/IaCGenius/RemediGenius/releases)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 ![CE architecture: user and selected knowledge through Hermes, scoped execution, durable evidence and follow-up](docs/diagrams/ce-mvp-architecture.png)
 
 [Explore the architecture](docs/diagrams/ce-mvp-architecture.html) · [Architecture and capability detail](docs/CURRENT-CE-OFFERING.md)
-
-## Try it in 60 seconds
-
-```sh
-python -m pip install -e .
-python tools/demo.py
-```
-
-A clearly labeled synthetic evidence loop, using Python 3.11+ with no AWS credentials,
-model key or cloud deployment. [What this demo shows](docs/DEMO.md). For the live agent,
-choose workstation or AWS setup below.
 
 ## Start with a useful question
 
@@ -29,9 +31,15 @@ choose workstation or AWS setup below.
 - **Investigation:** “Show EC2 CloudTrail management events for the last five days. State actual time coverage and collection limits.”
 - **Remediation:** “Explain this finding using our policy. Prepare a CLI fix, save a case, and help me reassess after our change window.”
 
+## Choose your setup
+
+Hermes is an open-source agent runtime by Nous Research. CE adds the `ce-desk`
+profile, scoped AWS tools and readable security skills. Bring a model supported
+by Hermes; the tested configuration is Qwen 3.8 Max.
+
 CE reuses Hermes's conversation, skills, model routing and manual Kanban. A small native runtime plugin admits bounded operations and shares retrieved context with a critic. Separate deterministic Lambda collectors retrieve AWS records and write receipts to S3. The model interprets evidence; it does not rewrite source observations or apply customer-cloud fixes.
 
-## Choose your setup
+
 
 | | Workstation | Your AWS account |
 |---|---|---|
@@ -41,9 +49,21 @@ CE reuses Hermes's conversation, skills, model routing and manual Kanban. A smal
 | Login | Local dashboard, generated credentials | Private SSM tunnel, generated credentials |
 | Walkthrough | [Start on your workstation](docs/WORKSTATION-HERMES.md) | [Deploy in AWS](docs/NATIVE-CE-QUICKSTART.md) |
 
-Both paths use your AWS and model accounts and incur their charges. Local means local agent compute, not offline. Start with [Start Here](START-HERE.md) and [required inputs and credentials](docs/PREVIEW-ONBOARDING.md). The cloud path requires an existing subnet and private bucket; the workstation Terraform creates its own evidence bucket. Source and Terraform remain inspectable and customizable.
+Both paths use your AWS and model accounts and incur their charges. Local means local agent compute, not offline. Start with [Start Here](START-HERE.md) and [required inputs and credentials](docs/ONBOARDING.md). The cloud path requires an existing subnet and private bucket; the workstation Terraform creates its own evidence bucket. Source and Terraform remain inspectable and customizable.
+
+## Offline rule check (no AWS or model needed)
+
+```sh
+python -m pip install -e .
+python tools/demo.py
+```
+
+A clearly labeled synthetic rule example, using Python 3.11+ with no AWS credentials,
+model key or cloud deployment. [What this demo shows](docs/DEMO.md). This is not a demonstration of the live agent.
 
 ## What you get
+
+[Community skills](docs/COMMUNITY-SKILLS.md) add focused IAM, S3, framework-mapping, CloudTrail, reassessment and case-summary guidance. These are post-v0.1.0 updates on `main`; use current source for them. Existing v0.1.0 release assets retain their documented baseline.
 
 | Included in v0.1.0 | Boundary |
 |---|---|
@@ -57,7 +77,7 @@ Both paths use your AWS and model accounts and incur their charges. Local means 
 
 See [scope and limits](docs/LIMITS.md) for what is not included and [model/data choices](docs/MODELS.md) before connecting your account.
 
-[Illustrated first-use walkthrough](docs/MVP-WALKTHROUGH.md) · [Login and profile screenshots](docs/NATIVE-CE-QUICKSTART.md#3-retrieve-your-login-open-the-tunnel-and-select-ce-desk)
+[Illustrated first-use walkthrough](docs/WALKTHROUGH.md) · [Login and profile screenshots](docs/NATIVE-CE-QUICKSTART.md#3-retrieve-your-login-open-the-tunnel-and-select-ce-desk)
 
 ## Bring context, see it used, return later
 

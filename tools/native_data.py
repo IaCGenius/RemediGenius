@@ -16,7 +16,7 @@ def hydrate(bucket, prefix, destination):
     def fetch(path, limit):
         response = s3.get_object(Bucket=bucket, Key=f"{prefix.strip('/')}/{path}")
         if response["ContentLength"] > limit:
-            raise ValueError("Record exceeds sketch size limit")
+            raise ValueError("Record exceeds collection size limit")
         return response["Body"].read(limit + 1)
 
     body = fetch("catalog.json", 1024 * 1024)

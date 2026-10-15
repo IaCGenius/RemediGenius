@@ -113,7 +113,7 @@ resource "aws_launch_template" "host" {
   instance_type = var.instance_type
   iam_instance_profile { name = aws_iam_instance_profile.host.name }
   network_interfaces {
-    associate_public_ip_address = true
+    associate_public_ip_address = var.associate_public_ip
     security_groups             = [aws_security_group.host.id]
     delete_on_termination       = true
   }

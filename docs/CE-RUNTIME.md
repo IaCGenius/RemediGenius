@@ -135,11 +135,15 @@ critique against receipts rather than blindly accept it. The runtime supplies on
 review-status heading. AI_CRITIQUED means a critique was returned with excerpts, not that every
 claim passed or that an independent reviewer approved the proposal.
 
-## Reuse in the hosted product
+## Proposal pattern checks
 
-The native plugin, readable skills, SDK operation manifest, evidence comparator
-and S3 receipt format are reusable independently of a CE console. A hosted version
-can compose them with separate analyst/builder identities and an independently
-approved execution boundary. Keep its IAM roles, prefixes and deployment state
-separate; do not merge CE test evidence into production knowledge. No hosted
-repository changes or automatic remediation were made as part of this release.
+The final-output hook performs deterministic text-pattern checks for broad IAM
+changes, Internet ingress, detection disablement, broad principals and S3 public
+access changes. Flagged lines are quoted with a fixed warning, followed by a
+pattern-only disclaimer. This is a review aid, not a command parser, IAM evaluator,
+security guarantee or approval to execute. Quoted observations and restrictive
+policies can trigger it; obfuscated or unfamiliar commands may be missed. Streaming
+may show draft text before the final hook. The model never executes these proposals.
+
+The plugin, skills, operation manifest, comparator and receipt format are reusable
+under Apache-2.0.

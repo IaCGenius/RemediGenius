@@ -51,7 +51,7 @@ Then choose a concrete investigation, for example:
 > are facts versus your interpretation. Do not change AWS.
 
 An unavailable service, access denial or empty result is useful coverage information,
-not a clean security assessment. See [the capability matrix](AWS-MVP-CAPABILITIES.md)
+not a clean security assessment. See [the capability matrix](AWS-CAPABILITIES.md)
 for supported reads versus demonstrated live results. A configured service may
 have no findings in this account. CE does not enable services for you.
 

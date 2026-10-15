@@ -1,5 +1,7 @@
 # Security
 
+Provided as-is; review [your configuration and data-handling responsibilities](docs/LIMITS.md#your-responsibility).
+
 ## Current native Hermes boundary — 2026-10-14
 
 The former console policy is retained in Git history; it does not describe native Hermes.

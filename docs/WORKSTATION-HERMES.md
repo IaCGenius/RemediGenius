@@ -66,7 +66,7 @@ After provisioning, the runtime operator needs `sts:AssumeRole` for the generate
 role/user ARN, not the `arn:...:sts::...:assumed-role/.../session` returned for an
 assumed session. Your AWS administrator can supply the correct IAM role ARN.
 If model credentials come from Secrets Manager, add the separate secret-read/KMS
-permissions described in [preview onboarding](PREVIEW-ONBOARDING.md).
+permissions described in [preview onboarding](ONBOARDING.md).
 
 Connection flow:
 
@@ -158,7 +158,7 @@ Open `http://127.0.0.1:9125/chat?profile=ce-desk`, sign in with that username/pa
 
 ![Select the single CE profile, ce-desk, in native Hermes Chat](images/hermes-profile-selector.jpg)
 
-Continue with [the illustrated first investigation and knowledge walkthrough](MVP-WALKTHROUGH.md).
+Continue with [the illustrated first investigation and knowledge walkthrough](WALKTHROUGH.md).
 
 ## 6. Investigate and add knowledge
 
@@ -231,3 +231,43 @@ expired login, correct the operator trust/permissions; do not grant the agent ad
 When using `model_secret_arn`, the local launcher retrieves the secret with your
 operator profile before Docker starts. The limited reader role is not granted
 Secrets Manager access. This is separate from the model key passed into Hermes.
+
+## bash/zsh equivalents (not a macOS acceptance claim)
+
+Windows is the tested workstation path. Linux source tests are not a full Linux
+workstation acceptance, and macOS end-to-end validation has not been performed.
+Use the same configuration fields and review steps above; these shell equivalents
+are provided for operators who choose to validate another platform.
+
+```sh
+git clone https://github.com/IaCGenius/RemediGenius.git
+cd RemediGenius
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[aws,documents]'
+mkdir -p .rgce
+export AWS_PROFILE=ce-operator
+cp deploy/aws-workstation/terraform.tfvars.example .rgce/workstation.tfvars
+# Edit the inputs before planning.
+inputs="$PWD/.rgce/workstation.tfvars"
+plan="$PWD/.rgce/workstation.tfplan"
+terraform -chdir=deploy/aws-workstation init
+terraform -chdir=deploy/aws-workstation plan "-var-file=$inputs" "-out=$plan"
+# Review changes before applying.
+terraform -chdir=deploy/aws-workstation apply "$plan"
+terraform -chdir=deploy/aws-workstation output -json workstation_backend
+cp deploy/aws-workstation/workstation.example.json .rgce/workstation.json
+# Edit JSON with your backend and provider fields; do not put the model key in it.
+# Prompt privately without shell-history disclosure (works from bash or zsh).
+export MODEL_API_KEY="$(python -c 'import getpass; print(getpass.getpass("Model API key: "))')"
+python tools/native_workstation.py run --config .rgce/workstation.json
+```
+
+In a second activated terminal, use the same platform-independent login command:
+
+```sh
+python tools/native_workstation.py login --config .rgce/workstation.json
+# When finished:
+python tools/native_workstation.py stop --config .rgce/workstation.json
+unset MODEL_API_KEY
+```

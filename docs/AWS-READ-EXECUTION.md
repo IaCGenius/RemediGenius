@@ -118,3 +118,13 @@ explicitly partial, not a complete scan.
 ## Validation
 
 See [release validation](RELEASE-VALIDATION.md) and [limits](LIMITS.md). Real reads do not guarantee complete coverage or correct AI interpretation.
+
+## Buckets outside configured regions
+
+S3 may redirect a request to the bucket's actual region. The executor's
+`aws:RequestedRegion` boundary still applies. A live check against an existing
+bucket in eu-central-1 through a us-east-1-only executor returned an ERROR receipt
+with AccessDenied. Treat that bucket as not assessed in this scope, not healthy.
+The error alone does not identify its cause; check actual bucket region, policy
+and configured scope before changing access. No additional regions are enabled
+automatically. This single check is not universal S3 endpoint qualification.

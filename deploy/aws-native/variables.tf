@@ -1,6 +1,11 @@
 variable "account_id" { type = string }
 variable "region" { type = string }
 variable "subnet_id" { type = string }
+variable "associate_public_ip" {
+  type        = bool
+  default     = false
+  description = "Enable for a public subnet using an Internet gateway. Otherwise supply NAT or equivalent outbound access for AWS APIs, model endpoint and package/image downloads."
+}
 variable "name" {
   type    = string
   default = "rgce-native"

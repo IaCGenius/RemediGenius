@@ -1,5 +1,7 @@
 # Try native RemediGenius CE
 
+Provided as-is; review [your configuration and data-handling responsibilities](docs/LIMITS.md#your-responsibility).
+
 Use your existing AWS security services through one Hermes agent. Collect scoped
 evidence, understand a finding, prepare a fix, save it for your change process,
 and return later to reassess. This is a single-operator community release.
@@ -9,7 +11,7 @@ and return later to reassess. This is a single-operator community release.
 See [current offering and release gates](docs/CURRENT-CE-OFFERING.md) and the
 [current architecture diagram](docs/diagrams/ce-mvp-architecture.html).
 
-Read [the preview setup and credential contract](docs/PREVIEW-ONBOARDING.md) for required inputs,
+Read [the preview setup and credential contract](docs/ONBOARDING.md) for required inputs,
 regions, model access, storage, and what this preview does not provide.
 
 ## Choose where Hermes runs
@@ -33,7 +35,7 @@ access. Account/region onboarding is explicit. Start with one account in `us-eas
 
 The deployment guide creates your own dashboard login. It is separate from AWS credentials and your model API key. Retrieve it privately using the local `login` command or cloud tunnel `-WithLogin`, sign in, and open Chat with `profile=ce-desk`. Do not paste credentials into chat. Keep the launcher/tunnel running while using the dashboard.
 
-See [the illustrated first investigation and knowledge walkthrough](docs/MVP-WALKTHROUGH.md) for the actual UI.
+See [the illustrated first investigation and knowledge walkthrough](docs/WALKTHROUGH.md) for the actual UI.
 
 ## First useful investigation
 

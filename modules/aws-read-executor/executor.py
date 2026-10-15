@@ -29,6 +29,11 @@ def handler(event, context):
                 'max_pages':10,'max_bytes':4000000,'notice':'Configured scope; each call still must pass actual IAM permissions.'}
     if event.get('action') != 'read':
         raise ValueError('Supported actions: capabilities, read')
+    required = ('target','region','service','operation')
+    if any(not isinstance(event.get(key), str) or not event[key] for key in required):
+        raise ValueError('Read requires target, region, service and operation strings')
+    if event['target'] not in targets:
+        raise ValueError('Unknown target; use a configured target from capabilities')
     target = targets[event['target']]
     region, service, operation = event['region'], event['service'], event['operation']
     if region not in target['regions'] or operation not in OPERATIONS.get(service, {}):
@@ -40,7 +45,12 @@ def handler(event, context):
     if service == 'cloudtrail' and operation == 'lookup_events':
         parameters = dict(parameters)
         for field in ('StartTime','EndTime'):
-            parameters[field] = datetime.fromisoformat(parameters[field].replace('Z','+00:00'))
+            if not isinstance(parameters.get(field), str):
+                raise ValueError('CloudTrail lookup requires StartTime and EndTime ISO-8601 strings')
+            try:
+                parameters[field] = datetime.fromisoformat(parameters[field].replace('Z','+00:00'))
+            except ValueError as exc:
+                raise ValueError('CloudTrail StartTime and EndTime must be valid ISO-8601 strings') from exc
         start, end = parameters['StartTime'], parameters['EndTime']
         if start.tzinfo is None or end.tzinfo is None or not 0 < (end-start).total_seconds() <= 90*86400:
             raise ValueError('Use an explicit timezone-aware window of at most 90 days')

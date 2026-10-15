@@ -9,4 +9,4 @@ schedule_enabled = true
 schedule_interval_hours = 24
 
 # Model credentials belong in your launcher environment or Secrets Manager, not here.
-# Full input meanings: docs/PREVIEW-ONBOARDING.md
+# Full input meanings: docs/ONBOARDING.md

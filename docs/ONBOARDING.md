@@ -1,8 +1,7 @@
 # What a new CE user gets
 
 RemediGenius CE is a **single-operator, self-hosted AWS investigation tool**.
-You bring your AWS account and model access. There is no RemediGenius hosted
-service, shared model key, trial AWS account or preconnected organization policy.
+You bring your AWS account and model access. There is no shared model key, trial AWS account or preconnected organization policy.
 
 **Release baseline: one AWS account in `us-east-1`, using Qwen 3.8 Max.** Explicit additional-account onboarding remains available. Other regions and models are configurable extensions, not validation requirements or promises for this release.
 
@@ -185,7 +184,7 @@ fresh-evidence reassessment and configurable deterministic scheduled checks.
 
 **Not supplied:** model credits; pre-enabled AWS services; automatic organization
 account enrollment; automatic cloud fixes; a guarantee of complete coverage from a
-bounded read; certified compliance; automated case closure; hosted multi-tenancy;
+bounded read; certified compliance; automated case closure; multi-user or multi-tenant operation;
 turnkey OAuth/Confluence synchronization; automatic chat-attachment intake; or a
 public production MCP/API/A2A service. Planned interfaces are labeled as proposals.
 Enabling extra upstream skills/plugins does not automatically grant CE execution

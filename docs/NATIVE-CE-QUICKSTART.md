@@ -43,7 +43,7 @@ not create or configure that existing bucket. Choose a dedicated workspace prefi
 and stack name. Terraform
 creates scoped IAM, Lambda, a Spot ASG, retained encrypted EBS and a dashboard
 secret; it does not create the bucket or VPC. Protect Terraform state: it contains
-the generated dashboard login. Review [all input meanings](PREVIEW-ONBOARDING.md#inputs-and-what-they-control).
+the generated dashboard login. Review [all input meanings](ONBOARDING.md#inputs-and-what-they-control).
 
 The default Spot pool offers `t3.medium` and `t3a.medium` (2 vCPU, 4 GiB RAM),
 using price-capacity-optimized selection and a 3 GiB container memory limit.
@@ -148,7 +148,7 @@ that dashboard secret, Auto Scaling discovery and SSM session access.
 
 ![Select the single CE profile, ce-desk, in native Hermes Chat](images/hermes-profile-selector.jpg)
 
-Continue with [the illustrated first investigation and knowledge walkthrough](MVP-WALKTHROUGH.md).
+Continue with [the illustrated first investigation and knowledge walkthrough](WALKTHROUGH.md).
 
 Use `-ShowLogin` to retrieve only the login, or omit both login switches to open
 only a tunnel. If connection fails, first confirm `running=true`, a healthy SSM
@@ -219,3 +219,5 @@ During onboarding, choose whether to enable daily collection. It is separately o
 checks (minimum one hour). It keeps running when Spot is stopped. Set
 `schedule_enabled=false` too if you want all scheduled collection paused. See
 [daily checks and saved findings](OPERATING-LOOP.md) for scope and follow-up.
+
+Network input: `associate_public_ip` defaults to false. Use a private subnet with outbound connectivity, or explicitly set true for a public subnet without NAT. See [upgrade/network notes](UPGRADING.md#post-v010-network-and-reader-changes).
