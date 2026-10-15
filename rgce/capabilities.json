@@ -1,5 +1,0 @@
-[
-  {"id":"investigate","version":"0.1.0","title":"Investigate a finding","description":"Follow a finding to its evidence, rule and approved context.","required":["evidence"],"optional":["Hermes or another MCP client","Terraform snapshot"],"writes_cloud":false},
-  {"id":"propose","version":"0.1.0","title":"Prepare a remediation proposal","description":"Prepare a reviewable plan with evidence, prerequisites and verification steps.","required":["finding"],"optional":["Approved knowledge","AI explanation"],"writes_cloud":false},
-  {"id":"reassess","version":"0.1.0","title":"Reassess a change","description":"Compare compatible snapshots. Missing evidence stays unknown.","required":["two_assessments"],"optional":[],"writes_cloud":false}
-]

@@ -2,9 +2,9 @@
 
 Use your existing AWS security services through one Hermes agent. Collect scoped
 evidence, understand a finding, prepare a fix, save it for your change process,
-and return later to reassess. This is a single-operator community preview.
+and return later to reassess. This is a single-operator community release.
 
-**Validated preview baseline: AWS `us-east-1`, Qwen 3.8 Max, one `ce-desk` profile.** Other configured regions/models are operator experiments, not release acceptance scope.
+**Validated release baseline: AWS `us-east-1`, Qwen 3.8 Max, one `ce-desk` profile.** Other configured regions/models are operator experiments, not release acceptance scope.
 
 See [current offering and release gates](docs/CURRENT-CE-OFFERING.md) and the
 [current architecture diagram](docs/diagrams/ce-mvp-architecture.html).
@@ -67,6 +67,5 @@ credentials/state/transcripts out of shared files, and back up your Docker volum
 or EBS plus deployment configuration. S3 evidence alone does not restore chat.
 Review source changes before using the explicit workstation `--upgrade` option.
 
-The root Compose files and older console guides remain historical source. They
-are not the native Hermes entry points above. Start with these two guides rather
-than installing a second console or creating additional agent profiles.
+Legacy console and prototype deployments are archived outside this release.
+Use the two native setup guides above.

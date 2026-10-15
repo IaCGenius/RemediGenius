@@ -1,6 +1,6 @@
 import zipfile
 import pytest
-from tools.package_preview import inspect_source
+from tools.package_release import inspect_source
 
 
 @pytest.mark.parametrize('name', ['../escape.py', '.rgce/evidence.json', '.git/config', 'deploy/terraform.tfstate', 'auth.json'])

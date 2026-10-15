@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 def test_comparison_failure_cannot_report_all_clear(monkeypatch):
     root = Path(__file__).resolve().parents[1]
-    monkeypatch.syspath_prepend(str(root/'profiles/native-sketch/desk/skills/ce-aws-read/scripts'))
+    monkeypatch.syspath_prepend(str(root/'profiles/ce/desk/skills/ce-aws-read/scripts'))
     spec = importlib.util.spec_from_file_location('scheduled_check', root/'modules/assurance-schedule/check.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

@@ -15,8 +15,8 @@ def module(name,path):
     value=importlib.util.module_from_spec(spec);spec.loader.exec_module(value)
     return value
 
-comparison=module('ce_compare','profiles/native-sketch/desk/skills/ce-aws-read/scripts/evidence_compare.py')
-runtime=module('ce_runtime','profiles/native-sketch/desk/plugins/ce-runtime/__init__.py')
+comparison=module('ce_compare','profiles/ce/desk/skills/ce-aws-read/scripts/evidence_compare.py')
+runtime=module('ce_runtime','profiles/ce/desk/plugins/ce-runtime/__init__.py')
 
 def snapshot():
     return {'run_id':'a'*32,'observed_at':'2026-01-01T00:00:00+00:00',

@@ -1,6 +1,6 @@
 # Current scope and limits
 
-CE is a public, single-operator preview. The validated baseline is AWS us-east-1
+CE is a public, single-operator release. The validated baseline is AWS us-east-1
 with Qwen 3.8 Max. Other models/regions are configurable, not yet qualified.
 Azure and GCP are future direction, with no delivery date promised.
 
@@ -25,5 +25,4 @@ Azure and GCP are future direction, with no delivery date promised.
   and providers have their own settings and data policies.
 
 See [AWS coverage](AWS-MVP-CAPABILITIES.md), [acceptance](MVP-ACCEPTANCE.md)
-and [security](../SECURITY.md). Older console and deployment paths remain legacy
-source awaiting separate packaging cleanup; they are not native CE entry points.
+and [security](../SECURITY.md). Legacy console and prototype deployments are archived outside CE.

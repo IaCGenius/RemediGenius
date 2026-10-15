@@ -1,6 +1,6 @@
 # Contributing to RemediGenius CE
 
-The preview baseline is AWS `us-east-1`, Qwen 3.8 Max and one native `ce-desk`
+The release baseline is AWS `us-east-1`, Qwen 3.8 Max and one native `ce-desk`
 profile. Prefer a small improvement to an existing skill or Hermes integration
 over a parallel agent framework or custom UI. Other providers/regions are welcome
 experiments, but are not required to qualify this MVP.

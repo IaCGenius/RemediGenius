@@ -59,7 +59,7 @@ Lambda kiosk and does not perform cloud remediation.
 The default target is the deployment account and region. Configure
 `aws_read_targets` in private Terraform inputs to add aliases with account ID,
 region list and optional role ARN/external ID. For a member account, deploy
-`deploy/aws-native-sketch/member-read-role.json` with the exact CE executor role
+`deploy/aws-native/member-read-role.json` with the exact CE executor role
 ARN and selected regions, then put its output ARN in that target configuration.
 The trust policy requires the configured external ID. Inspect the template before
 deployment; it grants metadata/finding reads, not customer object-content reads.

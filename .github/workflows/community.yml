@@ -1,4 +1,4 @@
-name: Community candidate
+name: Community release checks
 on: [push, pull_request]
 permissions:
   contents: read
@@ -13,9 +13,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install -e ".[aws,mcp,documents,test]"
-      - run: python tests/test_checks.py
-      - run: python tests/test_results.py
+      - run: python -m pip install -e ".[aws,documents,test]"
       - run: python -m pytest -q tests
-      - run: python -m pytest -q modules/lambda-kiosk/tests
+      - run: python -m pytest -q profiles/ce/tests modules/native-source-discovery
       - run: python -m pip wheel --no-deps --wheel-dir dist .

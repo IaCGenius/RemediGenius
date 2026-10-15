@@ -5,7 +5,7 @@ Lambda performs bounded collection; S3 retains evidence; EventBridge runs daily
 deterministic checks even when your workstation is off. This is a hybrid deployment,
 not an offline edition. AWS and model usage are charged to your accounts.
 
-The older root `compose.yaml` starts the legacy console, not this experience.
+The legacy console is archived outside this release. Use the launcher below.
 
 The launcher checks the pinned upstream dashboard source and mounts a small CE
 session-limit overlay: two live terminals and ten minutes for detached terminals.
@@ -15,7 +15,7 @@ updating the official image; a changed source hash stops preparation explicitly.
 
 ## 1. Get the public source and prerequisites
 
-Use AWS `us-east-1` and Qwen 3.8 Max for the preview baseline. Install Git, Python 3.11+, Docker with Linux containers, Terraform 1.10+ and AWS CLI v2. The examples below use PowerShell; run them from the repository root. Windows is the accepted workstation baseline.
+Use AWS `us-east-1` and Qwen 3.8 Max for the release baseline. Install Git, Python 3.11+, Docker with Linux containers, Terraform 1.10+ and AWS CLI v2. The examples below use PowerShell; run them from the repository root. Windows is the accepted workstation baseline.
 
 ```powershell
 git clone https://github.com/IaCGenius/RemediGenius.git

@@ -4,9 +4,9 @@
 
 **AWS today. Azure/GCP next (planned).** Current live validation: AWS `us-east-1`.
 
-Self-hosted · one native Hermes `ce-desk` profile · Apache-2.0 · **v0.1 preview**
+Self-hosted · one native Hermes `ce-desk` profile · Apache-2.0 · **[v0.1.0](https://github.com/IaCGenius/RemediGenius/releases/tag/v0.1.0)**
 
-**Preview baseline: AWS `us-east-1` and Qwen 3.8 Max.** Bring your own AWS account and model access. Other regions and providers are configurable, but are outside this release's validated baseline.
+**Validated baseline: AWS `us-east-1` and Qwen 3.8 Max.** Bring your own AWS account and model access. Other regions and providers are configurable, but are outside this release's validated baseline.
 
 ![CE architecture: user and selected knowledge through Hermes, scoped execution, durable evidence and follow-up](docs/diagrams/ce-mvp-architecture.png)
 
@@ -45,7 +45,7 @@ Both paths use your AWS and model accounts and incur their charges. Local means 
 
 ## What you get
 
-| Included in the preview | Boundary |
+| Included in v0.1.0 | Boundary |
 |---|---|
 | Scoped AWS reads, records, counts and receipts | Bounded queries; unavailable services are not healthy services |
 | Selected organizational knowledge | Import files, publish/mount a view, show sources and their effect on advice |
@@ -68,7 +68,8 @@ See [scope and limits](docs/LIMITS.md) for what is not included and [model/data 
 
 ## Evidence, limits and project source
 
-- [Release checklist and known limits](docs/V0.1-RELEASE-PLAN.md)
+- [v0.1.0 validation](docs/RELEASE-VALIDATION.md) and [upgrade safely](docs/UPGRADING.md)
+- [Release scope and known limits](docs/V0.1-RELEASE-PLAN.md)
 - [MVP acceptance: Windows workstation, Windows/Linux source tests and live Qwen](docs/MVP-ACCEPTANCE.md)
 - [Skill improvements: broader Pi evaluation and native Qwen retests](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/SKILL-EVALUATION-2026-10-15.md)
 - [AWS capabilities and scope](docs/AWS-READ-EXECUTION.md)
@@ -79,10 +80,10 @@ See [scope and limits](docs/LIMITS.md) for what is not included and [model/data 
 
 | Source | Location |
 |---|---|
-| Native profile and readable skills | `profiles/native-sketch/desk` |
-| Runtime gate and bounded critic | `profiles/native-sketch/desk/plugins/ce-runtime` |
+| Native profile and readable skills | `profiles/ce/desk` |
+| Runtime gate and bounded critic | `profiles/ce/desk/plugins/ce-runtime` |
 | Deterministic collection | `modules/aws-read-executor` |
-| Workstation / Spot Terraform | `deploy/aws-workstation` / `deploy/aws-native-sketch` |
+| Workstation / Spot Terraform | `deploy/aws-workstation` / `deploy/aws-native` |
 | Launchers and verification | `tools` / `tests` |
 
 Acceptance reports preserve partial and recovered results. CI execution status is distinct from local/live acceptance; see the release checklist. Never include credentials, Terraform state, private policies or unredacted transcripts in public issues.

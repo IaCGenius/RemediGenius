@@ -14,7 +14,7 @@ data "archive_file" "code" {
     filename = "check.py"
   }
   source {
-    content  = file("${path.module}/../../profiles/native-sketch/desk/skills/ce-aws-read/scripts/evidence_compare.py")
+    content  = file("${path.module}/../../profiles/ce/desk/skills/ce-aws-read/scripts/evidence_compare.py")
     filename = "evidence_compare.py"
   }
 }

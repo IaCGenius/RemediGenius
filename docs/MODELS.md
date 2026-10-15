@@ -1,6 +1,6 @@
 # Bring your own model
 
-Use a capable reasoning model with reliable tool calling. Qwen 3.8 Max is the tested preview baseline, not a requirement to use that provider. No subscription, API key or model credits are included.
+Use a capable reasoning model with reliable tool calling. Qwen 3.8 Max is the tested release baseline, not a requirement to use that provider. No subscription, API key or model credits are included.
 
 The native profile uses Hermes's custom provider with a model ID, OpenAI-compatible base URL and MODEL_API_KEY. Configure the workstation launcher or AWS Terraform inputs in the [setup guide](../START-HERE.md). Cloud keys come from your Secrets Manager secret; workstation mode supports a local environment variable or your Secrets Manager secret. Never commit keys.
 

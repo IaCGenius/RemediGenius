@@ -1,9 +1,0 @@
-[Unit]
-Description=RemediGenius Community collector (no LLM): every connected account, read-only configuration facts
-After=network-online.target rg-hermes.service
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/python3 /opt/rg/dist/collect.py --all
-TimeoutStartSec=45min

@@ -1,7 +1,6 @@
-# Deploy the native Hermes CE candidate
+# Deploy native Hermes CE
 
-This is the current cloud entry point. Docker Compose at the repository root
-starts the preserved console, not this agent.
+This is the cloud entry point. The legacy console is archived outside this release.
 
 For local native Hermes instead, use [the workstation guide](WORKSTATION-HERMES.md).
 Both modes use the same CE profile and scoped AWS collector. The workstation mode
@@ -66,14 +65,14 @@ The model receives selected AWS records and knowledge needed for the question.
 
 ## 2. Package and launch
 
-1. Read `deploy/aws-native-sketch/README.md` and the IAM/module source.
+1. Read `deploy/aws-native/README.md` and the IAM/module source.
 2. Package this checkout:
 
    ```powershell
    python tools/package_native_hermes.py --output .rgce/native-source.zip
    ```
 
-3. Read `deploy/aws-native-sketch/terraform.tfvars.example` for all configurable
+3. Read `deploy/aws-native/terraform.tfvars.example` for all configurable
    settings. Create `.rgce/aws.tfvars.json` using the following JSON shape. Replace
    **every** uppercase placeholder; use your packaged digest for both digest fields.
    JSON is supported by Terraform and by the knowledge publisher later. Do not
@@ -108,10 +107,10 @@ The model receives selected AWS records and knowledge needed for the question.
    aws s3 cp .rgce/native-source.zip s3://YOUR_PRIVATE_BUCKET/native-source/YOUR_DIGEST.zip
    $inputs = (Resolve-Path .rgce/aws.tfvars.json).Path
    $plan = Join-Path (Resolve-Path .rgce).Path "aws.tfplan"
-   terraform -chdir=deploy/aws-native-sketch init
-   terraform -chdir=deploy/aws-native-sketch plan "-var-file=$inputs" "-out=$plan"
+   terraform -chdir=deploy/aws-native init
+   terraform -chdir=deploy/aws-native plan "-var-file=$inputs" "-out=$plan"
    # Review resources and permissions before applying the saved plan.
-   terraform -chdir=deploy/aws-native-sketch apply $plan
+   terraform -chdir=deploy/aws-native apply $plan
    ```
 
    The upload location must match `bucket_name` plus `source_archive_key` exactly.

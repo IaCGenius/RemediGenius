@@ -1,9 +1,0 @@
-[Unit]
-Description=Refresh kiosk credentials every 40 minutes (they last 1 hour)
-
-[Timer]
-OnBootSec=2min
-OnUnitActiveSec=40min
-
-[Install]
-WantedBy=timers.target

@@ -3,7 +3,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-path = Path(__file__).resolve().parents[1] / 'profiles/native-sketch/desk/skills/ce-explain-review/scripts/review_log.py'
+path = Path(__file__).resolve().parents[1] / 'profiles/ce/desk/skills/ce-explain-review/scripts/review_log.py'
 spec = importlib.util.spec_from_file_location('native_review_log', path)
 review = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(review)

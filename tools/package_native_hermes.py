@@ -12,7 +12,7 @@ import zipfile
 
 def package(output):
     root = Path(__file__).resolve().parents[1]
-    desk = root / 'profiles/native-sketch/desk'
+    desk = root / 'profiles/ce/desk'
     reviewed = [desk/'SOUL.md']
     for directory in ('plugins/ce-runtime', 'skills/ce-aws-read', 'skills/ce-aws-security', 'skills/ce-knowledge', 'skills/shared-evidence', 'skills/ce-explain-review', 'skills/ce-source-tools'):
         reviewed.extend(p for p in (desk/directory).rglob('*') if p.is_file()
@@ -20,10 +20,10 @@ def package(output):
     manifest = {'version':'ce-runtime/0.1.0','files':{
         p.relative_to(desk).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(reviewed)}}
-    selected = [root / 'tools/native_sketch_data.py', root / 'tools/upgrade_native_profile.py',
+    selected = [root / 'tools/native_data.py', root / 'tools/upgrade_native_profile.py',
                 root / 'tools/native_session_limits.py']
     extensions = {'.py', '.tf', '.md', '.yaml', '.yml', '.tftpl', '.sh', '.json'}
-    for directory in ('deploy/aws-native-sketch', 'profiles/native-sketch'):
+    for directory in ('deploy/aws-native', 'profiles/ce'):
         for path in (root / directory).rglob('*'):
             parts = path.relative_to(root).parts
             if (path.is_file() and not any(p.startswith('.') or p == '__pycache__' for p in parts)
@@ -37,7 +37,7 @@ def package(output):
             entry = zipfile.ZipInfo(path.relative_to(root).as_posix(), (2020, 1, 1, 0, 0, 0))
             entry.compress_type = zipfile.ZIP_DEFLATED
             archive.writestr(entry, path.read_bytes())
-        entry = zipfile.ZipInfo('profiles/native-sketch/desk/plugins/ce-runtime/manifest.json', (2020,1,1,0,0,0))
+        entry = zipfile.ZipInfo('profiles/ce/desk/plugins/ce-runtime/manifest.json', (2020,1,1,0,0,0))
         entry.compress_type = zipfile.ZIP_DEFLATED
         archive.writestr(entry, json.dumps(manifest,sort_keys=True))
     return {'archive': str(output), 'files': len(selected)+1,

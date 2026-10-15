@@ -84,7 +84,7 @@ class Workstation:
             raise ValueError('CE source changed. Review it, back up the volume, then pass --upgrade to apply it.')
         with zipfile.ZipFile(archive) as source:
             source.extractall(self.root/'source') # generated locally by the reviewed packager
-        profile=self.root/'source/profiles/native-sketch/desk'
+        profile=self.root/'source/profiles/ce/desk'
         cfg=profile/'config.yaml'
         cfg.write_text(cfg.read_text(encoding='utf-8').replace('__MODEL_NAME__',json.dumps(self.cfg['model_name']))
                        .replace('__MODEL_BASE_URL__',json.dumps(self.cfg['model_base_url'])),encoding='utf-8')
