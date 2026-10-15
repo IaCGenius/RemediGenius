@@ -24,5 +24,5 @@ Azure and GCP are future direction, with no delivery date promised.
 - No CE adoption telemetry is collected. Feedback is voluntary. Upstream runtimes
   and providers have their own settings and data policies.
 
-See [AWS coverage](AWS-MVP-CAPABILITIES.md), [acceptance](MVP-ACCEPTANCE.md)
+See [AWS coverage](AWS-MVP-CAPABILITIES.md), [acceptance](RELEASE-VALIDATION.md)
 and [security](../SECURITY.md). Legacy console and prototype deployments are archived outside CE.

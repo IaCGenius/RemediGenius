@@ -34,7 +34,6 @@ Generated with the installed [Archify](https://github.com/tt-a1i/archify) skill,
 - Browser evidence: **passed** at 1440×900, 1600×1000, 1920×1080 and 2048×1320. No page overflow.
 - Visual review: **passed** after inspecting light and dark screenshots at both endpoint sizes. No node/label crossings, clipped cards or conspicuous empty lower band. No visual correction rounds were needed.
 - The README PNG is an exact copy of the 2048×1320 light browser capture. It includes the viewer chrome; it is a screenshot, not a canonical SVG export.
-- [Delivery receipt](ce-mvp-architecture.delivery.json) binds source/artifact bytes. [Browser receipt](https://github.com/IaCGenius/RemediGenius/blob/1403054804410ab92a0ef4065c9e51d719ab2186/docs/diagrams/ce-mvp-architecture.visual-check.json) records measurements. [Contact sheet](https://github.com/IaCGenius/RemediGenius/blob/1403054804410ab92a0ef4065c9e51d719ab2186/docs/diagrams/ce-mvp-architecture.visual-check.html) shows the four screenshots.
 
 Specification SHA-256: `d836a2580c6660787252f41758642878ee455555b9623867c8542f671efd4d2f`
 

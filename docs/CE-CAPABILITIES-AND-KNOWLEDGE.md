@@ -2,7 +2,7 @@
 
 **Historical implementation note.** The gaps described below are dated to this
 change, not current release status. See [current offering](CURRENT-CE-OFFERING.md)
-and [native acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/NATIVE-PREVIEW-ACCEPTANCE.md).
+and [release validation](RELEASE-VALIDATION.md).
 
 2026-10-13. Implementation notes and next delivery sequence; not a release claim.
 

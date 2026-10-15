@@ -111,9 +111,7 @@ technically accurate proposals. Skills and deterministic controls help, but cann
 make every small/fast model equally reliable. A "reasoning" product label or high
 reasoning-effort setting alone does not establish suitability.
 
-For the MVP, use Qwen 3.8 Max. If you deliberately experiment with another model, first run a real bounded AWS read, a knowledge/exception question and a remediation proposal with review; inspect receipts and actual critic model/context. Qwen 3.8 Max is the tested baseline. [DeepSeek smoke results](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/DEEPSEEK-SMOKE-ACCEPTANCE.md)
-record two targeted checks on the operator's compatible endpoint. Alternative model smoke tests
-are not full release qualification. Keep provider/model selection in Hermes rather
+For the MVP, use Qwen 3.8 Max. If you deliberately experiment with another model, first run a real bounded AWS read, a knowledge/exception question and a remediation proposal with review; inspect receipts and actual critic model/context. Qwen 3.8 Max is the tested baseline. Other providers remain outside release qualification. Keep provider/model selection in Hermes rather
 than adding model-specific CE code. Use the same operator-owned credentials model.
 
 For local AWS credentials, follow [the authentication steps](WORKSTATION-HERMES.md#2-authenticate-to-aws-first):

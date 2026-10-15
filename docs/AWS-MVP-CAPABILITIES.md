@@ -83,22 +83,6 @@ documents are surfaced when they affect the decision. Import time is not policy
 precedence or an effective date. The operator remains responsible for supplied
 context; CE adds provenance and review assistance, not another approval committee.
 
-## Read the test evidence
+## Validation
 
-- [Current MVP acceptance](MVP-ACCEPTANCE.md): fresh-source Windows/Linux checks,
-  live Qwen knowledge use, independently checked Config definition/status empty
-  responses, workstation runtime and Spot update.
-
-- [Native runtime acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/CE-RUNTIME-ACCEPTANCE.md): real-source checks and
-  execution boundaries.
-- [Native preview acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/NATIVE-PREVIEW-ACCEPTANCE.md): deployment,
-  proposals, saved cases and corrections.
-- [Layered assessment acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/LAYERED-ASSESSMENT-ACCEPTANCE.md): framework
-  grouping and knowledge use, including preserved partial results.
-- [Organization exception acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/ORG-EXCEPTION-ACCEPTANCE.md): real
-  operator policy, conditional applicability and explicit unknowns.
-- [Critic context acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/CRITIC-CONTEXT-ACCEPTANCE.md): shared captured
-  skill results and bounded evidence; not an infallible review gate.
-
-SDK boundary unit tests use constructed responses to check error handling and
-receipt preservation. They are never labelled live AWS or Qwen acceptance.
+See [release validation](RELEASE-VALIDATION.md). Capability support does not imply populated-source live testing for every service. Constructed boundary tests are not live AWS evidence.

@@ -2,8 +2,7 @@
 
 Updated 2026-10-15. [Open the architecture diagram](diagrams/ce-mvp-architecture.html).
 
-**Preview release baseline: AWS `us-east-1` and Qwen 3.8 Max.** Configuration remains extensible; other regions/models do not need qualification for this MVP.
-Older console/rc2/rc3 designs are not automatically native Hermes features.
+**v0.1.0 validated baseline: AWS `us-east-1` and Qwen 3.8 Max.** Configuration remains extensible; other regions/models are outside the validated baseline.
 
 ## What an AWS operator gets
 
@@ -48,11 +47,10 @@ File intake reuses MarkItDown. For Confluence, start with selected exports in
 supported formats or saved text, retaining page reference/version when known.
 A private URL is not a connector. Authenticated Confluence sync and automatic chat
 attachment ingestion are not shipped. Use [native staging](KNOWLEDGE-USE-AND-CONTROL-MAPPING.md),
-not the older console upload guide. Operators publish/mount views; Hermes reads.
+with explicit publication and mounting of views for Hermes to read.
 
-Borrow from the local OKF project: small context/task selections, readable sources
-and explicit unknowns. Do not introduce its separate runtime or claim full schema
-conformance. Hashes identify bytes; they do not establish truth.
+The knowledge design uses small context/task selections, readable sources
+and explicit unknowns. CE does not claim full OKF schema conformance. Hashes identify bytes; they do not establish truth.
 
 The updated tool returns metadata with content and checks its hash. The skill
 explains which source changed a recommendation. Conflicts remain explicit until
@@ -60,36 +58,7 @@ applicability is resolved. Refresh means re-importing changed originals and
 publishing a new selected view. Explicit `--replaces` excludes an old revision from new views while preserving
 its original and prior views. Automatic sync or authority decisions are not implemented.
 See [the knowledge quickstart](NATIVE-KNOWLEDGE-QUICKSTART.md).
-The [knowledge usability acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/OKF-USABILITY-ACCEPTANCE.md) records the newer
-guided-onboarding deployment, inventory/refresh checks and real Qwen result.
-The operator [preview-and-publish workflow](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/KNOWLEDGE-PUBLICATION-ACCEPTANCE.md)
-now verifies and publishes selected views to S3. Activation remains explicit.
 
-## Release gates
+See [release validation](RELEASE-VALIDATION.md) and [known limits](LIMITS.md).
 
-- Preserve [UI rerun](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/UI-RERUN-2026-10-15.md) partial results and the real
-  [organization-policy test](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/ORG-EXCEPTION-ACCEPTANCE.md).
-- Updated skills/provenance and session overlay are deployed: repository suite
-  latest critic-context acceptance records 207 passed/4 Windows skips; kiosk suite 30 passed in its recorded run. Eight UI terminal generations
-  and saved-chat resume passed with memory below 1.4 GiB of the 3 GiB limit.
-- Real Qwen knowledge onboarding/provenance passed; broad assessment interpretation
-  remains partial. See [the detailed acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/LAYERED-ASSESSMENT-ACCEPTANCE.md).
-- Final proposal format-consistency retest passed. CloudTrail counts and bounds
-  independently matched AWS after projection corrections (RECOVERED); narrative
-  attribution remained imperfect. These are operator-reviewed draft outputs.
-- The current source ZIP and checksum are delivered under `dist/native-preview/`.
-  Consult its `RELEASE.json` for the exact commit; older ZIPs are historical.
-- Public source is published at [IaCGenius/RemediGenius](https://github.com/IaCGenius/RemediGenius). See [release gates](V0.1-RELEASE-PLAN.md) for current preview completion work and CI execution limitations.
-- Critic reference sharing and its targeted Qwen retest are recorded in [critic context acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/CRITIC-CONTEXT-ACCEPTANCE.md). Older counts/results above describe their specific runs, not a claim that every case was rerun.
-
-## Session compatibility overlay
-
-Pinned Hermes retains up to sixteen dashboard terminals; serial UI tests exhausted
-the medium host's 3 GiB container limit. The new overlay sets two terminals and a
-ten-minute detached TTL, preserving Hermes's native cleanup/admission logic.
-It is not an upstream configuration option. Exact upstream source hash verification
-fails closed on image changes until reviewed. No custom reaper or database deletion.
-
-At capacity, Hermes can reclaim a detached terminal; all attached slots cause its
-native capacity error. Finish a run before leaving it to start another. Saved
-conversation resume and live terminal continuity are different acceptance checks.
+See [release validation](RELEASE-VALIDATION.md) and [known limits](LIMITS.md).

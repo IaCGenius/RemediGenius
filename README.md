@@ -70,10 +70,7 @@ See [scope and limits](docs/LIMITS.md) for what is not included and [model/data 
 
 - [v0.1.0 validation](docs/RELEASE-VALIDATION.md) and [upgrade safely](docs/UPGRADING.md)
 - [Release scope and known limits](docs/V0.1-RELEASE-PLAN.md)
-- [MVP acceptance: Windows workstation, Windows/Linux source tests and live Qwen](docs/MVP-ACCEPTANCE.md)
-- [Skill improvements: broader Pi evaluation and native Qwen retests](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/SKILL-EVALUATION-2026-10-15.md)
 - [AWS capabilities and scope](docs/AWS-READ-EXECUTION.md)
-- [Workstation acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/WORKSTATION-ACCEPTANCE.md), [critic context acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/CRITIC-CONTEXT-ACCEPTANCE.md), [remediation acceptance](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/REMEDIATION-SKILL-ACCEPTANCE.md)
 - [Runtime controls and extension boundaries](docs/CE-RUNTIME.md)
 - [What CE adds to Hermes](docs/CE-PRODUCT-AND-INTEGRATION-CONTRACT.md)
 - [Contributing and reporting issues](CONTRIBUTING.md)
@@ -86,4 +83,4 @@ See [scope and limits](docs/LIMITS.md) for what is not included and [model/data 
 | Workstation / Spot Terraform | `deploy/aws-workstation` / `deploy/aws-native` |
 | Launchers and verification | `tools` / `tests` |
 
-Acceptance reports preserve partial and recovered results. CI execution status is distinct from local/live acceptance; see the release checklist. Never include credentials, Terraform state, private policies or unredacted transcripts in public issues.
+Validation is scoped to the documented release baseline. Never include credentials, Terraform state, private policies or unredacted transcripts in public issues.

@@ -1,7 +1,7 @@
 # Native Hermes: live AWS investigation
 
 Implemented and exercised against actual AWS accounts on 2026-10-13. This document
-records engineering results; the owner decides when and what to release.
+describes the supported read path and its boundaries.
 
 ## What the operator gets
 
@@ -94,7 +94,7 @@ The host mounts selected knowledge
 to `/opt/data/shared/knowledge`, read-only to Hermes. CE operating guidance is
 explicitly scoped to tool behavior, never a customer security baseline. The owner
 has separately supplied a real S3 policy for acceptance testing; it is not shipped
-as a default rule for other organizations. See [the policy test](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/ORG-EXCEPTION-ACCEPTANCE.md).
+as a default rule for other organizations.
 
 Compute can be replaced: source records and selected knowledge remain in S3.
 Native Hermes sessions/profile state currently survive on retained encrypted EBS,
@@ -115,34 +115,6 @@ CloudTrail and Security Hub data and verifies stored hashes; it makes no model
 calls. A source ERROR gives a nonzero exit code. A bounded PARTIAL query remains
 explicitly partial, not a complete scan.
 
-## Actual acceptance results
+## Validation
 
-Private raw reports are under `.rgce/native-sketch/`; private AWS records are not
-checked into Git. Relevant receipts remain in the configured S3 evidence prefix.
-
-| Check | Observed result |
-|---|---|
-| Native Hermes UI, real model, five-day EC2 CloudTrail request | Run `5a47e4fc40164f77b1d6494c8d92d7ee`; 150 events, three pages, PARTIAL. Model explicitly reported only about 41 minutes represented, retained requested window and cited the new receipt. |
-| Selected second AWS account | Actual EC2 describe and CloudTrail describe succeeded through a new member read role. Two accounts tested; no claim of all organization accounts. |
-| Security Hub ACTIVE findings | 24 actual findings; original, normalized and receipt object hashes verified. |
-| Native helper immediate S3 read | Successfully read receipt `829246aca9c840f6b5339787bceb5fc4` from the running Hermes container using scoped credentials. |
-| Reassessment | Two real complete Security Hub reads compared: comparable, unchanged. No cloud fix was made or claimed. |
-| GuardDuty / Inspector | One detector returned; five covered resources returned across two Inspector pages. Coverage discovery is not proof of finding triage. |
-| Access Analyzer / Config / Security Lake | Successful queries returned zero analyzers, zero configuration recorders and zero lakes in the selected account/region. No broader absence inferred. |
-| Macie | AccessDeniedException stored with an ERROR receipt; no false clean result. |
-| IAM simulation | Invoker denied direct EC2 read, EC2 termination and secret retrieval; executor allowed EC2 describe and denied termination/secret retrieval. This was policy simulation, not a live destructive attempt. |
-| Replacement Spot | Native gateway became active; retained profile survived; credential-refresh and S3-hydration timers active. |
-| Executor rejection | A disallowed mutation operation and an unconfigured region were rejected before SDK execution; no customer mutation was attempted. |
-| Final reproducible source check | Fresh EC2 OK, CloudTrail PARTIAL (three pages), Security Hub OK; eight returned S3 object hashes verified after the final executor update. |
-| Validation | Python compilation, Terraform validation and 44 operation names checked against installed SDK service models. |
-
-The operator authorized the real Qwen test. Its first run exhausted the iteration
-limit without an answer; a later run completed but still made unsupported next-step
-and coverage claims. It is not counted as a full pass. See
-[the skills and execution review](HERMES-SKILLS-AND-EXECUTION-CONTRACT.md) for the
-instruction corrections. The subsequent [five-workflow Qwen retest](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/QWEN-SKILL-RETEST-2026-10-13.md)
-verified real reads and source counts but still found interpretation, scratch-script
-steering and pagination-sensitive comparison defects; it is not a clean acceptance
-pass. Broader central-log querying, automatic onboarding,
-actual organization-exception reasoning, and remediation execution are separate
-unfinished capabilities, not implied by this read path.
+See [release validation](RELEASE-VALIDATION.md) and [limits](LIMITS.md). Real reads do not guarantee complete coverage or correct AI interpretation.

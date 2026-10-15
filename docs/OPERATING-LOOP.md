@@ -1,6 +1,6 @@
 # Daily evidence, saved findings and remediation follow-up
 
-See [acceptance results and known gaps](https://github.com/IaCGenius/RemediGenius/blob/aab2f8a7c74a87fc60684e1afc8ec983fd89fd5b/docs/OPERATING-LOOP-ACCEPTANCE.md).
+See [release validation](RELEASE-VALIDATION.md).
 
 This increment keeps Hermes as the interactive agent and native Kanban as its
 workspace. AWS EventBridge Scheduler invokes a small deterministic Lambda, which
