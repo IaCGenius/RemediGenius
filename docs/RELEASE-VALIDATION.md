@@ -34,3 +34,29 @@ workstation/Spot/UI acceptance is retained in [MVP acceptance](MVP-ACCEPTANCE.md
 GitHub Actions remains billing-blocked; local verification is the owner-approved
 alternative. See [upgrade instructions](UPGRADING.md) before changing a retained
 installation and [limits](LIMITS.md) for the release boundary.
+
+## Retained AWS installation upgrade — 15 October 2026
+
+After publication, the owner authorized upgrading the existing Spot installation
+to the exact released native archive. An encrypted, application-consistent EBS
+snapshot completed before replacement. Terraform applied three updates, with no
+resource additions or deletions. The existing volume was retained.
+
+- All 62 prior sessions and 1,290 messages remained before the new test.
+- All 505 prior knowledge/evidence files remained; only the discovery catalog
+  changed during normal bootstrap refresh.
+- Profile configuration and credential-file hashes remained identical.
+- Hermes remains 0.21.7; Qwen 3.8 Max remains the configured model.
+- All 59 packaged integrity entries matched. Dashboard login with the existing
+  credentials and the authenticated chat route both returned HTTP 200.
+- A bounded real Qwen run completed in 140 seconds. It read retained operator
+  encryption guidance and fresh Config definitions/status in us-east-1. Both
+  loaded skills and six evidence excerpts reached the critic, without omissions.
+  The final answer incorporated the critic's two scope/qualification corrections.
+- No cloud remediation or case mutation was requested. This is an upgrade smoke
+  test, not a repeat of every UI acceptance case or universal model qualification.
+
+The public NOTICE now uses RemediGenius. The source and wheel downloads received
+this attribution-only correction and refreshed checksums; executable wheel files,
+the v0.1.0 tag and the native runtime archive remain unchanged. The retained local
+suite passed again (74 tests), and the corrected wheel installed successfully.
