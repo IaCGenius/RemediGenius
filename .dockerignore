@@ -1,0 +1,15 @@
+**
+!Dockerfile
+!pyproject.toml
+!LICENSE
+!NOTICE
+!README.md
+!rgce/
+!rgce/**
+!deploy/
+!deploy/hermes/
+!deploy/hermes/broker.py
+!deploy/hermes/runner.py
+!deploy/hermes/Dockerfile
+rgce/**/__pycache__/
+rgce/**/*.pyc

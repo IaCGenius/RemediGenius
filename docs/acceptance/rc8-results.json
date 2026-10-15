@@ -1,0 +1,58 @@
+{
+  "version": "0.1.0rc8",
+  "regression": {
+    "ce": 118,
+    "rules": 38,
+    "legacy_kiosk": 30,
+    "browser_journeys": 3
+  },
+  "storage": {
+    "migration_verified": true,
+    "migration_retry_verified": true,
+    "delete_denied": true,
+    "outside_prefix_denied": true,
+    "unconditional_overwrite_denied": true,
+    "fresh_container_recovery": true,
+    "live_source_preserved": true,
+    "knowledge_variation_preserved": true,
+    "original_restored": true,
+    "document_receipt_restored": true,
+    "reassessment": true,
+    "export_verified": true,
+    "objects_verified": 10
+  },
+  "windows_wheel": {
+    "fresh_windows_install": true,
+    "outside_checkout_import": true,
+    "package_files_verified": 32,
+    "document_and_variation_revision": true,
+    "export_verified": true,
+    "reassessment": true,
+    "wheel_sha256": "b12e203c662e6e0aab59aeec09b618e239013c52467c7b80c2fbaaa5c6bb10f5"
+  },
+  "host": {
+    "aws_host_health": true,
+    "s3_mode": true,
+    "tmpfs_replaced": true,
+    "records_survived_restart": true,
+    "no_inbound_rules": true,
+    "prior_workspace_recovered": true,
+    "parameter_store_read_denied": true
+  },
+  "host_stopped": {
+    "stopped": true
+  },
+  "docker_image": "sha256:2e145ffe0169e612ca9158c949dc5dc9cc7103ca79baa568898e7a6da14bfac1",
+  "image_archive_sha256": "aa543af1ef7e707a092d03294fffa53ce8ad4e87f10e9b437319ce3b11c91d0d",
+  "external_review": {
+    "base_commit": "dea5eed",
+    "source_files": [
+      "rgce/store.py",
+      "rgce/object_storage.py",
+      "rgce/documents.py",
+      "rgce/knowledge.py"
+    ],
+    "tools_disabled": true,
+    "aws_data_included": false
+  }
+}

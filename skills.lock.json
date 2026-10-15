@@ -1,0 +1,168 @@
+{
+  "comment": "Upstream pins for adapted skills. Rebuild copies: python tools/vendor.py fetch. Check: python tools/vendor.py verify.",
+  "sources": {
+    "jhkchan/aws-agent-skills": {
+      "url": "https://github.com/jhkchan/aws-agent-skills.git",
+      "commit": "eeace51bd5dd1db2030729d83eeab988861553aa",
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "vetted": "2026-10-10: SkillSpector static (no LLM) CAUTION, pi review ready/read-only, deep dive pick for A3/A6/B6"
+    },
+    "aws/agent-toolkit-for-aws": {
+      "url": "https://github.com/aws/agent-toolkit-for-aws.git",
+      "commit": "2cb0fa1c2e668e1bb075028800b6b27efb95779e",
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "vetted": "2026-10-10: SkillSpector static (no LLM) CAUTION for each skill; text only injected (SKILL.md, references), no scripts or assets"
+    },
+    "mukul975/anthropic-cybersecurity-skills": {
+      "url": "https://github.com/mukul975/anthropic-cybersecurity-skills.git",
+      "commit": "54a798831d2266a3ca61ce68a7acb80b81160d57",
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "vetted": "2026-10-10: SkillSpector static (no LLM) CAUTION (MEDIUM, MCP least privilege); text only injected, scripts/agent.py excluded"
+    }
+  },
+  "skills": [
+    {
+      "name": "s3-public-access",
+      "profile": "analyst",
+      "category": "remedigenius",
+      "version": "0.1.0",
+      "mission": "A3",
+      "source": "jhkchan/aws-agent-skills",
+      "path": "skills/s3-public-access-auditor",
+      "include": [
+        "SKILL.md",
+        "references"
+      ],
+      "files": {
+        "UPSTREAM-SKILL.md": "a12e6b608dd05e464ff12f30156aa2ea0eb2655c6dfc0c4c9f0c4edd9b56ce1c",
+        "references/advanced-patterns.md": "7f1df1d82bf9b48701adcd2f83db0c32fa6cb587d05bf79e598d7d5453da9402",
+        "references/bpa-settings-and-cli-commands.md": "884501c8db5a8f493a8dc8a27468c03c760da5f8239e6c221b01f79c4ed66940",
+        "references/condition-strength-matrix.md": "f33f1144ec21d3f5a368d9d732f63b088639a2cd8876a99995573dd3c94b5a63",
+        "references/diagnostic-commands.md": "3ae44898bb295fff069b48b194127b672e287a0f25e4b1659dd812a853b0e032"
+      }
+    },
+    {
+      "name": "sg-exposure",
+      "profile": "analyst",
+      "category": "remedigenius",
+      "version": "0.1.0",
+      "mission": "A6",
+      "source": "jhkchan/aws-agent-skills",
+      "path": "skills/ec2-security-group-auditor",
+      "include": [
+        "SKILL.md",
+        "references"
+      ],
+      "files": {
+        "UPSTREAM-SKILL.md": "6108352d50a3bfe4f9d39f284f0d1e060ad31fa323c302b3e9627bd0e36201fc",
+        "references/advanced-patterns.md": "30c63c41a44d525ba1c4768a83872cd6a4bf9a95d0548c3dfce2b67a4fe956db",
+        "references/diagnostic-commands.md": "fe69aef26a4d15742b64d7f7bff57f7fa76a61071289c88d503bfe3278752108",
+        "references/security-group-exposure-guide.md": "1890cb3eb0c54fcb3647773c6eac71ce7dfaa19903ba5eb8306c6aee41583f06",
+        "references/worked-examples.md": "4f2435c87f10506f8e0092a6a5bab45a0717879f402deaeff6a230fca46ed873"
+      }
+    },
+    {
+      "name": "iam-least-privilege",
+      "profile": "analyst",
+      "category": "remedigenius",
+      "version": "0.1.0",
+      "mission": "B6",
+      "source": "jhkchan/aws-agent-skills",
+      "path": "skills/iam-least-privilege-advisor",
+      "include": [
+        "SKILL.md",
+        "references"
+      ],
+      "files": {
+        "UPSTREAM-SKILL.md": "95a6877b2cfa068cc2847e0d65815fb9b5dab0738d9eaadabd76bb6ee513e689",
+        "references/advanced-patterns.md": "a1df93d01a5fcf4552d9cd460d864c16913cf618d6c901326956ac3e503b4225",
+        "references/policy-analysis-guide.md": "6e03a7c4b89606c037cc268e26926ab7251743e12dc43a5b4965b8e33cbd7ec6"
+      }
+    },
+    {
+      "name": "aws-serverless",
+      "profile": "builder",
+      "category": "kiosk",
+      "version": "0.1.0",
+      "mission": "kiosk",
+      "source": "aws/agent-toolkit-for-aws",
+      "path": "plugins/aws-core/skills/aws-serverless",
+      "include": [
+        "SKILL.md",
+        "references"
+      ],
+      "files": {
+        "UPSTREAM-SKILL.md": "f30ef6b9a01823bdf5b2f8ccd117f64d3ffe9109b379bdc9d1fad3fcb3abd621",
+        "references/api-gateway.md": "ba8e49728a4d8837d6fe50740d9b209078001f46921fb8437648720b617e2ef1",
+        "references/architecture.md": "c6eb3f9d9cf8653d7ccc08fd57fa533abb1f38e03074150e027c53b613ee6521",
+        "references/concurrency.md": "9c2e7d326b8ada443ac1acefd935fdc38e3ddd672446aed019f7aaff6b8d01b6",
+        "references/deployment.md": "ac0a037dfd0d371864ec409a0671213a3e27893fd6f6bbb8b47f0fa6c95288f7",
+        "references/event-sources.md": "0f728b0c8e6ae8f12a55f2284da04b04f899879f55427630552042ca093b14ee",
+        "references/lambda.md": "4dfbc27390ed989065072e901ae44d3806b4ae8343ccb5e754199cf4bea6601b",
+        "references/orchestration.md": "7251eec0493de1277bcbd3cff392d4d0d4587ce9f7f49a8daa40117f075182da",
+        "references/production.md": "8b7c9d4d4ed4168437021067693197db769e9e864cb31962dd6206d0f1e88fe2",
+        "references/troubleshooting.md": "e0b3212fc9cc5d0aebc09a3c6cb13b8349b0d6458277839324573d8c81b9f9fc"
+      }
+    },
+    {
+      "name": "aws-sdk-python-usage",
+      "profile": "builder",
+      "category": "kiosk",
+      "version": "0.1.0",
+      "mission": "kiosk",
+      "source": "aws/agent-toolkit-for-aws",
+      "path": "plugins/aws-core/skills/aws-sdk-python-usage",
+      "include": [
+        "SKILL.md",
+        "references"
+      ],
+      "files": {
+        "UPSTREAM-SKILL.md": "f4e0bfd87dfcd08d7af75b1b5940071e479f4e5607da4fc45c4c8c3d12ba6d70",
+        "references/configuration.md": "5c9968f72bcc61032e4d647718dd51546e39e9cef152db7343375149d6958bbe",
+        "references/credentials.md": "a86c13661571a269d16fff129c386b2f37e3ec7ca1e2d11f3be0495ed430a82b",
+        "references/dynamodb.md": "d4efbd05d9f62da1a6fbd38631e99cc2fdb118fe2378eaa68d8e67c77ac878fb",
+        "references/error-handling.md": "fa63e1e806a27cf81be877cced49a934d2a58fdd894188744932617a994b5c29",
+        "references/pagination.md": "d5a0ab71189b81fa537b29a3f6de9e6a5f31c41872638d9cf6ffa535e52cf927",
+        "references/s3.md": "88559d3a670564af2dd1fe41cc3457d6cc41dc3db3ef88d9d9210ec975b8e0d4",
+        "references/waiters.md": "0a7a972faefd8f38c61433359a926b51026de2c3027df30b9ead557c772464d4"
+      }
+    },
+    {
+      "name": "debugging-lambda-timeouts",
+      "profile": "builder",
+      "category": "kiosk",
+      "version": "0.1.0",
+      "mission": "kiosk",
+      "source": "aws/agent-toolkit-for-aws",
+      "path": "skills/specialized-skills/serverless-skills/debugging-lambda-timeouts",
+      "include": [
+        "SKILL.md",
+        "references"
+      ],
+      "files": {
+        "UPSTREAM-SKILL.md": "52a1a0bb979d2104c48d6362cd4857ea94542dba6dd4c7fd41487566c1a16d83",
+        "references/lambda-timeout-debugging.md": "c88e37a67813ebeb439b711938729b96275fa0e15179dd50f850a6cab858dfbd"
+      }
+    },
+    {
+      "name": "securing-serverless-functions",
+      "profile": "builder",
+      "category": "kiosk",
+      "version": "0.1.0",
+      "mission": "kiosk",
+      "source": "mukul975/anthropic-cybersecurity-skills",
+      "path": "skills/securing-serverless-functions",
+      "include": [
+        "SKILL.md",
+        "references"
+      ],
+      "files": {
+        "UPSTREAM-SKILL.md": "ffdb234b6fea33fa97d135b8c0b547f0a3d26e60e928544459d0b9496de77886",
+        "references/api-reference.md": "1479ad9fb01527fb49d52ce0954422de111656a141264e87615f77f5c6bfa47f"
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\work\\remedigenius-community\\docs\\diagrams\\ce-inputs-triage-outputs.architecture.json",
+  "output": "C:\\work\\remedigenius-community\\docs\\diagrams\\ce-inputs-triage-outputs.html",
+  "specification": {
+    "sha256": "f047c8612ad08d9ba3c09779a70ca8bbf0015b2113f1276958e92bb20e917401",
+    "bytes": 5053
+  },
+  "artifact": {
+    "sha256": "7054ada46d7a4226b1e0c5e41d3958778b8f0d8fe9f9eb07648f61c187c2060e",
+    "bytes": 713833
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

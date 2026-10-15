@@ -1,0 +1,123 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "RemediGenius CE scoped read role; no v2 changes or customer data mutation.",
+  "Parameters": {
+    "ExecutorRoleArn": {
+      "Type": "String"
+    },
+    "ExternalId": {
+      "Type": "String",
+      "MinLength": 16
+    },
+    "AllowedRegions": {
+      "Type": "CommaDelimitedList",
+      "Default": "us-east-1"
+    }
+  },
+  "Resources": {
+    "ReadRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "RemediGeniusCERead",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Ref": "ExecutorRoleArn"
+                }
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "sts:ExternalId": {
+                    "Ref": "ExternalId"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "ScopedSecurityReads",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "access-analyzer:GetFinding",
+                    "access-analyzer:ListAnalyzers",
+                    "access-analyzer:ListFindings",
+                    "cloudtrail:DescribeTrails",
+                    "cloudtrail:GetTrailStatus",
+                    "cloudtrail:LookupEvents",
+                    "config:DescribeConfigurationAggregatorSourcesStatus",
+                    "config:DescribeConfigurationAggregators",
+                    "config:DescribeConfigurationRecorders",
+                    "config:GetAggregateResourceConfig",
+                    "config:SelectAggregateResourceConfig",
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DescribeRegions",
+                    "ec2:DescribeRouteTables",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeVpcs",
+                    "guardduty:GetDetector",
+                    "guardduty:GetFindings",
+                    "guardduty:ListDetectors",
+                    "guardduty:ListFindings",
+                    "guardduty:ListMembers",
+                    "inspector2:BatchGetAccountStatus",
+                    "inspector2:ListCoverage",
+                    "inspector2:ListFindings",
+                    "macie2:GetFindings",
+                    "macie2:GetMacieSession",
+                    "macie2:ListFindings",
+                    "s3:GetBucketLogging",
+                    "s3:GetBucketPolicyStatus",
+                    "s3:GetBucketPublicAccessBlock",
+                    "s3:GetBucketVersioning",
+                    "s3:GetEncryptionConfiguration",
+                    "s3:ListAllMyBuckets",
+                    "securityhub:DescribeHub",
+                    "securityhub:GetEnabledStandards",
+                    "securityhub:GetFindingAggregator",
+                    "securityhub:GetFindings",
+                    "securityhub:ListFindingAggregators",
+                    "securityhub:ListMembers",
+                    "securitylake:ListDataLakes",
+                    "securitylake:ListLogSources",
+                    "securitylake:ListSubscribers"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": {
+                        "Ref": "AllowedRegions"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "RoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ReadRole",
+          "Arn"
+        ]
+      }
+    }
+  }
+}

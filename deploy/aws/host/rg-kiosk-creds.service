@@ -1,0 +1,8 @@
+[Unit]
+Description=Short-lived kiosk credentials for Hermes profiles that ship kiosk.json
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/rg-kiosk-creds

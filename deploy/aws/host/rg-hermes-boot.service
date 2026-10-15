@@ -1,0 +1,12 @@
+[Unit]
+Description=Hermes host boot (data volume, secrets, container, profiles) on every reboot
+After=network-online.target cloud-final.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/rg/dist/boot.sh
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

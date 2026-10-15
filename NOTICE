@@ -1,0 +1,38 @@
+RemediGenius Community Edition
+Copyright 2026 RemediGenius
+
+This product includes or uses the following third-party software and content.
+
+Hermes Agent (separate runtime image; upstream source is not vendored in this repository)
+  https://github.com/NousResearch/hermes-agent
+  Copyright (c) 2025 Nous Research. MIT License.
+  The rc10 cloud bundle redistributes a separate image built from pinned upstream commit
+  f97608f178d1ffeca59860195ab7da295f7c8e5f (deploy/hermes/Dockerfile).
+  Its upstream licence and dependency notices remain in /opt/hermes in that image.
+  Legacy deploy/aws uses the upstream image path; deploy/aws-hermes uses the supplied image archive.
+
+Adapted skill content (verbatim copies under each skill's references/upstream/, with the upstream LICENSE;
+changes listed in each skill's PROVENANCE.md; pins in skills.lock.json)
+  jhkchan/aws-agent-skills                  Apache-2.0  (s3-public-access, sg-exposure, iam-least-privilege)
+  aws/agent-toolkit-for-aws                 Apache-2.0  (aws-serverless, aws-sdk-python-usage, debugging-lambda-timeouts)
+  mukul975/anthropic-cybersecurity-skills   Apache-2.0  (securing-serverless-functions)
+
+Python packages in the lambda kiosk layers (hash-pinned in modules/lambda-kiosk/layers/*.lock)
+  boto3, botocore, s3transfer (Apache-2.0); jmespath, six, urllib3 (MIT); python-dateutil (Apache-2.0 / BSD-3-Clause);
+  pytest, pluggy, iniconfig (MIT); packaging (Apache-2.0 / BSD-2-Clause); pygments (BSD-2-Clause).
+
+AWS managed policies referenced by the read-only role (ViewOnlyAccess, SecurityAudit) are defined by AWS.
+
+CE console dependencies (installed in runtime images; not vendored as repository source)
+  FastAPI, Pydantic, PyYAML, MCP Python SDK (MIT); Uvicorn (BSD-3-Clause).
+  boto3 and botocore (Apache-2.0) provide the optional scoped AWS collector.
+
+The rgce/rules modules carry forward the community baseline's adapted rule code.
+  See rgce/RULES-PROVENANCE.md and rgce/rules/*-PROVENANCE.md.
+  No Hermes runtime or model-provider client is copied into the local CE package.
+
+Optional document intake
+  Microsoft MarkItDown (MIT), installed with selected format extras in the console image.
+  https://github.com/microsoft/markitdown
+  Its transitive document libraries retain their own licences in the runtime image.
+  Knowledge design concepts were studied independently; no personal memory content was copied.

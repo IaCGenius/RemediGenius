@@ -1,0 +1,10 @@
+auth.json
+.env
+.env.*
+!.env.EXAMPLE
+memories/
+sessions/
+state.db*
+logs/
+cache/
+*.lock

@@ -1,0 +1,19 @@
+# Copy to an ignored private .tfvars file and replace EVERY placeholder.
+account_id            = "YOUR_ACCOUNT_ID"
+region                = "us-east-1"
+subnet_id             = "YOUR_SUBNET_ID"
+bucket_name           = "YOUR_PRIVATE_BUCKET"
+workspace_prefix      = "ce-preview"
+name                  = "rgce-native"
+running               = false
+instance_type         = "t3.medium"
+spot_instance_types   = ["t3.medium", "t3a.medium"]
+container_memory_mb   = 3072
+source_archive_key    = "native-source/YOUR_DIGEST.zip"
+source_archive_sha256 = "YOUR_64_CHARACTER_SHA256"
+model_secret_arn       = "YOUR_SECRET_ARN"
+model_name            = "YOUR_MODEL_NAME"
+model_base_url        = "https://YOUR_PROVIDER/v1"
+# Empty map uses the deployment account and region.
+aws_read_targets      = {}
+knowledge_view        = ""

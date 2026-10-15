@@ -1,0 +1,15 @@
+# Combine with compose.yaml. Supply only temporary workspace-storage credentials.
+services:
+  rgce:
+    environment:
+      RGCE_STORAGE_BUCKET: ${RGCE_STORAGE_BUCKET:?Set the durable bucket}
+      RGCE_STORAGE_PREFIX: ${RGCE_STORAGE_PREFIX:?Set a dedicated workspace prefix}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:?Set the region}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?Use temporary storage-role credentials}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?Use temporary storage-role credentials}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:?Use temporary storage-role credentials}
+      AWS_EC2_METADATA_DISABLED: "true"
+    volumes:
+      - rgce-s3-cache:/data
+volumes:
+  rgce-s3-cache:

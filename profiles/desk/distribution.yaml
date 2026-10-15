@@ -1,0 +1,10 @@
+name: desk
+version: 0.3.0
+description: "RemediGenius Community desk: the reporter you talk to. Answers questions about findings with evidence and writes the Morning Brief. Never changes anything in AWS."
+hermes_requires: ">=0.21.0"
+author: "RemediGenius"
+license: "Apache-2.0"
+env_requires:
+  - name: MODEL_API_KEY
+    description: "API key for your OpenAI-compatible model provider (set on the host from Secrets Manager)"
+    required: true

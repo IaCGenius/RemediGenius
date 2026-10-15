@@ -1,0 +1,47 @@
+{
+  "storage": {
+    "migration_verified": true,
+    "migration_retry_verified": true,
+    "delete_denied": true,
+    "outside_prefix_denied": true,
+    "unconditional_overwrite_denied": true,
+    "fresh_container_recovery": true,
+    "live_source_preserved": true,
+    "knowledge_variation_preserved": true,
+    "original_restored": true,
+    "reassessment": true,
+    "export_verified": true,
+    "objects_verified": 10
+  },
+  "windows_wheel": {
+    "fresh_windows_install": true,
+    "outside_checkout_import": true,
+    "document_and_knowledge": true,
+    "export_verified": true,
+    "reassessment": true,
+    "package_files_verified": 32,
+    "wheel_sha256": "c74e6fbe4626e2661b08b80de1aac33719744f584385f329b7afe430e961820a",
+    "download_api_verified": true
+  },
+  "regression": {
+    "ce": 112,
+    "rules": 38,
+    "legacy_kiosk": 30,
+    "browser_journeys": 3
+  },
+  "docker_image": "sha256:a6f0727e2bedf6b0cf01cd5916d8f42bc04329a02f435acf723b6d053d86c0c9",
+  "host": {
+    "aws_host_health": true,
+    "s3_mode": true,
+    "tmpfs_replaced": true,
+    "records_survived_restart": true,
+    "no_inbound_rules": true,
+    "prior_workspace_recovered": true,
+    "parameter_store_read_denied": true
+  },
+  "host_stopped": {
+    "stopped": true
+  },
+  "image_archive_sha256": "3ea897b8802eecec863ffcd66254776fd2a83a25973344d1230cd4f50cd04545",
+  "download_manifest_validation": true
+}

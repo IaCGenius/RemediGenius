@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\work\\remedigenius-community\\docs\\diagrams\\ce-brain.architecture.json",
+  "output": "C:\\work\\remedigenius-community\\docs\\diagrams\\ce-brain.html",
+  "specification": {
+    "sha256": "f3b65cdf0f4cc4f426acda50be13eeab2b729a94eb1dc0eaa49a5530a46c45a4",
+    "bytes": 4000
+  },
+  "artifact": {
+    "sha256": "4c912d75d560365b22f58cb4fb40db00be949b8bcf855954eb63d38867e77784",
+    "bytes": 708061
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Proposed CE \u2014 Hermes leads the investigation",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1370,
+      710
+    ]
+  },
+  "components": [
+    {
+      "id": "human",
+      "type": "frontend",
+      "label": "Operator",
+      "sublabel": "Native Hermes or thin UI",
+      "pos": [
+        30,
+        255
+      ],
+      "size": [
+        185,
+        85
+      ]
+    },
+    {
+      "id": "brain",
+      "type": "backend",
+      "label": "Hermes brain",
+      "sublabel": "Skills, planning, coordination",
+      "pos": [
+        370,
+        255
+      ],
+      "size": [
+        215,
+        85
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "external",
+      "label": "Model provider",
+      "sublabel": "Native Hermes integration",
+      "pos": [
+        370,
+        50
+      ],
+      "size": [
+        215,
+        80
+      ]
+    },
+    {
+      "id": "gate",
+      "type": "security",
+      "label": "Execution gate",
+      "sublabel": "Permissions, scope, budgets",
+      "pos": [
+        760,
+        255
+      ],
+      "size": [
+        210,
+        85
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "cloud",
+      "label": "Disposable compute",
+      "sublabel": "Approved Lambda / collector",
+      "pos": [
+        1110,
+        255
+      ],
+      "size": [
+        230,
+        85
+      ]
+    },
+    {
+      "id": "sources",
+      "type": "external",
+      "label": "Existing AWS sources",
+      "sublabel": "Findings, config, opted-in logs",
+      "pos": [
+        1110,
+        570
+      ],
+      "size": [
+        230,
+        85
+      ]
+    },
+    {
+      "id": "state",
+      "type": "database",
+      "label": "S3 shared knowledge",
+      "sublabel": "Evidence, context, run receipts",
+      "pos": [
+        660,
+        570
+      ],
+      "size": [
+        235,
+        85
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Agent runtime \u2014 upstream Hermes + CE skills",
+      "wraps": [
+        "brain"
+      ],
+      "pad": 25
+    },
+    {
+      "kind": "security-group",
+      "label": "Independent execution boundary \u2014 scoped roles",
+      "wraps": [
+        "gate",
+        "worker"
+      ],
+      "pad": 25
+    }
+  ],
+  "connections": [
+    {
+      "id": "question",
+      "from": "human",
+      "to": "brain",
+      "label": "1. Ask",
+      "variant": "emphasis"
+    },
+    {
+      "id": "reason",
+      "from": "brain",
+      "to": "llm",
+      "label": "2 / 6. Reason",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDy": -35
+    },
+    {
+      "id": "request",
+      "from": "brain",
+      "to": "gate",
+      "label": "3. Request work",
+      "variant": "emphasis"
+    },
+    {
+      "id": "dispatch",
+      "from": "gate",
+      "to": "worker",
+      "label": "4. Dispatch",
+      "variant": "emphasis"
+    },
+    {
+      "id": "read",
+      "from": "worker",
+      "to": "sources",
+      "label": "4. Read only",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 100
+    },
+    {
+      "id": "persist",
+      "from": "worker",
+      "to": "state",
+      "label": "5. Save results"
+    },
+    {
+      "id": "retrieve",
+      "from": "state",
+      "to": "brain",
+      "label": "2 / 6. Retrieve context"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Hermes controls the investigation",
+      "items": [
+        "Select skills, consult knowledge, reuse tools before building.",
+        "Return a cited answer or proposal to the operator."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "The platform controls execution rights",
+      "items": [
+        "A missing tool goes through a separate builder + kiosk path.",
+        "Generated code cannot grant itself permissions or raise limits."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Compute disappears; knowledge remains",
+      "items": [
+        "S3 retains evidence, reviewed context and receipts.",
+        "Target architecture: not yet the deployed rc10 experience."
+      ]
+    }
+  ]
+}

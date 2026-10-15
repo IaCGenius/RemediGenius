@@ -1,0 +1,33 @@
+model:
+  default: __MODEL_NAME__
+  provider: custom
+  base_url: __MODEL_BASE_URL__
+  key_env: MODEL_API_KEY
+agent:
+  max_turns: 24
+  run_budget_seconds: 240
+terminal:
+  backend: local
+  cwd: /opt/data/work
+  timeout: 30
+memory:
+  memory_enabled: false
+  user_profile_enabled: false
+skills:
+  external_dirs: []
+  write_approval: true
+curator:
+  enabled: false
+telemetry:
+  shared_metrics:
+    enabled: false
+tools:
+  tool_search:
+    enabled: "off"
+mcp_servers: {}
+platform_toolsets:
+  cli:
+    - file
+    - skills
+    - terminal
+    - clarify

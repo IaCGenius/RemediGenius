@@ -1,0 +1,56 @@
+# analyst: the model is yours (bring your own key). Terraform fills __MODEL_NAME__ and __MODEL_BASE_URL__
+# from model_name / model_base_url when it uploads this file; the host renders MODEL_API_KEY from Secrets Manager
+# into tmpfs. Any OpenAI-compatible endpoint works (docs/MODELS.md).
+model:
+  default: __MODEL_NAME__
+  provider: custom
+  base_url: __MODEL_BASE_URL__
+  key_env: MODEL_API_KEY   # a "custom" provider reads its key from here, not from providers.*
+providers:
+  byok:
+    name: Your model provider (OpenAI-compatible)
+    api: __MODEL_BASE_URL__
+    key_env: MODEL_API_KEY
+    transport: chat_completions
+    default_model: __MODEL_NAME__
+    discover_models: false
+    models:
+      __MODEL_NAME__: {}
+agent:
+  max_turns: 300
+database:
+  journal_mode: wal
+terminal:
+  backend: local
+  cwd: /opt/data/work
+  timeout: 180
+tool_loop_guardrails:
+  warnings_enabled: true
+  hard_stop_enabled: false
+compression:
+  enabled: true
+  threshold: 0.5
+  target_ratio: 0.2
+  protect_last_n: 20
+display:
+  show_reasoning: true
+  streaming: false
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+telemetry:
+  shared_metrics:
+    enabled: false
+skills:
+  external_dirs: []
+  write_approval: true      # no self-made skills without owner approval; new skills arrive by PR
+curator:
+  enabled: false
+platform_toolsets:
+  cli:
+    - file
+    - memory
+    - session_search
+    - skills
+    - terminal
+    - todo

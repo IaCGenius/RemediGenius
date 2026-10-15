@@ -1,0 +1,112 @@
+#!/bin/bash
+set -euo pipefail
+dnf install -y docker python3 iptables
+systemctl enable --now docker
+install -d -m 0755 /opt/rgce-hermes
+aws s3 cp 's3://${bucket}/${console_key}' /var/tmp/rgce-console.tar.gz --region '${region}' --only-show-errors
+echo '${console_sha}  /var/tmp/rgce-console.tar.gz' | sha256sum -c -
+docker load -i /var/tmp/rgce-console.tar.gz
+docker image inspect '${console_id}' >/dev/null
+aws s3 cp 's3://${bucket}/${hermes_key}' /var/tmp/rgce-hermes.tar.gz --region '${region}' --only-show-errors
+echo '${hermes_sha}  /var/tmp/rgce-hermes.tar.gz' | sha256sum -c -
+docker load -i /var/tmp/rgce-hermes.tar.gz
+docker image inspect '${hermes_id}' >/dev/null
+container=$(docker create '${console_id}')
+docker cp "$container:/usr/share/rgce/hermes/broker.py" /opt/rgce-hermes/broker.py
+docker rm "$container"
+cat >/opt/rgce-hermes/start.sh <<'BOOT'
+#!/bin/bash
+set -euo pipefail
+umask 077
+# /run is tmpfs. No model credential is written to an image, disk, logs or Terraform state.
+install -d -m 0700 /run/rgce-hermes
+install -d -o 10001 -g 10001 -m 0700 /run/rgce-jobs
+aws secretsmanager get-secret-value --secret-id '${secret_arn}' --region '${region}' \
+  --query SecretString --output json >/run/rgce-hermes/key.json
+python3 - <<'PYTHON'
+import base64, json, os
+from pathlib import Path
+root = Path('/run/rgce-hermes')
+secret_path = root / 'key.json'
+try:
+    key = json.loads(secret_path.read_text())
+    if not isinstance(key, str) or not key or len(key) > 4096 or any(ord(c) < 33 or ord(c) > 126 for c in key):
+        raise SystemExit('Model secret must be a single nonempty printable API key without whitespace.')
+    settings = json.loads(base64.b64decode('${model_config_b64}'))
+    settings[settings['RGCE_MODEL_KEY_ENV']] = key
+    output = root / 'model.env'
+    fd = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+        for name, value in settings.items():
+            stream.write(name + '=' + value + '\n')
+    os.chmod(output, 0o600)
+finally:
+    secret_path.unlink(missing_ok=True)
+PYTHON
+docker network inspect rgce-agent >/dev/null 2>&1 || docker network create \
+  --driver bridge --subnet 172.29.241.0/24 --opt com.docker.network.bridge.name=br-rgce-agent rgce-agent
+# Workers cannot reach host services, metadata, other containers or private networks.
+# No port is published by workers. IPv6 is disabled on this bridge and at IMDS.
+iptables -C INPUT -i br-rgce-agent -j DROP 2>/dev/null || iptables -I INPUT 1 -i br-rgce-agent -j DROP
+iptables -N RGCE-AGENT 2>/dev/null || true
+iptables -F RGCE-AGENT
+# Docker's embedded resolver forwards from the worker network. Permit only DNS
+# to the host-configured VPC resolver before denying other private destinations.
+for resolver in $(awk '/^nameserver / {print $2}' /etc/resolv.conf); do
+  if [[ "$resolver" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    iptables -A RGCE-AGENT -d "$resolver" -p udp --dport 53 -j ACCEPT
+    iptables -A RGCE-AGENT -d "$resolver" -p tcp --dport 53 -j ACCEPT
+  fi
+done
+for cidr in 0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 198.18.0.0/15 224.0.0.0/4 240.0.0.0/4; do
+  iptables -A RGCE-AGENT -d "$cidr" -j DROP
+done
+iptables -A RGCE-AGENT -p tcp --dport 443 -j ACCEPT
+iptables -A RGCE-AGENT -j DROP
+iptables -C DOCKER-USER -i br-rgce-agent -j RGCE-AGENT 2>/dev/null || iptables -I DOCKER-USER 1 -i br-rgce-agent -j RGCE-AGENT
+docker rm -f rgce-cloud-console >/dev/null 2>&1 || true
+docker run -d --name rgce-cloud-console --network host --restart unless-stopped \
+  --read-only --cap-drop ALL --security-opt no-new-privileges --init \
+  --tmpfs /data:rw,uid=10001,gid=10001,mode=0700 \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
+  --mount type=bind,src=/run/rgce-jobs,dst=/jobs \
+  -e RGCE_HERMES_JOBS=/jobs -e RGCE_STORAGE_BUCKET='${bucket}' \
+  -e RGCE_STORAGE_PREFIX='${prefix}' -e AWS_DEFAULT_REGION='${region}' \
+  '${console_id}' --home /data serve
+BOOT
+chmod 0700 /opt/rgce-hermes/start.sh
+cat >/etc/systemd/system/rgce-cloud.service <<'UNIT'
+[Unit]
+Description=RemediGenius CE cloud console and isolated Hermes network
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/opt/rgce-hermes/start.sh
+RemainAfterExit=yes
+UMask=0077
+[Install]
+WantedBy=multi-user.target
+UNIT
+cat >/etc/systemd/system/rgce-hermes-broker.service <<'UNIT'
+[Unit]
+Description=RemediGenius CE trusted Hermes job broker
+Requires=rgce-cloud.service
+After=rgce-cloud.service
+[Service]
+Type=simple
+Environment=RGCE_HERMES_IMAGE=${hermes_id}
+Environment=RGCE_HERMES_ENV_FILE=/run/rgce-hermes/model.env
+Environment=RGCE_HERMES_JOBS=/run/rgce-jobs
+Environment=RGCE_HERMES_NETWORK=rgce-agent
+ExecStart=/usr/bin/python3 /opt/rgce-hermes/broker.py
+Restart=on-failure
+RestartSec=5
+UMask=0077
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now rgce-cloud.service
+systemctl enable --now rgce-hermes-broker.service

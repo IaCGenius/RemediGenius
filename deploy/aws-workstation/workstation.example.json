@@ -1,0 +1,13 @@
+{
+  "name": "rgce-workstation",
+  "port": 9125,
+  "aws_profile": "your-operator-profile",
+  "region": "us-east-1",
+  "bucket": "COPY_FROM_TERRAFORM_OUTPUT",
+  "prefix": "ce/evidence",
+  "reader_function": "COPY_FROM_TERRAFORM_OUTPUT",
+  "reader_role_arn": "COPY_FROM_TERRAFORM_OUTPUT",
+  "model_name": "YOUR_HERMES_COMPATIBLE_MODEL",
+  "model_base_url": "YOUR_PROVIDER_BASE_URL",
+  "model_key_env": "MODEL_API_KEY"
+}

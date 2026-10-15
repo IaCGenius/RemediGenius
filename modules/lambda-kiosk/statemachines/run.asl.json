@@ -1,0 +1,166 @@
+{
+  "Comment": "Kiosk run: one function alias over a list of units (Map), then a receipt.",
+  "StartAt": "Resolve",
+  "States": {
+    "Resolve": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${gate}",
+        "Payload": {
+          "action": "resolve_run",
+          "input.$": "$"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultSelector": {
+        "r.$": "$.Payload"
+      },
+      "ResultPath": "$.resolve",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "Refused"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Refuse"
+        }
+      ],
+      "Next": "Units"
+    },
+    "Units": {
+      "Type": "Map",
+      "ItemsPath": "$.resolve.r.items",
+      "MaxConcurrencyPath": "$.resolve.r.concurrency",
+      "ItemSelector": {
+        "target.$": "$.resolve.r.target",
+        "run_id.$": "$.resolve.r.run_id",
+        "index.$": "$$.Map.Item.Index",
+        "unit.$": "$$.Map.Item.Value"
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "INLINE"
+        },
+        "StartAt": "Invoke",
+        "States": {
+          "Invoke": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName.$": "$.target",
+              "Payload": {
+                "kiosk": {
+                  "run_id.$": "$.run_id",
+                  "unit_index.$": "$.index"
+                },
+                "unit.$": "$.unit"
+              }
+            },
+            "ResultSelector": {
+              "payload.$": "$.Payload"
+            },
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "Lambda.TooManyRequestsException",
+                  "Lambda.ServiceException",
+                  "Lambda.SdkClientException"
+                ],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 4,
+                "BackoffRate": 2
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": [
+                  "States.ALL"
+                ],
+                "ResultPath": "$.error",
+                "Next": "UnitFailed"
+              }
+            ],
+            "End": true
+          },
+          "UnitFailed": {
+            "Type": "Pass",
+            "Parameters": {
+              "status": "FAILED",
+              "error.$": "$.error.Error",
+              "cause.$": "$.error.Cause"
+            },
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.results",
+      "Next": "Receipt"
+    },
+    "Receipt": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${gate}",
+        "Payload": {
+          "action": "receipt",
+          "run.$": "$.resolve.r",
+          "results.$": "$.results"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "OutputPath": "$.Payload",
+      "End": true
+    },
+    "Refuse": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${gate}",
+        "Payload": {
+          "action": "refuse",
+          "error.$": "$.error"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "OutputPath": "$.Payload",
+      "End": true
+    }
+  }
+}

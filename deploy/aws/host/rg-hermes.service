@@ -1,0 +1,23 @@
+[Unit]
+Description=Hermes (desk + analyst) in Docker; dashboard on host loopback only
+After=docker.service network-online.target
+Requires=docker.service
+ConditionPathExists=/run/rg-hermes/env
+
+[Service]
+EnvironmentFile=/etc/rg-hermes.env
+ExecStartPre=-/usr/bin/docker rm -f hermes
+# Bridged network (no host network, no IMDS), dashboard published on 127.0.0.1 only.
+ExecStart=/usr/bin/docker run --rm --name hermes \
+  --env-file /run/rg-hermes/env \
+  -p 127.0.0.1:${DASHBOARD_PORT}:${DASHBOARD_PORT} \
+  -v /data/hermes:/opt/data \
+  -v /opt/rg/profiles:/opt/rg-profiles:ro \
+  --memory 6g --pids-limit 1024 \
+  ${HERMES_IMAGE} gateway run
+ExecStop=/usr/bin/docker stop -t 30 hermes
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

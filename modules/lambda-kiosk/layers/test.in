@@ -1,0 +1,2 @@
+# Test layer: what the sandbox and `kiosk test` run tests with.
+pytest==9.1.1

@@ -1,0 +1,6 @@
+account_id = "REPLACE_ACCOUNT_ID"
+region = "us-east-1"
+operator_arn = "arn:aws:iam::REPLACE_ACCOUNT_ID:role/REPLACE_OPERATOR_ROLE"
+name = "rgce-workstation"
+schedule_enabled = true
+schedule_interval_hours = 24

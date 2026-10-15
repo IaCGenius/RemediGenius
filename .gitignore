@@ -1,0 +1,25 @@
+# keys and local state never enter git
+.env
+.env.*
+!.env.EXAMPLE
+auth.json
+*.tfvars
+*.tfvars.json
+!example.tfvars
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform/
+__pycache__/
+*.pyc
+.pytest_cache/
+modules/lambda-kiosk/build/
+.venv/
+*.egg-info/
+dist/
+build/
+.rgce/
+playwright-output/
+
+modules/approved-reader/build/
+modules/assurance-schedule/.build/
