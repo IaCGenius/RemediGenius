@@ -1,5 +1,5 @@
 RemediGenius Community Edition
-Copyright 2026 Srikrishnas Ventures LLC
+Copyright 2026 RemediGenius
 
 Hermes Agent: separate official pinned runtime; upstream code is not vendored.
 https://github.com/NousResearch/hermes-agent
