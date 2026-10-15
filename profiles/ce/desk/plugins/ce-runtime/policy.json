@@ -9,5 +9,6 @@
   "review_guidance": [
     "skills/ce-aws-security/references/ce-fix-preparation.md",
     "skills/ce-aws-security/references/follow-up.md"
-  ]
+  ],
+  "skill_context_max_chars": 64000
 }

@@ -37,12 +37,16 @@ See [AWS coverage](AWS-CAPABILITIES.md), [acceptance](RELEASE-VALIDATION.md)
 and [security](../SECURITY.md). Legacy console and prototype deployments are archived outside CE.
 
 
-### Natural-language collection limits
+### Collection limits
 
-The deterministic reader enforces the tool request's configured bounds, not the
-wording of the conversation. In live testing, a request for "one page" used the
-three-page default and the answer disclosed that wider scope. For a precise
-request, specify `max_pages=1` as well as the service's per-page parameter (such
-as `MaxResults`), and inspect the returned receipt. This remains an agent
-instruction-following limitation; a model critique does not guarantee compliance
-with every requested bound.
+The reader enforces numeric page budgets independently of the model. In v0.1.1,
+an omitted page budget collects one page, consistently across the runtime, CLI
+helper and Lambda. Explicit multi-page requests remain supported within the
+configured ceiling. Service parameters such as MaxResults control page size,
+not the number of pages. Scheduled checks retain their explicit configured budgets.
+
+The runtime displays actual scope, pages and completeness from collection results
+above the model's interpretation. PARTIAL means the collected sample is incomplete;
+it is not a healthy result or an exhaustive assessment. These bounds fix the
+previous silent three-page default; they do not guarantee the model interprets
+every natural-language instruction correctly.

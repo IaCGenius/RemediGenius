@@ -20,7 +20,10 @@ AWS SDK input fields, not CLI options. Supply target and region for each read.
 - `schema`: supply service, operation, and optional field path to inspect installed
   botocore input definitions. Use this when uncertain; never guess an API shape.
 - `read`: service, operation, target, region, parameters and max_pages. Preserve
-  the user's filters and page budget. One request yields scope, observation time,
+  the user's filters and page budget. Omitted max_pages collects one page. For a
+  one-page request use max_pages=1; MaxResults controls items per page, not pages.
+  Increase max_pages only when the task calls for wider collection. Do not repeat
+  reads to bypass a requested limit. One request yields scope, observation time,
   original source records, deterministic summary and exact S3 paths.
 - `show`: path returned by read; optional JMESPath query, offset and limit (1–200
   lines). Use one compact projection; if truncated narrow it, not a new script.

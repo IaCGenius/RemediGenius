@@ -1,4 +1,20 @@
-# Upgrade from the native preview
+# Upgrade an existing CE installation
+
+## v0.1.1
+
+v0.1.1 keeps the official Hermes image and existing model settings. It updates
+the CE skills, runtime plugin and AWS read executor. Upgrade both the native
+package/profile and the collector Lambda through your existing Terraform state;
+updating only the chat profile leaves the old collector default in place.
+Workstation users must also update their AWS workstation backend. Preserve
+volumes, private inputs and secrets as described below.
+
+An omitted interactive page budget now means one page. Explicit multi-page and
+scheduled-check budgets are unchanged. Confirm the runtime receipt heading after
+a fresh bounded read. See [validation outcomes](RELEASE-VALIDATION.md), including
+the remaining remediation-draft limitation.
+
+## Historical v0.1.0 layout migration
 
 v0.1.0 keeps the same Hermes image, Qwen baseline, `ce-desk` identity and runtime
 resource names. The source layout changes:

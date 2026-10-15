@@ -71,3 +71,28 @@ def test_config_status_does_not_admit_recording_mutations(monkeypatch):
         with pytest.raises(ValueError, match='outside configured scope'):
             module.handler({'action': 'read', 'target': 'default', 'region': 'us-east-1',
                             'service': 'config', 'operation': operation}, None)
+
+
+@pytest.mark.parametrize('budget,expected', [(None, 1), (2, 2)])
+def test_default_and_explicit_page_budgets_stop_sdk_iteration(monkeypatch, budget, expected):
+    module = load_executor()
+    fetched = []
+    class Paginator:
+        def paginate(self, **parameters):
+            for n in range(5):
+                fetched.append(n)
+                yield {'Findings': [], 'NextToken': str(n + 1)}
+    sdk = SimpleNamespace(can_paginate=lambda operation: True,
+                          get_paginator=lambda operation: Paginator())
+    monkeypatch.setattr(module.boto3, 'Session', lambda: SimpleNamespace(client=lambda *a, **kw: sdk))
+    monkeypatch.setattr(module.boto3, 'client', lambda *a, **kw: SimpleNamespace(put_object=lambda **kw: None))
+    for key, value in {'TARGETS': json.dumps({'default': {'regions': ['us-east-1'], 'account_id': 'unit-test'}}),
+                       'ACCOUNT_ID': 'unit-test', 'BUCKET': 'unit-test', 'PREFIX': 'evidence'}.items():
+        monkeypatch.setenv(key, value)
+    request = {'action': 'read', 'target': 'default', 'region': 'us-east-1',
+               'service': 'securityhub', 'operation': 'get_findings', 'parameters': {'MaxResults': 2}}
+    if budget is not None:
+        request['max_pages'] = budget
+    result = module.handler(request, None)
+    assert len(fetched) == expected == result['pages_returned'] == result['scope']['max_pages']
+    assert result['status'] == 'PARTIAL' and result['has_more'] is True

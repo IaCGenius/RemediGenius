@@ -147,3 +147,19 @@ may show draft text before the final hook. The model never executes these propos
 
 The plugin, skills, operation manifest, comparator and receipt format are reusable
 under Apache-2.0.
+
+
+### v0.1.1 collection display
+
+An omitted page budget defaults to one page in all interactive execution layers.
+The final answer includes a runtime-generated collection summary from actual
+collector results: target/region, operation, observation time, returned pages,
+page budget and whether more results exist. This is separate from the model's
+interpretation and is not a compliance verdict. It is rendered in native Hermes
+chat; CE does not introduce a separate dashboard. Explicit scheduled page budgets
+and explicit multi-page requests are preserved.
+
+Review retains a bounded 64,000-character skill context within the existing
+90,000-character review request ceiling. If captured guidance is omitted, the
+runtime displays `AI_CRITIQUED_LIMITED_CONTEXT`; neither that label nor
+`AI_CRITIQUED` certifies proposal correctness.

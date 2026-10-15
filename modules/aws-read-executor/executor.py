@@ -39,7 +39,7 @@ def handler(event, context):
     if region not in target['regions'] or operation not in OPERATIONS.get(service, {}):
         raise ValueError('Operation or region outside configured scope')
     parameters = event.get('parameters', {})
-    pages_limit = event.get('max_pages', 3)
+    pages_limit = event.get('max_pages', 1)
     if not isinstance(parameters, dict) or type(pages_limit) is not int or not 1 <= pages_limit <= 10 or len(encoded(parameters)) > 16000:
         raise ValueError('Invalid parameters or page budget')
     if service == 'cloudtrail' and operation == 'lookup_events':
@@ -157,4 +157,4 @@ def handler(event, context):
              'scope':f'Bounded {service}.{operation} query; see receipt for exact scope', 'sources':[], 'files':files,'receipt_path':receipt,
              'limitations':['Only the selected query was executed; use prior receipts for other sources.','Source records may include sensitive identifiers; expose only what the question requires.']}
     s3.put_object(Bucket=os.environ['BUCKET'],Key=os.environ['PREFIX']+'/catalog.json',Body=encoded(catalog),ContentType='application/json')
-    return json.loads(encoded({k:result[k] for k in ('run_id','observed_at','status','pages_returned','has_more','errors')} | {'receipt_path':receipt,'raw_path':raw_path,'files':files,'summary':summary}))
+    return json.loads(encoded({k:result[k] for k in ('run_id','observed_at','scope','status','pages_returned','has_more','errors')} | {'receipt_path':receipt,'raw_path':raw_path,'files':files,'summary':summary}))

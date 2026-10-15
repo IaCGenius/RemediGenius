@@ -249,12 +249,12 @@ def test_skill_capture_does_not_capture_other_tools_or_modify_result(rt):
 
 def test_skill_context_budget_is_explicit_and_new_reference_is_retained(rt):
     state={'session_id':'bounded','evidence':[]}
-    rt.remember_skill(state,{'name':'large'},'x'*40000,'current turn')
+    rt.remember_skill(state,{'name':'large'},'x'*(rt.policy['skill_context_max_chars']+1),'current turn')
     rt.remember_skill(state,{'name':'selected'},'Complete selected reference','current turn')
     rt.persist_evidence(state)
     records,omitted=rt.review_skills(state)
     assert omitted and len(records)==1 and records[0]['result']=='Complete selected reference'
-    assert len(json.dumps(records))<=32000
+    assert len(json.dumps(records))<=rt.policy['skill_context_max_chars']
 
 
 def test_history_recovers_only_actual_skill_tool_results(rt,monkeypatch):
@@ -276,3 +276,17 @@ def test_oversized_review_does_not_call_model(rt):
     state.update(reviewed=False,evidence=[],request='x'*100000)
     result=rt.review(state,{'draft':'Small draft'})
     assert result['status']=='NOT_REVIEWED' and 'no model call' in result['notice']
+
+
+def test_three_loaded_guides_fit_without_silent_reference_loss(rt):
+    state={}
+    for name in ('security','reader','fix'):
+        rt.remember_skill(state,{'name':name},'x'*14000,'current turn')
+    assert len(state['skill_context'])==3
+    assert not state.get('skill_context_omitted',False)
+
+
+def test_limited_review_is_visible_without_model_cooperation(rt):
+    rt.turns[('session','turn')]['review']={'status':'AI_CRITIQUED','skill_context_omitted':True}
+    text=rt.label('A draft.',session_id='session',turn_id='turn')
+    assert 'AI_CRITIQUED_LIMITED_CONTEXT' in text

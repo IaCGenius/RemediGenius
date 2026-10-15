@@ -73,3 +73,14 @@ def test_invalid_read_never_reaches_aws(monkeypatch,change,match):
     request={'action':'read','target':'default','region':'us-east-1','service':'cloudtrail','operation':'lookup_events','parameters':{}}
     request.update(change)
     with pytest.raises(ValueError,match=match):module.handler(request,None)
+
+
+def test_receipt_display_does_not_rely_on_model_scope_claim():
+    rt = runtime.Runtime(None)
+    rt.turns[('s','t')] = {'collections':[{'scope':{'target':'default','region':'us-east-1',
+        'service':'securityhub','operation':'get_findings','max_pages':1}, 'pages_returned':1,
+        'has_more':True, 'status':'PARTIAL','observed_at':'test-time'}]}
+    result = rt.label('Everything was collected.',session_id='s',turn_id='t')
+    assert result.startswith('**Collection receipts — runtime reported**')
+    assert 'PARTIAL · pages 1/1 · more results: yes' in result
+    assert 'NOT_REVIEWED' in result

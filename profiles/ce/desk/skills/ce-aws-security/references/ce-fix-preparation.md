@@ -70,6 +70,19 @@ do not invent a missing start-recorder resource or mandatory post-stack CLI step
 The CLI setup does require a start-configuration-recorder step. See
 [CloudFormation ConfigurationRecorder](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-config-configurationrecorder.html)
 and [Config CLI setup](https://docs.aws.amazon.com/config/latest/developerguide/gs-cli-subscribe.html).
+Terraform AWS provider 5.x supports `aws_config_configuration_recorder_status`
+with `is_enabled = true`; order it after the delivery channel. Do not remove that
+resource based on an unsupported reviewer claim that it was removed. Check the
+operator's actual provider version before asserting different behavior.
+Source: https://registry.terraform.io/providers/hashicorp/aws/5.94.0/docs/resources/config_configuration_recorder_status.html
+
+CloudFormation `DependsOn`, `DeletionPolicy` and `UpdateReplacePolicy` are
+resource-level attributes alongside `Type` and `Properties`, never inside
+`Properties`. For a delivery channel requiring a recorder, put `DependsOn` on
+the channel resource at that level. Terraform uses its own `depends_on` resource
+meta-argument. Do not translate the two formats by indentation or field-name analogy.
+Source: https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-attribute-dependson.html
+
 An existing delivery bucket still needs appropriate Config delivery permissions;
 do not say the bucket policy prerequisite applies only to newly created buckets.
 An empty recorder list does not prove a delivery channel is absent or that no IaC

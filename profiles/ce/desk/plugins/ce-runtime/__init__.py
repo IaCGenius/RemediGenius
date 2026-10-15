@@ -214,7 +214,7 @@ class Runtime:
         identity = json.dumps(args, sort_keys=True)
         items[:] = [x for x in items if json.dumps(x['arguments'], sort_keys=True) != identity]
         items.append(entry)
-        while len(json.dumps(items)) > 32000:
+        while len(json.dumps(items)) > self.policy.get('skill_context_max_chars',64000):
             items.pop(0)
             state['skill_context_omitted'] = True
 
@@ -304,7 +304,7 @@ class Runtime:
 
     def aws(self, state, params):
         if params.get('action') == 'read':
-            params = {'target':'default',**params}
+            params = {'target':'default', 'max_pages':1, **params}
             signature = json.dumps(params, sort_keys=True)
             scope = tuple(params.get(k) for k in ('target','region','service','operation'))
             with self.lock:
@@ -418,7 +418,7 @@ class Runtime:
                 raise ValueError('Review guidance must belong to the reviewed package')
             body = path.read_text(encoding='utf-8')
             guidance.append({'path':relative,'origin':'packaged guidance, not an AWS observation',
-                             'text':body[:12000],'display_truncated':len(body)>12000})
+                             'text':body[:16000],'display_truncated':len(body)>16000})
         review_data = json.dumps({'request':state['request'],
             'preflight':state.get('preflight',{}),
             'reviewed_guidance':guidance,
@@ -474,7 +474,9 @@ class Runtime:
 
     def label(self, response_text, session_id='', turn_id='', **kwargs):
         state=self.turns.get((session_id,turn_id),{})
-        review=state.get('review') or {'status':'NOT_REVIEWED'}
+        review=dict(state.get('review') or {'status':'NOT_REVIEWED'})
+        if review['status']=='AI_CRITIQUED' and review.get('skill_context_omitted'):
+            review['status']='AI_CRITIQUED_LIMITED_CONTEXT'
         # The runtime owns this heading; avoid stacking model-written copies.
         lines=response_text.lstrip().splitlines()
         while lines and (not lines[0].strip() or lines[0].startswith('**AI interpretation —')):
@@ -491,7 +493,20 @@ class Runtime:
         targets = state.get('preflight',{}).get('capabilities',{}).get('targets',{})
         accounts = {v.get('account_id') for v in targets.values() if isinstance(v,dict)}
         body = proposal_check(body, accounts)
-        return '**AI interpretation — '+review['status']+'; verify proposals before acting.**\n\n'+body
+        # Receipt-derived scope is displayed independently of the model's narrative.
+        receipts = []
+        for item in state.get('collections', []):
+            scope = item.get('scope', {})
+            def cell(value):
+                return str(value).replace('`', "'").replace('<', '&lt;').replace('>', '&gt;').replace('\n', ' ')[:160]
+            receipts.append('- `' + cell(scope.get('service','?')) + '.' + cell(scope.get('operation','?'))
+                            + '` · target `' + cell(scope.get('target','?')) + '` / `' + cell(scope.get('region','?'))
+                            + '` · ' + cell(item.get('status','UNKNOWN'))
+                            + ' · pages ' + cell(item.get('pages_returned','?')) + '/' + cell(scope.get('max_pages','?'))
+                            + ' · more results: ' + ('yes' if item.get('has_more') else 'no')
+                            + ' · observed `' + cell(item.get('observed_at','unknown')) + '`')
+        summary = ('**Collection receipts — runtime reported**\n' + '\n'.join(receipts) + '\n\n') if receipts else ''
+        return summary + '**AI interpretation — '+review['status']+'; verify proposals before acting.**\n\n'+body
 
 
 def register(ctx):

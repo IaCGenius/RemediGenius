@@ -9,7 +9,7 @@ reassess after your change window.
 By design, the agent requests bounded reads from a separate collector with a
 configured allowlist. Fixes are proposals you review and apply yourself.
 
-AWS today · Azure/GCP planned · Self-hosted · Apache-2.0 · [v0.1.0](https://github.com/IaCGenius/RemediGenius/releases/tag/v0.1.0)
+AWS today · Azure/GCP planned · Self-hosted · Apache-2.0 · [v0.1.1](https://github.com/IaCGenius/RemediGenius/releases/tag/v0.1.1)
 
 Provided as-is. You choose your model provider and AWS backend and are responsible
 for their configuration, data handling and charges. See [your responsibility](docs/LIMITS.md#your-responsibility).
@@ -63,9 +63,9 @@ model key or cloud deployment. [What this demo shows](docs/DEMO.md). This is not
 
 ## What you get
 
-[Community skills](docs/COMMUNITY-SKILLS.md) add focused IAM, S3, framework-mapping, CloudTrail, reassessment and case-summary guidance. These are post-v0.1.0 updates on `main`; use current source for them. Existing v0.1.0 release assets retain their documented baseline.
+[Community skills](docs/COMMUNITY-SKILLS.md) add focused IAM, S3, framework-mapping, CloudTrail, reassessment and case-summary guidance. These are included in v0.1.1, together with receipt-derived collection summaries and a conservative one-page default.
 
-| Included in v0.1.0 | Boundary |
+| Included in v0.1.1 | Boundary |
 |---|---|
 | Scoped AWS reads, records, counts and receipts | Bounded queries; unavailable services are not healthy services |
 | Selected organizational knowledge | Import files, publish/mount a view, show sources and their effect on advice |
@@ -88,7 +88,7 @@ See [scope and limits](docs/LIMITS.md) for what is not included and [model/data 
 
 ## Evidence, limits and project source
 
-- [v0.1.0 validation](docs/RELEASE-VALIDATION.md) and [upgrade safely](docs/UPGRADING.md)
+- [Release validation](docs/RELEASE-VALIDATION.md) and [upgrade safely](docs/UPGRADING.md)
 - [Release scope and known limits](docs/V0.1-RELEASE-PLAN.md)
 - [AWS capabilities and scope](docs/AWS-READ-EXECUTION.md)
 - [Runtime controls and extension boundaries](docs/CE-RUNTIME.md)

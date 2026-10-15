@@ -17,7 +17,7 @@ def package(output):
     for directory in ('plugins/ce-runtime', 'skills'):
         reviewed.extend(p for p in (desk/directory).rglob('*') if p.is_file()
                         and p.suffix in ('.py','.md','.json','.yaml') and p.name!='manifest.json')
-    manifest = {'version':'ce-runtime/0.1.0','files':{
+    manifest = {'version':'ce-runtime/0.1.1','files':{
         p.relative_to(desk).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(reviewed)}}
     selected = [root / 'tools/native_data.py', root / 'tools/upgrade_native_profile.py',

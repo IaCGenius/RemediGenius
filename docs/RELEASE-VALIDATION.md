@@ -1,4 +1,58 @@
-# v0.1.0 validation
+# v0.1.1 validation
+
+Qualified scope: AWS us-east-1, Qwen 3.8 Max, one ce-desk profile. This release
+includes the ten reviewed community skills; their source branch was merged,
+not copied into an unrelated implementation.
+
+The final native package SHA-256 is
+`ff7d22c9dae0eb55b7abbd3f7bfa601fc6d6fcb571f5b7e526ebab7dc4a06d32`.
+Both deployment paths use the official Hermes 0.21.7 image pinned to
+`sha256:444b42594e7f467425872fc35e077a227d377f0fe0726bc818706d62175fad8b`.
+Local Docker assembles this image with the CE package; CE does not publish a
+custom rebuilt Hermes image.
+
+| Check | Outcome |
+|---|---|
+| Deterministic tests | 101 passed, including a clean source export |
+| Installed wheel | Clean target installation and explicitly synthetic offline demo passed |
+| Live collector bounds | Both deployment collectors returned one page when the budget was omitted and two when explicitly requested; incompleteness stayed visible |
+| Local Qwen functional runs | Six scenarios completed: two one-page phrasings, explicit two-page collection, organizational knowledge, remediation proposal and persistent case |
+| Spot Qwen functional runs | The same six scenarios completed; natural-language page requests produced 1, 1 and 2 pages respectively; knowledge and evidence-linked case workflows exercised |
+| Critic context, both runtimes | Every loaded skill/reference reached the critic in all twelve final scenarios; no reported omissions |
+| Spot upgrade and access | Encrypted backup completed; host replacement finished; prior knowledge and session history retained; authenticated chat and board passed; all 89 integrity entries matched |
+| Local persistence | Restart retained all six sessions and the evidence-linked case; authenticated chat and Kanban access passed; all 89 package integrity entries matched |
+| Scheduled collection | Both deployed scheduled-check functions returned OK on real evidence; no model calls required |
+| Reader boundary | Direct EC2 access with the local container reader identity was denied |
+| Remediation draft quality | **PARTIAL**: final local draft still used an invalid AWS CLI flag; no proposal was applied or provider-validated |
+
+This is functional testing with real model calls and live AWS reads, alongside
+code tests. Process completion alone was not treated as proof of answer quality.
+Both case workflows recovered from one rejected argument before saving their
+notes; these were recovered attempts, not first-attempt passes. Spot critique
+corrections were recorded on the case. Narrative reasoning can still overstate
+what an empty current Config response establishes about historical coverage;
+read the scoped receipts and do not infer that older history never existed.
+
+The first candidate exposed dropped review guidance and incorrect CloudFormation
+attribute placement. The final candidate retained all three proposal guides and
+put CloudFormation attributes at resource level. However, its CLI proposal used
+`--recorder-name` where `start-configuration-recorder` requires
+`--configuration-recorder-name`. This illustrates the remaining draft-quality
+limit: AI critique can miss syntax and semantic errors. Do not copy a generated
+fix into production without validation. Runtime receipts describe observations;
+an AI review label does not validate commands or infrastructure templates.
+
+Tests used Hermes conversations on each deployed runtime. Login/board checks
+used HTTP; this is not a claim of exhaustive browser automation. No customer-cloud
+remediation was executed. Local validation substitutes for unavailable hosted CI;
+a successful GitHub Actions run is not claimed. Other models, regions, every AWS
+resource type and every possible question are not qualified by these checks.
+
+See [limits](LIMITS.md), [coverage](AWS-CAPABILITIES.md) and
+[upgrade instructions](UPGRADING.md). Earlier results below are historical and
+must not be mistaken for the final candidate's pagination behavior.
+
+## Historical v0.1.0 validation
 
 Validated baseline: AWS us-east-1, Qwen 3.8 Max, Hermes 0.21.7, one ce-desk profile.
 Other models and regions are configurable but not qualified by this release.
@@ -24,7 +78,7 @@ See [limits](LIMITS.md), [AWS coverage](AWS-CAPABILITIES.md), and
 [upgrade instructions](UPGRADING.md).
 
 
-## Post-v0.1.0 main: community skills review
+## Historical community-skills integration checks
 
 The community skills pack was reviewed and corrected before integration. It adds
 model-guided workflows, not new cloud-write permissions or scanner integrations.
@@ -52,7 +106,7 @@ Live Qwen checks on the updated Spot runtime:
 | Check | Outcome |
 |---|---|
 | Framework/attack-path interpretation | Used returned control/version metadata and kept hypothetical exposure separate from observations; no false prose command warning |
-| Natural-language one-page request | Partial: used the three-page default, correctly disclosed actual scope; see [collection-limit caveat](LIMITS.md#natural-language-collection-limits) |
+| Natural-language one-page request | Partial: used the three-page default, correctly disclosed actual scope; see [collection-limit caveat](LIMITS.md#collection-limits) |
 | Explicit page bound | With ce-aws-read loaded and `max_pages=1`, exactly one page was collected and all five loaded skill/reference files reached the critic |
 | Controlled injection test | Rejected the explicitly constructed malicious command; runtime warning appeared; no AWS reads or writes in this test |
 | Organization context and reassessment | Used retained selected knowledge and fresh scoped Config evidence; no invented classifications or verified fix; incorporated the critic's removal of an unsupported KMS proposal |
