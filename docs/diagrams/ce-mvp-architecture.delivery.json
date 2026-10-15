@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\work\\remedigenius-community\\docs\\diagrams\\ce-mvp-architecture.json",
+  "output": "C:\\work\\remedigenius-community\\docs\\diagrams\\ce-mvp-architecture.html",
+  "specification": {
+    "sha256": "d836a2580c6660787252f41758642878ee455555b9623867c8542f671efd4d2f",
+    "bytes": 5001
+  },
+  "artifact": {
+    "sha256": "7c5e8fe2df6c9da8c353ecee6840d7e8be97afa2fb04e80c09b5bbc40c5736c6",
+    "bytes": 716618
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

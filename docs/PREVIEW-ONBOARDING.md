@@ -4,6 +4,8 @@ RemediGenius CE is a **single-operator, self-hosted AWS investigation preview**.
 You bring your AWS account and model access. There is no RemediGenius hosted
 service, shared model key, trial AWS account or preconnected organization policy.
 
+**Release baseline: one AWS account in `us-east-1`, using Qwen 3.8 Max.** Explicit additional-account onboarding remains available. Other regions and models are configurable extensions, not validation requirements or promises for this preview.
+
 ## Choose a deployment
 
 | Question | Workstation | AWS Spot |
@@ -81,9 +83,7 @@ and tunnel convenience script default there; pass your own `region` and tunnel
 The executor checks each requested target/region against the configured list.
 Adding regions or accounts requires an operator configuration/trust update.
 
-Start with an ordinary commercial AWS region supporting the required services,
-selected x86 Spot types and the Amazon Linux public AMI parameter. The preview
-has not been acceptance-tested in every region. China/GovCloud partitions, ARM
+Use `us-east-1` for this preview. The selected x86 Spot types and required services must be available in your chosen subnet/Availability Zone. We are not attempting all-region qualification. China/GovCloud partitions, ARM
 hosts and universal cross-region failover are **not validated preview promises**.
 The bootstrap has commercial endpoint assumptions; a partition-aware ARN alone
 does not establish support. Keep the bucket and model secret in the deployment
@@ -111,14 +111,12 @@ technically accurate proposals. Skills and deterministic controls help, but cann
 make every small/fast model equally reliable. A "reasoning" product label or high
 reasoning-effort setting alone does not establish suitability.
 
-Before adopting another model, run a real bounded AWS read, a knowledge/exception
-question and a remediation proposal with review; inspect receipts and actual critic
-model/context. Qwen 3.8 Max is the tested baseline. [DeepSeek smoke results](DEEPSEEK-SMOKE-ACCEPTANCE.md)
+For the MVP, use Qwen 3.8 Max. If you deliberately experiment with another model, first run a real bounded AWS read, a knowledge/exception question and a remediation proposal with review; inspect receipts and actual critic model/context. Qwen 3.8 Max is the tested baseline. [DeepSeek smoke results](DEEPSEEK-SMOKE-ACCEPTANCE.md)
 record two targeted checks on the operator's compatible endpoint. Alternative model smoke tests
 are not full release qualification. Keep provider/model selection in Hermes rather
 than adding model-specific CE code. Use the same operator-owned credentials model.
 
-For local AWS credentials, follow [the authentication steps](WORKSTATION-HERMES.md#authenticate-to-aws-first):
+For local AWS credentials, follow [the authentication steps](WORKSTATION-HERMES.md#2-authenticate-to-aws-first):
 SSO is preferred; long-lived access keys are optional, and temporary credentials
 need a session token. AWS credentials and the model API key are separate.
 
@@ -189,10 +187,21 @@ public production MCP/API/A2A service. Planned interfaces are labeled as proposa
 Enabling extra upstream skills/plugins does not automatically grant CE execution
 permission. Read the current capability and release documents before extending it.
 
+## What survives stopping compute
+
+| Data | Workstation | AWS Spot |
+|---|---|---|
+| Collected AWS records and receipts | S3 | S3 |
+| Selected published knowledge | S3 if published; local view if mounted | S3 selected view |
+| Conversations, profile and Kanban | Named Docker volume | Retained encrypted EBS |
+| Live execution/terminal | Lost when compute stops | Lost on stop or interruption |
+| Daily checks | Continue in AWS until disabled | Continue in AWS until disabled |
+
+S3 evidence alone does not restore a conversation. Back up your volume/EBS and private deployment configuration separately. To pause cloud compute use Terraform `running=false`; stopping an individual ASG instance can cause replacement. To pause collection set `schedule_enabled=false` and apply the reviewed plan.
+
 ## Privacy of this public preview
 
-The initial public tree was checked across 471 files using the existing credential
-shape and private-identifier checks. Private `.rgce` files, AWS credentials,
+The initial public tree was checked using the existing credential shape and private-identifier checks. The count and results belong to each release artifact, not a permanent guarantee for subsequent edits. Private `.rgce` files, AWS credentials,
 Terraform state/private inputs and raw acceptance exports were excluded. The
 public repository began with the scanned source tree, not the earlier development
 history. Public acceptance reports intentionally describe tests and may name Qwen,

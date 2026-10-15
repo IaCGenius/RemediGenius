@@ -93,9 +93,17 @@ load all references, enumerate every service, or write an analysis script.
   discovery capability can execute that query. Do not invent an operation to fill
   the gap. [AWS LookupEvents](https://docs.aws.amazon.com/awscloudtrail/latest/APIReference/API_LookupEvents.html).
 - DescribeConfigurationRecorders describes recorder configuration. Recording
-  status requires DescribeConfigurationRecorderStatus. If that operation is not
-  exposed, say current recording status is unverified; do not substitute the
-  configuration API. [AWS recorder status](https://docs.aws.amazon.com/config/latest/developerguide/configuration-recorder-view.html).
+  status requires DescribeConfigurationRecorderStatus. Use ce_aws with service
+  `config`, operation `describe_configuration_recorder_status`, then inspect
+  `ConfigurationRecordersStatus` in the raw response: `recording`, `lastStatus`,
+  and any returned error/timing fields. Do not infer current recording from
+  `lastStatus` alone. An unfiltered request concerns the customer-managed
+  recorder; it is not proof of every service-linked recorder's status. Use the
+  SDK schema for a specific recorder selector if needed. If the deployed
+  capability or IAM does not admit this read, state that limit rather than
+  substituting the configuration API. An empty status list does not prove a
+  recorder is running or that other change-history sources are absent.
+  [AWS recorder status](https://docs.aws.amazon.com/config/latest/APIReference/API_DescribeConfigurationRecorderStatus.html).
 - A failed alerting control does not establish that no alternative detection or
   notification exists. A missing Config recorder does not establish that no
   other change history exists. State the specific failed control instead.

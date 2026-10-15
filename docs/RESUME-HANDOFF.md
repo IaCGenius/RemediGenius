@@ -2,6 +2,19 @@
 
 Updated 2026-10-15 (America/Chicago). Read this first when resuming.
 
+## Latest MVP qualification
+
+This supersedes older runtime/archive notes below. Baseline is us-east-1 and
+Qwen 3.8 Max. See [MVP acceptance](MVP-ACCEPTANCE.md) and
+[the illustrated walkthrough](MVP-WALKTHROUGH.md). Current deployed native archive:
+`dc17c5cf50eb427844ba13ad94ed2fa0a16f9082180060870611af897f254705`.
+Spot profile upgraded after replacement; all 59 integrity entries passed. Current
+workstation profile and collector were also upgraded. Fresh public-source tests
+passed on Windows and Linux. GitHub Actions remains billing-blocked; the operator
+explicitly chose local verification for this preview. Do not wait on billing or
+claim hosted CI success. Model-provider keys and all raw acceptance artifacts
+remain private under ignored .rgce paths. No customer remediation was applied.
+
 ## Follow-up UI rerun
 
 ### Latest: critic shares loaded skill references

@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "RemediGenius CE — AWS security with context",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1390,
+      780
+    ]
+  },
+  "components": [
+    {
+      "id": "ce-ui",
+      "type": "frontend",
+      "label": "You + native Hermes UI",
+      "sublabel": "Ask · investigate · return to a case",
+      "pos": [
+        35,
+        295
+      ],
+      "size": [
+        260,
+        100
+      ]
+    },
+    {
+      "id": "ce-brain",
+      "type": "backend",
+      "label": "Hermes · ce-desk",
+      "sublabel": "Skills + selected knowledge + AI review",
+      "pos": [
+        395,
+        295
+      ],
+      "size": [
+        270,
+        100
+      ]
+    },
+    {
+      "id": "ce-collector",
+      "type": "security",
+      "label": "Scoped Lambda reader",
+      "sublabel": "Admitted operations · deterministic data",
+      "pos": [
+        745,
+        295
+      ],
+      "size": [
+        270,
+        100
+      ]
+    },
+    {
+      "id": "ce-aws",
+      "type": "cloud",
+      "label": "Existing AWS sources",
+      "sublabel": "Security Hub · CloudTrail · inventory",
+      "pos": [
+        1095,
+        295
+      ],
+      "size": [
+        250,
+        100
+      ]
+    },
+    {
+      "id": "ce-model",
+      "type": "external",
+      "label": "Your model provider",
+      "sublabel": "Tested: Qwen 3.8 Max · your credentials",
+      "pos": [
+        395,
+        65
+      ],
+      "size": [
+        270,
+        95
+      ]
+    },
+    {
+      "id": "ce-schedule",
+      "type": "messagebus",
+      "label": "Daily scheduled checks",
+      "sublabel": "Configurable · runs without Hermes",
+      "pos": [
+        745,
+        65
+      ],
+      "size": [
+        270,
+        95
+      ]
+    },
+    {
+      "id": "ce-knowledge",
+      "type": "database",
+      "label": "Organizational knowledge",
+      "sublabel": "Files → collections → selected view",
+      "pos": [
+        35,
+        575
+      ],
+      "size": [
+        260,
+        100
+      ]
+    },
+    {
+      "id": "ce-cases",
+      "type": "database",
+      "label": "Sessions + Kanban cases",
+      "sublabel": "Retained EBS or local Docker volume",
+      "pos": [
+        395,
+        575
+      ],
+      "size": [
+        270,
+        100
+      ]
+    },
+    {
+      "id": "ce-store",
+      "type": "database",
+      "label": "S3 object storage",
+      "sublabel": "Evidence receipts + published knowledge",
+      "pos": [
+        745,
+        575
+      ],
+      "size": [
+        270,
+        100
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Replaceable Hermes compute: workstation Docker OR AWS Spot",
+      "wraps": [
+        "ce-ui",
+        "ce-brain"
+      ],
+      "pad": 25
+    },
+    {
+      "kind": "region",
+      "label": "AWS us-east-1 · independent execution boundary",
+      "wraps": [
+        "ce-collector",
+        "ce-aws",
+        "ce-schedule",
+        "ce-store"
+      ],
+      "pad": 24
+    }
+  ],
+  "connections": [
+    {
+      "from": "ce-ui",
+      "to": "ce-brain",
+      "label": "Ask + explain"
+    },
+    {
+      "from": "ce-brain",
+      "to": "ce-collector",
+      "label": "Bounded tools"
+    },
+    {
+      "from": "ce-collector",
+      "to": "ce-aws",
+      "label": "Read-only IAM"
+    },
+    {
+      "from": "ce-brain",
+      "to": "ce-model",
+      "label": "Reason + review"
+    },
+    {
+      "from": "ce-schedule",
+      "to": "ce-collector",
+      "label": "Bounded reads",
+      "labelAt": [
+        880,
+        225
+      ]
+    },
+    {
+      "from": "ce-collector",
+      "to": "ce-store",
+      "label": "Store receipts",
+      "labelAt": [
+        880,
+        480
+      ]
+    },
+    {
+      "from": "ce-knowledge",
+      "to": "ce-brain",
+      "label": "Scoped context"
+    },
+    {
+      "from": "ce-brain",
+      "to": "ce-cases",
+      "label": "Save + follow up",
+      "labelAt": [
+        530,
+        480
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Your outcome",
+      "items": [
+        "Cited investigations and prioritized recommendations.",
+        "CLI / Terraform / CloudFormation drafts; fresh reassessment."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Facts remain separate from AI",
+      "items": [
+        "Deterministic reads, counts, timestamps and evidence receipts.",
+        "Critic shares loaded references; AI review is not certification."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "What persists",
+      "items": [
+        "Compute can go away; S3 evidence and selected knowledge remain.",
+        "Sessions/cases need the retained volume. No autonomous fixes."
+      ]
+    }
+  ]
+}

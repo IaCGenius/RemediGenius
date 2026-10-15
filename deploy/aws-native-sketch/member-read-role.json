@@ -58,6 +58,7 @@
                     "config:DescribeConfigurationAggregatorSourcesStatus",
                     "config:DescribeConfigurationAggregators",
                     "config:DescribeConfigurationRecorders",
+              "config:DescribeConfigurationRecorderStatus",
                     "config:GetAggregateResourceConfig",
                     "config:SelectAggregateResourceConfig",
                     "ec2:DescribeInstances",

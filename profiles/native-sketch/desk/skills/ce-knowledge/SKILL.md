@@ -38,6 +38,22 @@ from the selected view means "not supplied here," not "the organization has none
 CE operating guidance describes the tool's behavior; it is not a customer AWS
 security policy. Do not apply it as a compliance baseline or exception rule.
 
+## Make knowledge use visible
+
+When knowledge affects an assessment, add one short **Knowledge used** paragraph
+or table with: **Source** (copyable relative path and supplied version/hash),
+**Applies because** (the established scope match), **Effect** (what recommendation
+or priority changed, or why none changed), and **Unknowns** (material missing or
+conflicting context). Keep this beside the conclusion, not a second report.
+Do not claim a source was used unless you read it. If no relevant view is supplied,
+say so once and continue the AWS assessment. A cited policy does not independently
+prove a resource's purpose. Keep conditional outcomes conditional until purpose
+is established. Preserve the native AWS finding and technical observation.
+
+On a follow-up, reread the relevant selected source; distinguish a policy change
+from a change in AWS evidence. The readable source and conversation provide the
+explanation; do not claim an automatic knowledge-use ledger or hidden learning.
+
 The operator can add documents using `python -m rgce.knowledge_library` from a CE
 installation, or maintain readable source files. Ordinary file reading is enough
 for retrieval; no model call, database or custom API is needed to read the view.

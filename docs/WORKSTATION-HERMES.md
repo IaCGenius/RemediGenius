@@ -13,7 +13,22 @@ Hermes's own cleanup preserves saved conversations in the Docker volume. Finish
 an active run before starting another chat. The overlay must be reviewed when
 updating the official image; a changed source hash stops preparation explicitly.
 
-## Authenticate to AWS first
+## 1. Get the public source and prerequisites
+
+Use AWS `us-east-1` and Qwen 3.8 Max for the preview baseline. Install Git, Python 3.11+, Docker with Linux containers, Terraform 1.10+ and AWS CLI. The examples below use PowerShell; run them from the repository root. Windows is the accepted workstation baseline.
+
+```powershell
+git clone https://github.com/IaCGenius/RemediGenius.git
+cd RemediGenius
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[aws,documents]"
+New-Item -ItemType Directory -Force .rgce | Out-Null
+```
+
+The documents extra installs conversion dependencies for selected knowledge files; it does not start the legacy console. If PowerShell blocks activation, use `.\.venv\Scripts\python.exe` in place of `python` in subsequent Python commands.
+
+## 2. Authenticate to AWS first
 
 You need an authenticated AWS operator identity, **not necessarily long-lived
 access keys**. Prefer your organization's IAM Identity Center (SSO) profile:
@@ -68,22 +83,27 @@ and [temporary credential requirements](https://docs.aws.amazon.com/IAM/latest/U
 SSO is supported through the normal SDK profile chain; our existing acceptance
 run does not constitute a separate end-to-end test of your organization's SSO setup.
 
-## Prepare the AWS backend
+## 3. Prepare the AWS backend
 
 Prerequisites: Docker with Linux containers, Python 3.11 or later with boto3,
 Terraform 1.10 or later, and an authenticated AWS operator profile. The operator
 needs provisioning permissions for S3, IAM, Lambda, logs and EventBridge Scheduler.
 These operator credentials stay on the workstation and are not mounted in Hermes.
 
-1. Copy `deploy/aws-workstation/terraform.tfvars.example` to a private `.tfvars`
+1. Copy `deploy/aws-workstation/terraform.tfvars.example` to `.rgce/workstation.tfvars`, a private `.tfvars`
    file. Set your account, region and exact operator IAM user/role ARN. For an SSO
    or assumed-role session, use its IAM role ARN, not its STS session ARN.
 2. Initialize and inspect the plan, then apply it:
 
 ```powershell
+Copy-Item deploy/aws-workstation/terraform.tfvars.example .rgce/workstation.tfvars
+# Edit .rgce/workstation.tfvars before continuing; set region = "us-east-1".
+$inputs = (Resolve-Path .rgce/workstation.tfvars).Path
+$plan = Join-Path (Resolve-Path .rgce).Path "workstation.tfplan"
 terraform -chdir=deploy/aws-workstation init
-terraform -chdir=deploy/aws-workstation plan -var-file=YOUR_PRIVATE_INPUTS.tfvars
-terraform -chdir=deploy/aws-workstation apply -var-file=YOUR_PRIVATE_INPUTS.tfvars
+terraform -chdir=deploy/aws-workstation plan "-var-file=$inputs" "-out=$plan"
+# Review the displayed resource/permission changes before applying the saved plan.
+terraform -chdir=deploy/aws-workstation apply $plan
 terraform -chdir=deploy/aws-workstation output -json workstation_backend
 ```
 
@@ -101,7 +121,7 @@ as unavailable, not healthy. This is not an exhaustive daily scan. Configure
 Multi-account targets use the same explicit trust and region configuration as
 [AWS execution](AWS-READ-EXECUTION.md); accounts are not enrolled automatically.
 
-## Start Hermes
+## 4. Configure your model and start Hermes
 
 Copy `deploy/aws-workstation/workstation.example.json` into `.rgce/` and fill its
 backend fields from Terraform output. Set your AWS profile and Hermes-compatible
@@ -110,7 +130,11 @@ set `model_secret_arn` to a Secrets Manager secret containing the raw API key.
 Never commit keys or private deployment configuration.
 
 ```powershell
-python -m pip install boto3
+Copy-Item deploy/aws-workstation/workstation.example.json .rgce/workstation.json
+# Edit backend fields, aws_profile, model_name and model_base_url first.
+# Baseline model_name: qwen3.8-max (confirm the identifier with your provider).
+# PowerShell 7: prompt privately; do not paste the key into this JSON or chat.
+$env:MODEL_API_KEY = Read-Host "Your model API key" -MaskInput
 python tools/native_workstation.py run --config .rgce/workstation.json
 ```
 
@@ -120,18 +144,42 @@ than leaving a misleading connected session. AWS schedules remain active.
 `start` is an alternative for short tests, but its reader credentials expire after
 one hour unless you run `refresh` yourself.
 
-Open `http://127.0.0.1:9125/chat?profile=ce-desk`. In another terminal, explicitly
-retrieve your locally generated login:
+## 5. Retrieve your login and open ce-desk
+
+Leave the run terminal open. In a second terminal at this checkout, activate the same Python environment and explicitly retrieve your locally generated dashboard login:
 
 ```powershell
 python tools/native_workstation.py login --config .rgce/workstation.json
-python tools/native_workstation.py stop --config .rgce/workstation.json
 ```
+
+Open `http://127.0.0.1:9125/chat?profile=ce-desk`, sign in with that username/password, and confirm **ce-desk** in Chat. The dashboard password is neither the AWS secret access key nor the model API key. Never include the credential terminal in screenshots.
+
+![Native Hermes login form; use your own generated dashboard credentials](images/hermes-login.jpg)
+
+![Select the single CE profile, ce-desk, in native Hermes Chat](images/hermes-profile-selector.jpg)
+
+Continue with [the illustrated first investigation and knowledge walkthrough](MVP-WALKTHROUGH.md).
+
+## 6. Investigate and add knowledge
+
+Ask first: “What account aliases, regions and sources can you use? Distinguish configured access from collected evidence.”
 
 Ask: “Collect current Config recorder configuration. Show the account, region,
 observation time, source receipt and missing coverage.” Then ask about Security
 Hub findings, prepare a fix and save a follow-up case. No customer-cloud remediation
 is executed. Generated CLI/Terraform/CloudFormation remains a reviewable proposal.
+
+Use [the knowledge walkthrough](NATIVE-KNOWLEDGE-QUICKSTART.md) to import one policy, mount a selected view using `knowledge_dir`, and ask how it changed the recommendation. Chat text alone is not durable shared knowledge.
+
+## 7. Stop, restart and protect storage
+
+Ctrl+C in the launcher terminal stops local Hermes. Or, from another terminal:
+
+```powershell
+python tools/native_workstation.py stop --config .rgce/workstation.json
+```
+
+Restart with the same `run --config .rgce/workstation.json` command and credentials. Keep the same name/volume to recover your conversations and cases. Set `schedule_enabled=false` in Terraform and review/apply a plan if you also want daily AWS checks stopped. Stopping Docker alone does not stop those checks.
 
 ## Storage and trust
 
@@ -169,3 +217,17 @@ launcher requires `--upgrade`; review it and back up the volume first. The exist
 upgrader retains profile backups. Model changes for an existing installation use
 Hermes configuration; launcher model fields seed a new profile. Model choice stays
 configurable through Hermes.
+
+## Recover from an expired operator login
+
+If credential renewal fails, `run` stops the container and reports the underlying
+error after the stop notice. It does not delete the named volume or stop AWS schedules.
+For an expired SSO session, run `aws sso login --profile ce-operator`, check
+`aws sts get-caller-identity --profile ce-operator`, then repeat the same launcher
+`run --config .rgce/workstation.json` command. Use your actual profile name.
+Open Sessions to resume saved work. If the error is AccessDenied rather than an
+expired login, correct the operator trust/permissions; do not grant the agent admin.
+
+When using `model_secret_arn`, the local launcher retrieves the secret with your
+operator profile before Docker starts. The limited reader role is not granted
+Secrets Manager access. This is separate from the model key passed into Hermes.

@@ -16,6 +16,13 @@ and show how to import it. It must say when something exists only in chat.
 The current native runtime cannot publish shared knowledge or import a chat
 attachment for you. The operator runs the following commands from a CE installation.
 
+## Prepare the operator tools
+
+From your cloned CE repository, activate its Python environment and run
+`python -m pip install -e ".[aws,documents]"`. These commands run on your
+workstation, not inside the read-only agent chat. Complete either deployment
+quickstart first; keep its private JSON configuration for publication.
+
 ## Add one document and see what is available
 
 Save your reviewed text as `selected-policy.md`, or use an existing supported file.
@@ -42,7 +49,12 @@ is optional for this local read-only mount. For AWS Spot, publish as follows.
 ## Preview and publish to S3
 
 Use your existing CE AWS tfvars JSON (or workstation JSON for an optional S3 copy).
-The command reads only the destination fields, not model credentials:
+Use `.rgce/native.tfvars.json` from the AWS quickstart or
+`.rgce/workstation.json` from the workstation guide in place of `./ce-config.json`
+below. HCL `.tfvars` files are not accepted by this publisher. The destination is
+`bucket_name` + `workspace_prefix` for Spot, or `bucket` + `prefix` for workstation,
+plus `region` and optional `aws_profile`. The command reads those destination
+fields, not model credentials:
 
 ```powershell
 python -m rgce.knowledge_publish --view ./views/security-001 --config ./ce-config.json

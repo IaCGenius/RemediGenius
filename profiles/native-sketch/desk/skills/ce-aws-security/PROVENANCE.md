@@ -22,3 +22,9 @@ distinguishes API/provider/template schemas, documents the unsupported native
 CloudFormation path and requires correction of affected saved drafts. The same
 pinned reference is supplied to the existing bounded reviewer; no new generator
 or execution adapter was introduced.
+
+2026-10-15: CE-authored entry guidance adds the existing AWS Config recorder-status
+API to distinguish configuration from current recording. API semantics checked
+against https://docs.aws.amazon.com/config/latest/APIReference/API_DescribeConfigurationRecorderStatus.html.
+The deterministic executor admits that read through its operation manifest;
+no new collector, generated code or customer-cloud write is introduced.

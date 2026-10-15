@@ -1,7 +1,8 @@
 # Current native CE offering
 
-Updated 2026-10-14. [Open the architecture diagram](diagrams/ce-current-offering.html).
-The diagram includes the bounded session-reliability test result.
+Updated 2026-10-15. [Open the architecture diagram](diagrams/ce-mvp-architecture.html).
+
+**Preview release baseline: AWS `us-east-1` and Qwen 3.8 Max.** Configuration remains extensible; other regions/models do not need qualification for this MVP.
 Older console/rc2/rc3 designs are not automatically native Hermes features.
 
 ## What an AWS operator gets
@@ -69,7 +70,7 @@ now verifies and publishes selected views to S3. Activation remains explicit.
 - Preserve [UI rerun](UI-RERUN-2026-10-15.md) partial results and the real
   [organization-policy test](ORG-EXCEPTION-ACCEPTANCE.md).
 - Updated skills/provenance and session overlay are deployed: repository suite
-  192 passed/4 Windows skips; kiosk suite 30 passed. Eight UI terminal generations
+  latest critic-context acceptance records 207 passed/4 Windows skips; kiosk suite 30 passed in its recorded run. Eight UI terminal generations
   and saved-chat resume passed with memory below 1.4 GiB of the 3 GiB limit.
 - Real Qwen knowledge onboarding/provenance passed; broad assessment interpretation
   remains partial. See [the detailed acceptance](LAYERED-ASSESSMENT-ACCEPTANCE.md).
@@ -78,7 +79,8 @@ now verifies and publishes selected views to S3. Activation remains explicit.
   attribution remained imperfect. These are operator-reviewed draft outputs.
 - The current source ZIP and checksum are delivered under `dist/native-preview/`.
   Consult its `RELEASE.json` for the exact commit; older ZIPs are historical.
-- No GitHub remote is configured. Publishing a repository remains outstanding.
+- Public source is published at [IaCGenius/RemediGenius](https://github.com/IaCGenius/RemediGenius). See [release gates](V0.1-RELEASE-PLAN.md) for current preview completion work and CI execution limitations.
+- Critic reference sharing and its targeted Qwen retest are recorded in [critic context acceptance](CRITIC-CONTEXT-ACCEPTANCE.md). Older counts/results above describe their specific runs, not a claim that every case was rerun.
 
 ## Session compatibility overlay
 

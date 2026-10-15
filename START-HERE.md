@@ -4,8 +4,10 @@ Use your existing AWS security services through one Hermes agent. Collect scoped
 evidence, understand a finding, prepare a fix, save it for your change process,
 and return later to reassess. This is a single-operator community preview.
 
+**Validated preview baseline: AWS `us-east-1`, Qwen 3.8 Max, one `ce-desk` profile.** Other configured regions/models are operator experiments, not release acceptance scope.
+
 See [current offering and release gates](docs/CURRENT-CE-OFFERING.md) and the
-[current architecture diagram](docs/diagrams/ce-current-offering.html).
+[current architecture diagram](docs/diagrams/ce-mvp-architecture.html).
 
 Read [the preview setup and credential contract](docs/PREVIEW-ONBOARDING.md) for required inputs,
 regions, model access, storage, and what this preview does not provide.
@@ -25,7 +27,13 @@ regions, model access, storage, and what this preview does not provide.
 Both need your AWS access and a permitted Hermes-compatible model/provider key.
 Neither is offline. Model/AWS charges are yours. The workstation backend creates
 its bucket; the Spot deployment needs an existing bucket and subnet with outbound
-access. Account/region onboarding is explicit. Start with one account and region.
+access. Account/region onboarding is explicit. Start with one account in `us-east-1`.
+
+## Sign in, then start with ce-desk
+
+The deployment guide creates your own dashboard login. It is separate from AWS credentials and your model API key. Retrieve it privately using the local `login` command or cloud tunnel `-WithLogin`, sign in, and open Chat with `profile=ce-desk`. Do not paste credentials into chat. Keep the launcher/tunnel running while using the dashboard.
+
+See [the illustrated first investigation and knowledge walkthrough](docs/MVP-WALKTHROUGH.md) for the actual UI.
 
 ## First useful investigation
 
