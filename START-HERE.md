@@ -44,6 +44,8 @@ See [the illustrated first investigation and knowledge walkthrough](docs/WALKTHR
 2. Ask for a bounded Security Hub or Config read with scope, observation time and
    receipt. Missing/disabled services should be reported honestly.
 3. Ask for a CLI-first fix proposal, or Terraform/CloudFormation if supported.
+   CE runs [pinned Linux validation tools](docs/REMEDIATION-VALIDATION.md) and
+   returns real diagnostics, with at most three attempts per format.
    Some settings cannot be represented in every format. Review prerequisites,
    ownership, provider validation and rollback before acting outside CE.
 4. Ask to save an actionable case on Kanban. A waiting case is not a fixed finding.

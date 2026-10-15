@@ -1,6 +1,9 @@
-# Current main: deterministic remediation validation
+# v0.1.2: deterministic remediation validation
 
-This addition follows v0.1.1; the existing release tag and downloads are unchanged.
+This release follows v0.1.1; previous release tags and downloads remain unchanged.
+The functional acceptance package below precedes only the v0.1.2 manifest label
+and release documentation. Release packaging checks compare every payload file
+to that tested package; only the manifest version may differ.
 Native package SHA-256:
 `03adabba2ca146263950a3d2593c40b0fe3277a50b4fb2b8092e48a1bb8c727f`.
 See [the pinned toolchain and scope](REMEDIATION-VALIDATION.md).

@@ -9,7 +9,7 @@ reassess after your change window.
 By design, the agent requests bounded reads from a separate collector with a
 configured allowlist. Fixes are proposals you review and apply yourself.
 
-AWS today · Azure/GCP planned · Self-hosted · Apache-2.0 · [v0.1.1](https://github.com/IaCGenius/RemediGenius/releases/tag/v0.1.1)
+AWS us-east-1 · Qwen 3.8 Max · Self-hosted · Apache-2.0 · [v0.1.2](https://github.com/IaCGenius/RemediGenius/releases/tag/v0.1.2)
 
 Provided as-is. You choose your model provider and AWS backend and are responsible
 for their configuration, data handling and charges. See [your responsibility](docs/LIMITS.md#your-responsibility).
@@ -63,9 +63,9 @@ model key or cloud deployment. [What this demo shows](docs/DEMO.md). This is not
 
 ## What you get
 
-[Community skills](docs/COMMUNITY-SKILLS.md) add focused IAM, S3, framework-mapping, CloudTrail, reassessment and case-summary guidance. These are included in v0.1.1, together with receipt-derived collection summaries and a conservative one-page default.
+[Community skills](docs/COMMUNITY-SKILLS.md) add focused IAM, S3, framework-mapping, CloudTrail, reassessment and case-summary guidance. These are included in v0.1.2, together with receipt-derived collection summaries and a conservative one-page default.
 
-| Included in v0.1.1 | Boundary |
+| Included in v0.1.2 | Boundary |
 |---|---|
 | Scoped AWS reads, records, counts and receipts | Bounded queries; unavailable services are not healthy services |
 | Selected organizational knowledge | Import files, publish/mount a view, show sources and their effect on advice |
@@ -73,7 +73,7 @@ model key or cloud deployment. [What this demo shows](docs/DEMO.md). This is not
 | CLI-first remediation proposals | Ask for Terraform/CloudFormation alternatives or source-specific edits; drafts need operator review |
 | Saved findings and reassessment | Native manual Kanban and fresh evidence; no automatic closure |
 | Configurable daily collection | Deterministic AWS checks, independent of agent compute; no unattended model investigation |
-| Linux tool validation (current source) | Pinned Terraform/AWS provider, AWS CLI and cfn-lint; real diagnostics and up to three correction attempts; no deployment |
+| Linux tool validation | Pinned Terraform/AWS provider, AWS CLI and cfn-lint; real diagnostics and up to three correction attempts; no deployment |
 | Bounded AI critique | Same loaded references and bounded evidence; not a substitute for tool validation |
 
 See [scope and limits](docs/LIMITS.md) for what is not included and [model/data choices](docs/MODELS.md) before connecting your account.
@@ -106,6 +106,4 @@ See [scope and limits](docs/LIMITS.md) for what is not included and [model/data 
 
 Validation is scoped to the documented release baseline. Never include credentials, Terraform state, private policies or unredacted transcripts in public issues.
 
-The current source includes [deterministic remediation validation](docs/REMEDIATION-VALIDATION.md).
-The published v0.1.1 archives predate this addition; use the reviewed main source
-for the validator capability.
+See [deterministic remediation validation](docs/REMEDIATION-VALIDATION.md) for the pinned tools and validation workflow.

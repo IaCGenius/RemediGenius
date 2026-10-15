@@ -12,7 +12,6 @@ your cloud, and for the AWS and model charges you incur.
 
 CE is a public, single-operator release. The validated baseline is AWS us-east-1
 with Qwen 3.8 Max. Other models/regions are configurable, not yet qualified.
-Azure and GCP are future direction, with no delivery date promised.
 
 - Collection is bounded by configured accounts, regions, operations and IAM.
   Explicit additional account targets exist; automatic organization enrollment
