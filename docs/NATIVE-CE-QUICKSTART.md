@@ -11,7 +11,7 @@ subnet and adds Spot compute with retained EBS.
 ## 1. Get the source, authenticate and choose inputs
 
 Preview baseline: **AWS `us-east-1`, Qwen 3.8 Max, one `ce-desk` profile**.
-Use Git, Python 3.11+, Terraform 1.10+, AWS CLI and the AWS Session Manager plugin.
+Use Git, Python 3.11+, Terraform 1.10+, AWS CLI v2 and the AWS Session Manager plugin.
 The commands below use PowerShell. Work from the repository root:
 
 ```powershell
@@ -30,8 +30,10 @@ aws sts get-caller-identity
 Use your actual SSO settings. Existing named AWS credential profiles also work;
 see [AWS authentication](WORKSTATION-HERMES.md#2-authenticate-to-aws-first).
 Confirm the returned account is the one you intend to provision. The operator
-needs provisioning rights for IAM, Lambda, S3 uploads, EC2/Auto Scaling, EBS,
-Secrets Manager and the optional schedule, plus SSM access for the tunnel.
+needs provisioning rights for IAM, Lambda, CloudWatch Logs, S3 uploads,
+EC2/Auto Scaling, EBS, Secrets Manager and optional EventBridge scheduling.
+Dashboard access also needs Auto Scaling discovery, permission to read the
+generated dashboard secret, and SSM session access for the tunnel.
 The agent is not given those operator credentials.
 
 Prepare an existing subnet with outbound Internet and an existing private S3 bucket
@@ -103,7 +105,7 @@ The model receives selected AWS records and knowledge needed for the question.
 4. Upload the archive with your normal AWS operator credentials:
 
    ```powershell
-   aws s3 cp .rgce/native-source.zip s3://YOUR_BUCKET/native-source/DIGEST.zip
+   aws s3 cp .rgce/native-source.zip s3://YOUR_PRIVATE_BUCKET/native-source/YOUR_DIGEST.zip
    $inputs = (Resolve-Path .rgce/aws.tfvars.json).Path
    $plan = Join-Path (Resolve-Path .rgce).Path "aws.tfplan"
    terraform -chdir=deploy/aws-native-sketch init
@@ -111,6 +113,10 @@ The model receives selected AWS records and knowledge needed for the question.
    # Review resources and permissions before applying the saved plan.
    terraform -chdir=deploy/aws-native-sketch apply $plan
    ```
+
+   The upload location must match `bucket_name` plus `source_archive_key` exactly.
+   The archive key is separate from `workspace_prefix`; the instance policy grants
+   access to that specific archive as well as the workspace prefix.
 
    Set `running=true` in the reviewed inputs to launch. Start with one account
    in `us-east-1`. Source download/hash verification and image startup take several

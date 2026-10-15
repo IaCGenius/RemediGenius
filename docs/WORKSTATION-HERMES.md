@@ -15,7 +15,7 @@ updating the official image; a changed source hash stops preparation explicitly.
 
 ## 1. Get the public source and prerequisites
 
-Use AWS `us-east-1` and Qwen 3.8 Max for the preview baseline. Install Git, Python 3.11+, Docker with Linux containers, Terraform 1.10+ and AWS CLI. The examples below use PowerShell; run them from the repository root. Windows is the accepted workstation baseline.
+Use AWS `us-east-1` and Qwen 3.8 Max for the preview baseline. Install Git, Python 3.11+, Docker with Linux containers, Terraform 1.10+ and AWS CLI v2. The examples below use PowerShell; run them from the repository root. Windows is the accepted workstation baseline.
 
 ```powershell
 git clone https://github.com/IaCGenius/RemediGenius.git

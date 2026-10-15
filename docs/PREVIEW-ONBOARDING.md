@@ -27,7 +27,7 @@ AWS schedule. Neither path automatically enables paid AWS security services.
 
 1. Clone this repository and choose one of the two paths above. Use Docker with
    Linux containers for workstation mode; install Python 3.11+, boto3, Terraform
-   1.10+ and AWS CLI. Cloud dashboard access also needs the AWS Session Manager
+   1.10+ and AWS CLI v2. Cloud dashboard access also needs the AWS Session Manager
    plugin. Authenticate as your provisioning operator and verify the account.
 2. Copy the relevant example inputs into an ignored private file. Choose a stack
    name, deployment account/region and the inputs in the tables below. Inspect
@@ -62,6 +62,7 @@ Hermes quickstart. Both supported preview paths use the guides linked above.
 | `aws_read_targets` (Spot) / `targets` (workstation Terraform) | Explicit account aliases, region lists and optional scoped cross-account role/external ID |
 | `knowledge_view` (Spot) / `knowledge_dir` (workstation JSON) | Optional selected knowledge view, not your entire document store |
 | `schedule_enabled` / `schedule_interval_hours` | Deterministic background collection; 24 hours by default when enabled, configurable 1-168 |
+| `scheduled_checks` (Spot) / `schedule_checks` (workstation Terraform) | Bounded collector requests and explicit target/region coverage; these are the actual, different variable names of the two deployment stacks |
 
 Workstation backend outputs supply `region`, `bucket`, `prefix`, `reader_function`
 and `reader_role_arn` for the launcher JSON. Add your local `aws_profile`, model
@@ -127,6 +128,12 @@ API endpoint plus a raw API key**, configured through Hermes. CE does not implem
 its own provider SDK or hardcode Qwen. Qwen 3.8 Max is the tested model, not a
 bundled service or proof that all models will follow the skills equally well.
 The critic uses Hermes's model routing; the default needs no second provider key.
+
+The recorded acceptance model identifier was `qwen3.8-max`, reached through the
+operator's compatible API endpoint. Copy the endpoint URL from your own provider
+account; CE does not supply a shared endpoint subscription or credentials. The
+model endpoint's location is separate from the AWS collection region. Selected
+evidence goes to that model provider, so choose it according to your data policy.
 
 **Workstation environment option:** place your key in the environment variable
 named by `model_key_env` before starting the launcher. Use your normal local secret

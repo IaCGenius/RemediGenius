@@ -56,7 +56,7 @@ Not included: autonomous remediation, automatic organization enrollment, univers
 ## Evidence, limits and project source
 
 - [Release checklist and known limits](docs/V0.1-RELEASE-PLAN.md)
-- [Current MVP acceptance: local Windows/Linux and live Qwen](docs/MVP-ACCEPTANCE.md)
+- [MVP acceptance: Windows workstation, Windows/Linux source tests and live Qwen](docs/MVP-ACCEPTANCE.md)
 - [AWS capabilities and scope](docs/AWS-READ-EXECUTION.md)
 - [Workstation acceptance](docs/WORKSTATION-ACCEPTANCE.md), [critic context acceptance](docs/CRITIC-CONTEXT-ACCEPTANCE.md), [remediation acceptance](docs/REMEDIATION-SKILL-ACCEPTANCE.md)
 - [Runtime controls and extension boundaries](docs/CE-RUNTIME.md)
