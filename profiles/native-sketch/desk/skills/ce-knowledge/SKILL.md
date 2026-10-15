@@ -35,6 +35,18 @@ documents conflict or scope is missing, report the uncertainty and proceed with
 unaffected work. An import timestamp is not a policy's effective date. An absence
 from the selected view means "not supplied here," not "the organization has none."
 
+Explicit operator guidance in this conversation is also usable context now;
+cite it as such instead of inventing a document path. Publication is needed for
+shared reuse, not to use that guidance in the current assessment. Missing owner,
+version or policy dates are not mandatory gates unless the supplied rule says so.
+Keep resource purpose and scope checks: operator authority does not establish an
+unobserved cloud fact, and an unknown purpose does not qualify for an exception.
+A rule may cover a resource category; do not require a separate rule or approval
+for each resource when the category match is established. Applying a knowledge
+variation is not the same as closing a case as accepted risk. Case-disposition
+requirements apply only when that separate action is requested. Do not ask the
+operator to prove that an unspecified approval process does not exist.
+
 CE operating guidance describes the tool's behavior; it is not a customer AWS
 security policy. Do not apply it as a compliance baseline or exception rule.
 

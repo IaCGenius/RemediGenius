@@ -4,6 +4,11 @@ Baseline: **AWS us-east-1, Qwen 3.8 Max, native Hermes ce-desk**. This report
 records a targeted preview qualification, not an exhaustive service/model matrix.
 Earlier acceptance reports retain their failures, retries and limitations.
 
+The subsequent [skill evaluation](SKILL-EVALUATION-2026-10-15.md) records rejected
+broad rewrites and four focused Markdown improvements. Its eight focused native
+Qwen runs and 36 targeted contract checks supplement the baseline below; the
+earlier full-suite counts are not claimed as a rerun of the later Markdown change.
+
 ## Local verification replaces unavailable hosted CI for this preview
 
 The owner explicitly chose local verification while GitHub Actions is unable to

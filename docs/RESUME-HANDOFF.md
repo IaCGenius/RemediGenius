@@ -2,6 +2,28 @@
 
 Updated 2026-10-15 (America/Chicago). Read this first when resuming.
 
+## Latest: focused skill promotion after broader Pi evaluation
+
+This entry supersedes archive/version claims in the historical entries below.
+Current cloud native archive:
+`38d41ade74f5c00df9e718d699ebb60e7731e30d77916b705855dbc37fb80b18`.
+Four Markdown guidance edits only; original working procedure retained. Both
+broad procedure rewrites were rejected after manual inspection despite high
+model scores. See [evaluation and limits](SKILL-EVALUATION-2026-10-15.md).
+
+Eight focused isolated native Qwen runs completed, then one deployed cloud run.
+Existing boundary checks: 36 passed. Cloud: three in-place Terraform updates,
+no additions/destructions; retained profile backed up/upgraded, 59 integrity
+entries matched, Qwen retained, no lab plugin, dashboard HTTP 200. Final critic
+received the loaded skill hash and six evidence excerpts without skill omission.
+No customer remediation. Local workstation deployment was not upgraded again;
+the focused isolated tests ran the pinned Hermes container locally.
+
+Reusable Pi/DeepSeek lab is outside CE in v2, committed at `2a154e5` on sketch.
+Raw results/configuration are ignored and private. Unrelated v2 changes remain
+untouched. Do not copy rejected procedure candidates into CE. Historical full-suite
+and UI acceptance below remain earlier runs, not new claims for this skill change.
+
 ## Latest MVP qualification
 
 This supersedes older runtime/archive notes below. Baseline is us-east-1 and

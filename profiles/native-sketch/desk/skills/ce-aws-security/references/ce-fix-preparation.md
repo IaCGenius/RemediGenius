@@ -32,6 +32,15 @@ Do not invent drift behavior for a property the IaC format cannot represent.
 | Existing CloudFormation | Use the supplied template and resource identity; retain unrelated properties. Check replacement, interruption and stack-policy constraints, or mark uncertain. A diff is not a change set. |
 | No existing IaC | Provide a clearly labelled starting template with required inputs. Explain adoption/import and ownership implications. Do not present a new declaration as a safe update of an existing unmanaged resource. |
 
+For Terraform, use conventional multiline HCL blocks with one argument per line.
+Do not separate block arguments with commas; commas belong inside collection
+expressions. Put copyable HCL in a fenced `terraform` block, keep unresolved values
+as declared inputs, and distinguish a new example address from an observed state
+address. `terraform fmt` can check parsing/formatting without applying a change;
+it does not establish provider validity, safe ownership or a successful plan.
+If no validator ran, state that explicitly rather than treating model review as
+syntax validation.
+
 CloudFormation: S3 has no default Retain policy. Set DeletionPolicy and
 UpdateReplacePolicy explicitly. Import checks schema/identity, not agreement with
 live properties; compare configuration and run drift detection after import.

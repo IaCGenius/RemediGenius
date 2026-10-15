@@ -9,6 +9,13 @@ license: Apache-2.0
 For an initial posture assessment, prioritization, business-context onboarding or
 framework mapping, read [Layered assessment](references/layered-assessment.md).
 Use its short context questions and show which knowledge changed the priority.
+For policy or exception applicability, read ce-knowledge. The CE operator's
+explicit guidance can inform this assessment immediately; shared publication,
+formal approval, version and dates are not prerequisites unless the supplied
+policy makes them so. Check the resource/scope match and preserve AWS facts.
+Preserve exact source field meanings: independent status fields are not synonyms.
+Label counts with the population and properties actually established by the
+query or inspected records, not a stronger inferred status.
 
 For saved findings, delayed changes, daily checks or closing work, read
 [Follow-up](references/follow-up.md). Use the existing native Kanban workspace

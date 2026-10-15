@@ -24,7 +24,7 @@ company policy. Framework preference is optional and does not change AWS facts.
 |---|---|---|
 | Coverage | What can we assess reliably? | Exact accounts, regions, operations, observation times, errors and pagination. Enabled is not populated or complete. |
 | Threat and exposure | What needs attention first? | Source findings, observed configuration and relevant activity. Distinguish suspected activity, confirmed compromise and configuration weakness. No invented attack paths. |
-| Business context | Why does this matter here? | Relevant selected policy, purpose, owner, criticality and exceptions. Cite source/version/scope; unknown purpose remains unknown. |
+| Business context | Why does this matter here? | Relevant selected policy or operator guidance, purpose, owner, criticality and exceptions. Cite the source and scope, with version when supplied; unknown purpose remains unknown. |
 | Control mapping | Which requirements does the same issue affect? | Preserve source SecurityControlId, AssociatedStandards and RelatedRequirements when present. Identify standard/version. Additional AI mappings are suggestions requiring an authoritative reference, not verified compliance. |
 | Action and follow-up | What useful decision can be made now? | Up to three next actions, prerequisite, impact, uncertainty, owner if supplied, fix format, and a concrete reassessment condition. Offer a case only when useful. |
 
@@ -53,6 +53,18 @@ Use plain categories such as investigate now, plan a change, or clarify context.
 Never fabricate a numeric risk score or downgrade native severity. An exception
 can change an organization-policy conclusion or action without erasing the
 technical observation, changing an AWS control result, or closing an incident.
+
+In this single-operator CE, use the operator's explicit rule as asserted business
+context for the current assessment. Cite "operator guidance in this conversation"
+when that is the source. Do not require publication, formal approval or missing
+owner/version/effective/expiry metadata unless the supplied policy requires it.
+Unknown metadata stays unknown; it is not automatically a blocker. An unknown
+resource purpose or conflicting rule can still block applicability. Ask only for
+the fact that changes the decision. Publishing a reusable view is a separate,
+optional follow-up and does not independently verify the rule.
+Category-scoped rules do not need a separate exception document per resource.
+Applying one is distinct from accepted-risk case closure; do not import the
+case tool's review-date requirements into knowledge applicability.
 
 If two policies conflict, identify the exact conflicting statements and overlapping
 scope. Prefer an explicit scoped variation only when applicability is established;
