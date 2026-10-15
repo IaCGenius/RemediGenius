@@ -20,8 +20,13 @@ subsequent run. Prior session reference context survived Spot host replacement.
 All 59 integrity entries passed; Qwen 3.8 Max retained. Login HTTP 200 and the
 localhost 9121 tunnel restored. No new browser UI pass is claimed.
 
-No acceptance model call remains running. GitHub URL is still awaited; no remote
-or publication has been invented. Current source ZIP/checksum are identified by
+No acceptance model call remains running. Public CE repository:
+https://github.com/IaCGenius/RemediGenius (main). Initial public snapshot
+`e871b90` has the identical source tree as tested local commit `b34baec`.
+The local development history remains on `codex/community-v0.1`; only the scanned
+current tree was published, without its earlier history. Local `public/ce-main`
+tracks `origin/main` for subsequent CE work. This is a preview, not a stable release
+tag. Current source ZIP/checksum are identified by
 `dist/native-preview/RELEASE.json`. Next work beyond this focused fix remains
 assessment-linked knowledge-use history and simpler view activation; authenticated
 Confluence sync and automatic chat attachment intake remain unshipped.
