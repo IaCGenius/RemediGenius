@@ -27,6 +27,9 @@ commands; do not label them PowerShell-compatible. JSON files avoid shell quotin
    validated code, it needs validation again within the same budget. Show a short
    result: tool/version, pass/fail, artifact hash and remaining deployment checks.
    If attempts run out, show the last errors and the incomplete draft, not a pass.
+   If demonstrating an original failure, validate that original first and the
+   corrected artifact last. Once the intended artifact passes, stop validating;
+   do not spend another attempt on the already-rejected original or an alternative.
 5. Use the normal single ce_review for the surrounding security interpretation.
    A critic cannot overrule a failing tool, approve execution or certify impact.
 
@@ -64,6 +67,20 @@ multiple commands or arbitrary file paths. Submit each chosen API command
 separately; keep within the three-attempt format budget. For a longer setup,
 validate the principal change and mark other steps unchecked rather than claiming
 all were validated. High-level `aws s3` commands are outside this mechanism.
+
+Render the exact submitted CLI arguments after a pass. Keep placeholder tokens
+unchanged (for example `REPLACE_WITH_CONFIRMED_NAME`). Never replace a validated
+token with an unquoted `<NAME>`: Bash interprets angle brackets as redirection.
+Label unresolved templates clearly; syntax success does not fill missing inputs.
+Do not add equivalent forms, extra flags, or API-parameter claims unless separately
+grounded and needed. A schema listing is not permission to invent API limitations.
+
+When following a completed investigation, give only the requested additional work,
+normally within 200 words: the exact artifact, actual tool result, the specific
+unmet prerequisite and how to verify after execution. The runtime already displays
+the investigation and its sources. Do not repeat those tables, speculate about other
+regions/services, or narrate internal critic disagreements. Preserve a material
+uncertainty if it changes whether the proposal can be used.
 
 A PASS means the submitted artifact passed these specific tool checks. It does
 not prove the resource exists, caller has permission, the business decision is

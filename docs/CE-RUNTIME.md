@@ -20,8 +20,10 @@ flowchart LR
   E[(Retained EBS: sessions, config, audit)] --- H
 ```
 
-The model chooses investigation steps; the admission gate and Lambda decide what
-can execute. The critic cannot grant execution rights or alter source records.
+CE fixes the investigation stages and budgets; Hermes chooses relevant evidence
+within them. The admission gate and Lambda decide what can execute. The critic
+cannot grant execution rights or alter source records. See the
+[bounded investigation workflow](AWS-ASSESSMENT-WORKFLOW.md).
 
 ## Before an investigation
 
@@ -32,22 +34,29 @@ operations and budgets. READY does not assert every AWS service is accessible.
 An integrity, credential or connectivity failure blocks CE tool admission.
 
 The default investigation toolset is skills, clarification and ce_runtime. The
-plugin admits only skill viewing/listing, clarification and the three CE tools.
+plugin admits only skill viewing/listing, clarification and the six CE tools below.
 Terminal, arbitrary file access, skill editing, and unreviewed plugin tools are
 blocked. Scope is also independently checked by Lambda and IAM. The plugin and
 helper package are mounted read-only; there is no fork of Hermes.
 
-## Three reusable tools
+## Reusable tools
 
 | Tool | Purpose |
 |---|---|
-| ce_aws | SDK schema discovery, scoped reads, exact S3 evidence projection and comparison |
+| ce_assessment | Bounded objective → plan → collect → interpret → review → finish; owns live reads and comparisons |
+| ce_aws | SDK schema discovery and exact S3 evidence projection; read/compare execute inside ce_assessment |
 | ce_knowledge | Bounded Markdown/JSON reads inside the operator-selected knowledge view |
 | ce_review | One model critique of an answer draft against the actual retrieved evidence |
 | ce_case | Native Kanban cases and local activity/closure records; no customer cloud writes or worker dispatch |
+| ce_validate | Credential-free Linux CLI/Terraform/CloudFormation validation, with at most three attempts per format |
+
+An investigation has at most three rounds, six cloud reads/pages, twelve actions
+and one invalid-plan repair. Its final interpretation, critique and answer share
+one frozen evidence packet. Requested fix validation or case work can follow a
+completed investigation; the UI keeps the saved investigation and follow-up distinct.
 
 `policy.json` contains operator settings: 24 admitted tool calls, 6 cloud reads,
-at most 2 identical requests, and a 240-second deadline for admitting new calls
+at most 2 identical requests, and a 480-second deadline for admitting new calls
 per turn. An already-running request may finish after that deadline; it has its
 own subprocess/SDK/Lambda limits. Access denied stops that operation in that scope
 for the turn. One review call is allowed, with a 60-second requested model timeout

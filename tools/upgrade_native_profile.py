@@ -42,6 +42,10 @@ def upgrade(source, home):
     enabled=value.setdefault('plugins',{}).get('enabled',[])
     value['plugins']['enabled']=list(dict.fromkeys([*enabled,'ce-runtime']))
     value.setdefault('auxiliary',{}).setdefault('ce_review',{}).setdefault('reasoning_effort','none')
+    # Migrate only CE's prior defaults; preserve operator-selected budgets.
+    agent=value.setdefault('agent',{})
+    if agent.get('max_turns') == 12: agent['max_turns']=24
+    if agent.get('run_budget_seconds') == 240: agent['run_budget_seconds']=480
     value.setdefault('kanban',{}).update({'auto_decompose':False,'auto_promote_children':False,
         'dispatch_in_gateway':False,'review_dispatch':False,'dispatch_profiles':[]})
     pending=config.with_suffix('.pending');pending.write_text(yaml.safe_dump(value,sort_keys=False))

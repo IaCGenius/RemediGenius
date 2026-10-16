@@ -27,10 +27,10 @@ the retained volume without a snapshot would lose these private review records.
 | --- | --- | --- |
 | Tool correction | Initial attempt + at most one justified retry | SOUL/skill instruction, not a hard per-operation interceptor |
 | Permission, missing tool/auth/source | Stop; explain prerequisite | SOUL/skill instruction and existing IAM/filesystem boundaries |
-| Model iterations per user message | 12 | Native `agent.max_turns`; final grace responses may add calls |
+| Model iterations per user message | 24 | Native `agent.max_turns`; final grace responses and bounded workflow auxiliary calls may add calls |
 | Provider attempts | 2 total in pinned 0.21.7 | Native `api_max_retries: 2`; installed source counts attempts, unlike current web-doc wording |
 | Outage recovery cycles | 0 | Native `auto_recovery_cycles: 0` |
-| Wall-clock budget | 240 seconds | Native wrap-up guidance and timeout adjustment; not a hard kill |
+| Wall-clock budget | 480 seconds | Native wrap-up guidance and timeout adjustment; not a hard kill; CE separately stops admitting tools at this elapsed limit |
 | Terminal command | 30 seconds | Native terminal timeout |
 | Review scope | 3 days, 10 sessions by default | Metadata helper bounds; operator selects detailed content |
 

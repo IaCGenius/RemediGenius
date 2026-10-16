@@ -4,11 +4,12 @@ model:
   base_url: __MODEL_BASE_URL__
   key_env: MODEL_API_KEY
 agent:
-  max_turns: 12
+  # Includes bounded workflow hops plus skill loading and final delivery.
+  max_turns: 24
   # Pinned Hermes 0.21.7 counts total attempts: 2 = initial + one retry.
   api_max_retries: 2
   auto_recovery_cycles: 0
-  run_budget_seconds: 240
+  run_budget_seconds: 480
 terminal:
   backend: local
   cwd: /opt/data/work

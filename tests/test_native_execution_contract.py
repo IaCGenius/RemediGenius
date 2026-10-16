@@ -38,6 +38,33 @@ def test_pagination_rotation_order_and_page_boundaries_are_not_finding_changes()
     result=comparison.compare_snapshots(old,new)
     assert result['result']=='UNCHANGED' and result['after_count']==2
 
+
+def test_assessment_blocks_independent_tools(rt):
+    rt.turns[('session','turn')]['assessment_active']='a'*32
+    for tool in ('ce_aws','ce_validate','ce_case','ce_review'):
+        result=rt.gate(tool,{},session_id='session',turn_id='turn')
+        assert result['action']=='block' and 'assessment' in result['message']
+    assert rt.gate('ce_assessment',{'action':'next'},session_id='session',turn_id='turn')['action']=='modify'
+
+
+def test_assessment_final_output_cannot_be_rewritten_by_outer_model(rt):
+    rt.turns[('session','turn')]['assessment_result']={
+        'id':'a'*32,'notice':'Not a secure verdict','results':[],
+        'answer':'Exact saved interpretation with uncertainty'}
+    text=rt.label('Everything is secure',session_id='session',turn_id='turn')
+    assert 'Exact saved interpretation' in text and 'Everything is secure' not in text
+
+
+@pytest.mark.parametrize('status',['PASS','FAIL','BLOCKED'])
+def test_assessment_keeps_requested_validator_results_visible(rt,status):
+    state=rt.turns[('session','turn')]
+    state['assessment_result']={'id':'a'*32,'notice':'Not a secure verdict',
+        'results':[],'answer':'Exact saved source conclusion'}
+    state['validations']={'aws-cli':{'status':status,'attempt':1,'attempt_limit':3}}
+    text=rt.label('Requested syntax result; no deployment.',session_id='session',turn_id='turn')
+    assert 'Exact saved source conclusion' in text and 'Requested follow-up' in text
+    assert 'aws-cli · '+status in text and 'Requested syntax result' in text
+
 def test_actual_finding_change_is_not_hidden():
     old,new=pair();new['pages'][0]['Findings'][0]['Severity']['Label']='CRITICAL'
     result=comparison.compare_snapshots(old,new)
@@ -69,7 +96,7 @@ def test_unreviewed_execution_routes_blocked(rt,tool):
 
 def test_missing_preflight_and_deadline_block(rt):
     assert rt.gate('ce_aws',{},session_id='other',turn_id='turn')['action']=='block'
-    rt.turns[('session','turn')]['start']-=300
+    rt.turns[('session','turn')]['start']-=rt.policy['dispatch_deadline_seconds']+1
     assert rt.gate('ce_aws',{},session_id='session',turn_id='turn')['action']=='block'
 
 def test_tool_budget_and_missing_admission_ticket(rt):
@@ -77,6 +104,17 @@ def test_tool_budget_and_missing_admission_ticket(rt):
         assert rt.gate('ce_aws',{},session_id='session',turn_id='turn')['action']=='modify'
     assert rt.gate('ce_aws',{},session_id='session',turn_id='turn')['action']=='block'
     assert json.loads(rt.handle('ce_aws',{'action':'capabilities'}))['status']=='BLOCKED'
+
+@pytest.mark.parametrize('action',['read','compare'])
+def test_live_execution_cannot_skip_workflow(rt,action):
+    result=rt.gate('ce_aws',{'action':action},session_id='session',turn_id='turn')
+    assert result['action']=='block' and 'ce_assessment' in result['message']
+    assert rt.tickets == {}
+    assert rt.turns[('session','turn')]['reads']==0
+
+@pytest.mark.parametrize('action',['capabilities','schema','show'])
+def test_saved_inspection_still_available_without_workflow(rt,action):
+    assert rt.gate('ce_aws',{'action':action},session_id='session',turn_id='turn')['action']=='modify'
 
 def test_denial_cannot_be_retried_by_omitting_default_target(rt,monkeypatch):
     calls=[]

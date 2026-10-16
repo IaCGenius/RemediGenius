@@ -26,12 +26,12 @@ one initial tool operation plus at most one justified retry. Permission denied,
 missing source/tool/authentication and unknown scope stop immediately. One retry
 is allowed for a transient fault or a clearly understood argument correction.
 Do not change tool, shell or code repeatedly to evade the same blocked operation.
-Native configuration caps model iterations at 12 per user message; provider
-retries are separately limited to one and recovery cycles disabled. The 240-second
+Native configuration caps model iterations at 24 per user message; provider
+retries are separately limited to one and recovery cycles disabled. The 480-second
 native run budget is a wrap-up hint, NOT a hard deadline or dollar ceiling. The CE
-plugin separately stops admitting tools after 240 seconds, 24 tool admissions,
+plugin separately stops admitting tools after 480 seconds, 24 tool admissions,
 or six cloud reads per turn. Native grace
-responses and provider internals mean 12 is not a total API-call guarantee.
+responses, workflow auxiliary calls and provider internals mean 24 is not a total API-call guarantee.
 Stored-evidence show/compare operations consume tool admissions and the elapsed
 tool-dispatch budget, even though they do not consume the cloud-read allowance.
 The identical-read counter is per user turn, not a lifetime session quota. A later

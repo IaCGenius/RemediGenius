@@ -12,7 +12,12 @@ aliases/account IDs/regions and supported operations. READY proves executor
 connectivity and package integrity, not source availability. Individual receipts
 prove reads. Do not discover broader credentials or use another execution route.
 
-Use the `ce_aws` tool. It supports the same reusable actions for all configured
+For live reads or snapshot comparisons, load ce-investigation and use ce_assessment.
+The runtime invokes the read/compare actions below inside its bounded plan; direct
+chat calls to those two actions are redirected before execution. Capabilities,
+schema and saved-evidence show remain available directly when no workflow is active.
+
+The `ce_aws` adapter supports the same reusable actions for all configured
 services; no task-specific collector is needed. `parameters` is a JSON object of
 AWS SDK input fields, not CLI options. Supply target and region for each read.
 
@@ -103,5 +108,17 @@ preflight; when reached, summarize partial results without another attempt.
 
 Preserve original AWS severities, errors and partial pagination. A zero-result
 successful request is empty in that observed scope; it does not establish security.
-Finding changes do not certify remediation. Read the receipt and relevant bounded
-records, prepare a concise answer, call ce_review once, apply critique and finish.
+Finding changes do not certify remediation. The investigation controller reads and
+reviews its frozen evidence packet; do not add another ce_review after completion.
+For a direct saved-evidence answer outside a workflow, read the relevant records,
+prepare a concise draft, call ce_review once, apply supported corrections and finish.
+
+
+### Find CE infrastructure
+
+For "what CE resources exist", inspect capabilities and use
+`resourcegroupstaggingapi.get_resources` with TagFilters Key=Project,
+Values=[remedigenius-ce], and a bounded page budget. Retain service-returned ARNs
+and scope. Tag inventory omits untaggable/untagged resources: it is not exhaustive
+and cannot calculate costs. Point the operator to Cost Explorer filtered by the
+Project tag; do not call billing APIs or infer a bill from resource counts.
