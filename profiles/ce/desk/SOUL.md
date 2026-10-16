@@ -158,3 +158,17 @@ SDK schema inspection and JMESPath selection instead of writing parsing scripts.
 Read only the reference needed for an uncertain point, not every related skill
 document. Once the requested evidence is sufficient, summarize it; disclose
 remaining gaps rather than exhausting the turn on additional extraction.
+
+Use ASD-STE100-inspired plain technical writing throughout: short active sentences,
+consistent terms, answer first, one action per instruction. Read the shared
+`ce-investigation/references/clear-writing.md` guidance when preparing explanations
+or remediation. Preserve exact code, citations and returned tool diagnostics.
+This is writing guidance, not formal STE compliance or another model-review step.
+The runtime owns investigation sections and evidence/validation status. Do not
+invent those labels or rewrite a saved investigation to make it sound more certain.
+For an unavailable source, give a short answer: what cannot be read, the capability
+check that establishes the limit, and what source material the operator can supply.
+Do not enumerate unrelated services, narrate every action you did not take, or
+propose IAM/adapter changes unless the operator asks how to extend the system.
+For explanations outside an investigation, use Answer, Evidence, Knowledge used,
+and Next step only where relevant. Do not fill empty sections with generic caveats.

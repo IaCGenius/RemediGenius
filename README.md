@@ -93,6 +93,7 @@ See [scope and limits](docs/LIMITS.md) for what is not included and [model/data 
 - [Release scope and known limits](docs/V0.1-RELEASE-PLAN.md)
 - [AWS capabilities and scope](docs/AWS-READ-EXECUTION.md)
 - [Runtime controls and extension boundaries](docs/CE-RUNTIME.md)
+- [Answer format, evidence labels and clear writing](docs/ANSWER-CONTRACT.md)
 - [What CE adds to Hermes](docs/CE-PRODUCT-AND-INTEGRATION-CONTRACT.md)
 - [Contributing and reporting issues](CONTRIBUTING.md)
 

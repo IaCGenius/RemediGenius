@@ -378,6 +378,8 @@ class Runtime:
         for name in ('ce-investigation','ce-aws-read','ce-aws-security','ce-knowledge'):
             body = (ROOT/'skills'/name/'SKILL.md').read_text(encoding='utf-8')
             skills[name] = {'text':body,'sha256':hashlib.sha256(body.encode()).hexdigest()}
+        writing = (ROOT/'skills/ce-investigation/references/clear-writing.md').read_text(encoding='utf-8')
+        skills['clear-writing'] = {'text':writing, 'sha256':hashlib.sha256(writing.encode()).hexdigest()}
         def reason(stage, packet, prior):
             if stage == 'plan':
                 instructions = (
@@ -432,6 +434,27 @@ class Runtime:
                     + {'interpret':'Produce the initial answer.',
                        'review':'Critique the supplied draft against this same packet. Return only material unsupported claims or contradictions and their evidence. Do not add report sections, generic qualifications or optional follow-up advice. If none, say no material issue found; no certification.',
                        'finish':'Produce the final answer from evidence, draft and critique. Resolve only supported corrections. Do not narrate the review process.'}[stage])
+                instructions += '\nWriting guidance:\n'+writing
+                if stage == 'finish' and 'answer_references' in json.loads(packet):
+                    instructions += (
+                        '\nReturn ONLY a JSON object with exactly these keys: '
+                        'answer (short conclusion string), observations (list of {"text":"fact", "evidence":["E1"]}), '
+                        'knowledge (list of {"text":"how context affected the answer", "sources":["K1"]}), '
+                        'proposals (zero to three short suggestion strings), limits (zero to six relevant strings), '
+                        'next_step (string, empty when no action is needed). '
+                        'Use ONLY IDs from answer_references.evidence and answer_references.knowledge. '
+                        'Every observation needs at least one actual evidence ID. Evidence references prove source membership, not truth. '
+                        'Use empty observations for missing evidence; state the inability to conclude in answer. '
+                        'Use empty knowledge if no selected source affected the answer. '
+                        'Keep each string plain text in one paragraph: no Markdown headings, bold, code, HTML or newlines. '
+                        'Do not supply review, collection or validation badges; the runtime supplies those. '
+                        'Do not claim a proposal was validated or executed. This step does not run a validator. '
+                        'Aim for at most 220 words across all fields. Usually one to three observations suffice. '
+                        'Do not repeat the conclusion in observations or repeat an observation in limits. '
+                        'Runtime metadata already supplies scope, timestamps and pagination; do not narrate each field again. '
+                        'Do not discuss inapplicable warnings, absent aggregation, or unused capabilities. '
+                        'Mention display truncation only if it limits the requested answer; a complete projection needs no caveat about its preview. '
+                        'Do not invent content to fill empty lists.')
             async def call():
                 return await asyncio.wait_for(self.ctx.llm.acomplete(
                     [{'role':'system','content':instructions},
@@ -457,6 +480,10 @@ class Runtime:
             state['capabilities'], collect, self.knowledge, reason, skills)
         pointer = self.assessment_pointer(state.get('session_id',''))
         def track(result):
+            if result['status']=='BLOCKED':
+                state['assessment_blocked']=result
+            else:
+                state.pop('assessment_blocked',None)
             if result['status'] in ('COMPLETE','CANCELLED'):
                 state.pop('assessment_active',None)
                 pointer.unlink(missing_ok=True)
@@ -701,6 +728,14 @@ class Runtime:
 
     def label(self, response_text, session_id='', turn_id='', **kwargs):
         state=self.turns.get((session_id,turn_id),{})
+        blocked = state.get('assessment_blocked')
+        if blocked:
+            reason = str(blocked.get('reason','Inspect the retained investigation.')).replace('`', "'").replace('\n',' ')[:300]
+            return ('**Investigation BLOCKED — runtime reported**\n\n'
+                    'Run `'+blocked['id']+'` stopped at `'+blocked['stage']+'`.\n\n'
+                    'Reason: `'+reason+'`\n\n'
+                    'The final answer was not delivered. Saved evidence and progress remain available. '
+                    'No automatic restart. Inspect this run before requesting a new investigation.')
         assessment = state.get('assessment_result')
         assessment_prefix = ''
         if assessment:
@@ -708,7 +743,10 @@ class Runtime:
                 ': '+str(item['result'].get('status','UNKNOWN'))+
                 ('; additional pages exist' if item['result'].get('has_more') else '')
                 for item in assessment['results'])
-            assessment_prefix = ('**CE assessment '+assessment['id']+' — workflow complete**\n\n'+
+            if assessment.get('answer_contract'):
+                assessment_prefix = '**CE investigation '+assessment['id']+' — process complete**\n\n'+assessment['answer']
+            else:
+                assessment_prefix = ('**CE assessment '+assessment['id']+' — workflow complete**\n\n'+
                     assessment['notice']+'\n\n**Runtime source coverage**\n'+coverage+
                     '\n\n**AI interpretation — saved assessment output**\n\n'+assessment['answer'])
             if not state.get('validations') and not state.get('assessment_followup'):

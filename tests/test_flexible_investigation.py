@@ -13,7 +13,10 @@ def make(tmp_path, plans):
     calls=[];models=[]
     def reason(stage,packet,prior):
         models.append((stage,packet))
-        return json.dumps(plans.pop(0)) if stage=='plan' else 'Qualified test interpretation'
+        if stage=='plan': return json.dumps(plans.pop(0))
+        if stage=='finish': return json.dumps({'answer':'Qualified test interpretation',
+            'observations':[], 'knowledge':[], 'proposals':[], 'limits':[], 'next_step':''})
+        return 'Qualified test interpretation'
     def collect(req):
         calls.append(req)
         return {'status':'OK','run_id':'a'*32,'raw_path':'raw/returned.json'}

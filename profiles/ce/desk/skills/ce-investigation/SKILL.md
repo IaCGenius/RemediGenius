@@ -5,6 +5,12 @@ description: Predetermined investigation process with flexible evidence selectio
 
 # Predetermined process, flexible investigation
 
+Use [clear-writing.md](references/clear-writing.md) for explanations. The controller
+loads this reference for its model steps. Final structured answers use only the
+provided E/K reference IDs; no invented receipt, review or validation badges.
+Empty sections stay empty when evidence or knowledge is absent. The runtime renders
+the fixed layout. A reference check establishes membership, not semantic truth.
+
 Use the same process for a security question, imported finding, conflicting alerts,
 posture assessment or reassessment. Do not substitute a standard source checklist
 for the user's objective. Source-specific skills supply expertise, not new authority.

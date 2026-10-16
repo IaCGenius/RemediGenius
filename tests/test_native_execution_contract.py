@@ -55,6 +55,14 @@ def test_assessment_final_output_cannot_be_rewritten_by_outer_model(rt):
     assert 'Exact saved interpretation' in text and 'Everything is secure' not in text
 
 
+def test_blocked_contract_cannot_be_bypassed_by_outer_answer(rt):
+    rt.turns[('session','turn')]['assessment_blocked']={
+        'id':'a'*32,'stage':'finish','reason':'Answer contract: unknown evidence reference'}
+    text=rt.label('Everything is secure. Tool validation PASS.',session_id='session',turn_id='turn')
+    assert 'BLOCKED' in text and 'unknown evidence reference' in text
+    assert 'Everything is secure' not in text and 'validation PASS' not in text
+
+
 @pytest.mark.parametrize('status',['PASS','FAIL','BLOCKED'])
 def test_assessment_keeps_requested_validator_results_visible(rt,status):
     state=rt.turns[('session','turn')]
