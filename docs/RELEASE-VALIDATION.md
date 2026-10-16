@@ -1,4 +1,24 @@
-# v0.1.3 qualification
+# Validation records
+
+## Main after v0.1.3 — 2026-10-16
+
+The [answer contract and writing changes](ANSWER-CONTRACT.md) passed 168 local
+regression tests. Four real DeepSeek v4.1 Flash checks ran in isolated local Hermes:
+
+| Check | Result |
+|---|---|
+| Repeated EC2 inventory | Two completed investigations agreed on counts; returned references were valid. |
+| Config configuration/status | Completed with separate fresh reads and scoped conclusions. |
+| Frozen review context | All three investigations used the same packet hash within interpretation, review and finish; zero planning repairs. |
+| Unavailable CloudWatch source | Capability/schema checks and direct review stopped without reading logs or substituting CloudTrail; this was not a structured-investigation run. |
+| Writing quality | Partial: some metadata repeats, and the capability-gap answer contains unsolicited setup advice. |
+
+No new native UI end-to-end or Spot deployment pass is claimed for these updates.
+The live checks did not apply customer-cloud remediation. Private traces were kept
+outside tracked source. The existing release tag, version and downloads are unchanged.
+Source setup and packaging checks are described in the [change log](../CHANGELOG.md).
+
+## v0.1.3 qualification
 
 Scope: AWS us-east-1, DeepSeek v4.1 Flash, one native ce-desk profile. Both deployment
 paths use official Hermes 0.21.7 pinned by digest; CE supplies skills and the runtime

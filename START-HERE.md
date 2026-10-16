@@ -11,8 +11,10 @@ and return later to reassess. This is a single-operator community release.
 See [current offering and release gates](docs/CURRENT-CE-OFFERING.md) and the
 [current architecture diagram](docs/diagrams/ce-mvp-architecture.html).
 
-Read [the v0.1.2 release setup and credential contract](docs/ONBOARDING.md) for required inputs,
-regions, model access, storage, and what this v0.1.2 release does not provide.
+Read [the setup and credential contract](docs/ONBOARDING.md) for required inputs,
+region, model access and storage. The setup guides clone `main`, which includes
+[changes after v0.1.3](CHANGELOG.md). To reproduce the published release instead,
+run `git checkout v0.1.3` after cloning. Do not switch source while a launcher is running.
 
 ## Choose where Hermes runs
 
@@ -33,7 +35,7 @@ access. Account/region onboarding is explicit. Start with one account in `us-eas
 
 ## Sign in, then start with ce-desk
 
-The deployment guide creates your own dashboard login. It is separate from AWS credentials and your model API key. Retrieve it privately using the local `login` command or cloud tunnel `-WithLogin`, sign in, and open Chat with `profile=ce-desk`. Do not paste credentials into chat. Keep the launcher/tunnel running while using the dashboard.
+The deployment guide creates your own dashboard login. It is separate from AWS credentials and your model API key. Retrieve it privately using the local `login` command or Bash cloud tunnel `--with-login`, sign in, and open Chat with `profile=ce-desk`. Do not paste credentials into chat. Keep the launcher/tunnel running while using the dashboard.
 
 See [the illustrated first investigation and knowledge walkthrough](docs/WALKTHROUGH.md) for the actual UI.
 
@@ -56,6 +58,13 @@ or automatically resolve cases. Kanban is manual tracking with worker dispatch
 disabled. Read [the operating loop](docs/OPERATING-LOOP.md).
 
 ## Bring your context
+
+For the current `main` checkout, a completed investigation separates the answer,
+observed facts, runtime checks, knowledge used and next step. Check the account,
+region, observation time and receipt before acting. A process-complete label does
+not mean that AWS is secure or a fix was applied. If the runtime blocks an answer,
+keep its run ID and inspect the reason; do not repeatedly restart the same request.
+See [how to read an answer](docs/ANSWER-CONTRACT.md).
 
 Start with [the simple knowledge guide](docs/NATIVE-KNOWLEDGE-QUICKSTART.md).
 Import only relevant documents into a readable selected view; see

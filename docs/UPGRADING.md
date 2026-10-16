@@ -1,5 +1,30 @@
 # Upgrade an existing CE installation
 
+## Current main updates (no version bump)
+
+See the [change log](../CHANGELOG.md) before updating. The answer-format and writing
+changes are source updates after v0.1.3; the published tag/downloads do not contain
+them. Use the source commit and package SHA-256 to identify your installation,
+because the version string alone does not distinguish these changes.
+
+For an existing workstation installation, stop its launcher, back up its named
+volume and private inputs, and update a clean checkout with `git pull --ff-only`.
+Review the change log, then run the existing configuration:
+
+```bash
+python tools/native_workstation.py run --config .rgce/workstation.json --upgrade
+```
+
+Keep that terminal open. Retrieve your login in a second terminal as described in
+the workstation guide. Start a new bounded investigation in `ce-desk` and check
+its [answer sections and references](ANSWER-CONTRACT.md). Existing saved answers
+are not rewritten. Model settings, credentials and sessions are retained.
+
+For Spot, follow the backed-up package/profile upgrade procedure below. A Git pull
+does not update the running instance. These source updates were tested in isolated
+local Hermes; they have not received a new Spot qualification. No infrastructure
+change is required specifically for the answer-format or writing changes.
+
 ## v0.1.3
 
 Back up retained state first. Keep the existing stack name, Terraform state, model

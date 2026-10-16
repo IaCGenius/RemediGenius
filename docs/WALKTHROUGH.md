@@ -1,9 +1,13 @@
 # Your first CE investigation
 
-This v0.1.2 release is qualified with **AWS us-east-1 and Qwen 3.8 Max**. You supply your
+The v0.1.3 baseline is **AWS us-east-1 and DeepSeek v4.1 Flash**. You supply your
 own AWS access and model credentials. CE uses native Hermes as its agent and UI;
 the scoped reader collects AWS facts, and S3 retains their receipts. Start with
 [the architecture](diagrams/ce-mvp-architecture.html).
+
+The screenshots show the existing native UI, not a new qualification of every
+source update. Current `main` adds [structured investigation answers](ANSWER-CONTRACT.md);
+see the [change log](../CHANGELOG.md) for differences from the published tag.
 
 ## 1. Choose where Hermes runs
 
@@ -20,7 +24,7 @@ credentials, and the dashboard login. Never paste any of these secrets into chat
 ## 2. Sign in and select ce-desk
 
 Follow your deployment guide's login command. For AWS, keep the SSM tunnel open;
-`tools/open-native-hermes.ps1 -WithLogin` displays the existing dashboard login
+`bash tools/open-native-hermes.sh --region us-east-1 --name YOUR_STACK_NAME --with-login` displays the existing dashboard login
 and starts the tunnel. Run it only in your private terminal. The dashboard password
 is not a model API key. For Docker, use the launcher's `login` command.
 
@@ -61,7 +65,7 @@ Ask Hermes to help draft a short policy or application note. Review it, save it 
 Markdown, and follow [the knowledge walkthrough](NATIVE-KNOWLEDGE-QUICKSTART.md)
 to import it, select a view, and activate that view for your deployment. Supported
 document conversion uses MarkItDown. Chat text or an uploaded attachment alone
-does not publish shared knowledge in this v0.1.2 release.
+does not publish shared knowledge.
 
 Ask:
 
@@ -100,5 +104,5 @@ Stopping Hermes does not stop that schedule; disable it separately when needed.
 
 Keep deployment inputs and secrets private. Back up your conversation/case volume;
 S3 evidence alone does not restore the Kanban database. The setup guides explain
-stop/restart and credential renewal. This is a single-operator v0.1.2 release with bounded
+stop/restart and credential renewal. This is a single-operator release with bounded
 collection, not continuous monitoring of every AWS resource or automatic remediation.

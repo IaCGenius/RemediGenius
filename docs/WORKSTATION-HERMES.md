@@ -235,10 +235,10 @@ Secrets Manager access. This is separate from the model key passed into Hermes.
 
 ## bash/zsh equivalents (not a macOS acceptance claim)
 
-Windows is the tested workstation path. Linux source tests are not a full Linux
-workstation acceptance, and macOS end-to-end validation has not been performed.
-Use the same configuration fields and review steps above; these shell equivalents
-are provided for operators who choose to validate another platform.
+The tested workstation path is Ubuntu under WSL2 with Docker Desktop and a Windows
+browser. That is not a separate native-Linux or macOS end-to-end qualification.
+Use the same configuration fields and review steps above; the commands below
+summarize the Bash setup and can be adapted by operators using zsh.
 
 ```sh
 git clone https://github.com/IaCGenius/RemediGenius.git

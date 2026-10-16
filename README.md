@@ -17,7 +17,7 @@ Validated configuration: AWS us-east-1 and DeepSeek v4.1 Flash. Other supported 
 
 ![Agent helps identify the decisions needed before preparing a fix](docs/images/hermes-remediation-decisions.jpg)
 
-[![CI](https://github.com/IaCGenius/RemediGenius/actions/workflows/community.yml/badge.svg)](https://github.com/IaCGenius/RemediGenius/actions/workflows/community.yml)
+[Validation record](docs/RELEASE-VALIDATION.md) · GitHub Actions is paused; local checks are recorded separately.
 [![Release](https://img.shields.io/github/v/release/IaCGenius/RemediGenius)](https://github.com/IaCGenius/RemediGenius/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
@@ -32,6 +32,10 @@ Validated configuration: AWS us-east-1 and DeepSeek v4.1 Flash. Other supported 
 - **Remediation:** “Explain this finding using our policy. Prepare a CLI fix, save a case, and help me reassess after our change window.”
 
 ## Choose your setup
+
+The guides clone `main`. It includes [tested source updates after v0.1.3](CHANGELOG.md)
+without changing the published tag or downloads. Use `git checkout v0.1.3` after
+cloning if you want that exact release. Record your source commit before deployment.
 
 Hermes is an open-source agent runtime by Nous Research. CE adds the `ce-desk`
 profile, scoped AWS tools and readable security skills. Bring a model supported
