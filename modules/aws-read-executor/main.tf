@@ -23,21 +23,9 @@ data "archive_file" "code" {
     filename = "operations.json"
   }
 }
-resource "aws_iam_role" "executor" {
-  name               = "${var.name}-aws-read"
-  assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { Service = "lambda.amazonaws.com" }, Action = "sts:AssumeRole" }] })
-}
 resource "aws_cloudwatch_log_group" "executor" {
   name              = "/aws/lambda/${var.name}-aws-read"
   retention_in_days = 7
-}
-resource "aws_iam_role_policy" "executor" {
-  role = aws_iam_role.executor.id
-  policy = jsonencode({ Version = "2012-10-17", Statement = concat([
-    { Effect = "Allow", Action = local.read_actions, Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = local.regions } } },
-    { Effect = "Allow", Action = "s3:PutObject", Resource = [for p in ["raw/*", "normalized/*", "receipts/*", "catalog.json"] : "arn:${data.aws_partition.current.partition}:s3:::${var.bucket_name}/${var.workspace_prefix}/${p}"] },
-    { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = "${aws_cloudwatch_log_group.executor.arn}:*" }
-  ], length(local.roles) == 0 ? [] : [{ Effect = "Allow", Action = "sts:AssumeRole", Resource = local.roles }]) })
 }
 resource "aws_lambda_function" "executor" {
   function_name                  = "${var.name}-aws-read"

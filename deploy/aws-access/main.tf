@@ -25,6 +25,7 @@ variable "object_arns" {
 provider "aws" {
   region              = var.region
   allowed_account_ids = [var.account_id]
+  default_tags { tags = { Project = "remedigenius-ce", Stack = "ce-access", ManagedBy = "terraform", CEVersion = "0.1.2" } }
 }
 module "access" {
   source                = "../../modules/aws-read-access"

@@ -11,7 +11,7 @@ your cloud, and for the AWS and model charges you incur.
 ## Supported scope
 
 CE is a public, single-operator release. The validated baseline is AWS us-east-1
-with Qwen 3.8 Max. Other models/regions are configurable, not yet qualified.
+with DeepSeek v4.1 Flash. Other models/regions are configurable, not yet qualified.
 
 - Collection is bounded by configured accounts, regions, operations and IAM.
   Explicit additional account targets exist; automatic organization enrollment

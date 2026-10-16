@@ -111,6 +111,16 @@ class Workstation:
         if any(not v or any(ord(c)<33 or ord(c)>126 for c in v) for v in values.values()):
             raise ValueError('Missing/invalid model credential or login value; no values logged')
         env=self.root/'runtime.env'; env.write_text(''.join(k+'='+v+'\n' for k,v in values.items()),encoding='utf-8')
+        # Probe the retained Hermes configuration (seed only for a new profile).
+        try:
+            command('docker','run','--rm','--entrypoint','/opt/hermes/.venv/bin/python',
+                '--env-file',str(env),'--mount',f'type=volume,src={self.volume},dst=/opt/data,readonly',
+                '--mount',f'type=bind,src={profile},dst=/opt/ce-package,readonly',
+                '--mount',f'type=bind,src={ROOT / "tools/model_probe.py"},dst=/probe.py,readonly',
+                IMAGE,'/probe.py','/opt/data/profiles/ce-desk/config.yaml','/opt/ce-package/config.yaml')
+        except Exception:
+            env.unlink(missing_ok=True)
+            raise
         overlay=prepare_session_limits(IMAGE,self.root/'web_server_chat.py')
         validation_network=native_validator.start(self.name)
         args=['docker','run','-d','--rm','--name',self.name,'--label','com.remedigenius.ce=workstation',

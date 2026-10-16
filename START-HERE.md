@@ -6,13 +6,13 @@ Use your existing AWS security services through one Hermes agent. Collect scoped
 evidence, understand a finding, prepare a fix, save it for your change process,
 and return later to reassess. This is a single-operator community release.
 
-**Validated release baseline: AWS `us-east-1`, Qwen 3.8 Max, one `ce-desk` profile.** Other configured regions/models are operator experiments, not release acceptance scope.
+**Validated release baseline: AWS `us-east-1`, DeepSeek v4.1 Flash, one `ce-desk` profile.** Other configured regions/models are operator experiments, not release acceptance scope.
 
 See [current offering and release gates](docs/CURRENT-CE-OFFERING.md) and the
 [current architecture diagram](docs/diagrams/ce-mvp-architecture.html).
 
-Read [the preview setup and credential contract](docs/ONBOARDING.md) for required inputs,
-regions, model access, storage, and what this preview does not provide.
+Read [the v0.1.2 release setup and credential contract](docs/ONBOARDING.md) for required inputs,
+regions, model access, storage, and what this v0.1.2 release does not provide.
 
 ## Choose where Hermes runs
 

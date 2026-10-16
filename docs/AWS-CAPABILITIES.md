@@ -1,8 +1,8 @@
-# AWS preview: useful outcomes and actual coverage
+# AWS v0.1.2 release: useful outcomes and actual coverage
 
-The v0.1 preview baseline is **AWS us-east-1 with Qwen 3.8 Max** in native
+The v0.1.2 release baseline is **AWS us-east-1 with Qwen 3.8 Max** in native
 Hermes, using the single `ce-desk` profile. Other regions and models remain
-configurable, but are outside this preview's acceptance baseline. Customers
+configurable, but are outside this v0.1.2 release's acceptance baseline. Customers
 provide their own model credentials and explicitly configure their AWS targets.
 
 Start with three questions:

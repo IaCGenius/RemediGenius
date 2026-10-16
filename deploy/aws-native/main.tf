@@ -8,6 +8,9 @@ terraform {
 provider "aws" {
   region              = var.region
   allowed_account_ids = [var.account_id]
+  default_tags {
+    tags = { Project = "remedigenius-ce", Stack = var.name, ManagedBy = "terraform", CEVersion = "0.1.3" }
+  }
 }
 data "aws_partition" "current" {}
 data "aws_subnet" "selected" { id = var.subnet_id }
@@ -15,7 +18,7 @@ data "aws_ssm_parameter" "ami" { name = "/aws/service/ami-amazon-linux-latest/al
 locals {
   arn    = "arn:${data.aws_partition.current.partition}"
   bucket = "${local.arn}:s3:::${var.bucket_name}"
-  tags   = { Name = var.name, Project = "remedigenius-community", Purpose = "native-hermes-sketch" }
+  tags   = { Name = var.name, Project = "remedigenius-ce", Purpose = "native-hermes", Stack = var.name, ManagedBy = "terraform", CEVersion = "0.1.3" }
   config = {
     region              = var.region, bucket = var.bucket_name, prefix = var.workspace_prefix,
     archive_key         = var.source_archive_key, archive_sha256 = var.source_archive_sha256,
@@ -46,7 +49,7 @@ resource "random_password" "session" {
 }
 resource "aws_secretsmanager_secret" "dashboard" {
   name                    = "${var.name}/dashboard"
-  recovery_window_in_days = 7
+  recovery_window_in_days = var.dashboard_recovery_days
   tags                    = local.tags
 }
 resource "aws_secretsmanager_secret_version" "dashboard" {
@@ -59,36 +62,8 @@ resource "aws_ebs_volume" "sessions" {
   type              = "gp3"
   encrypted         = true
   tags              = merge(local.tags, { Name = "${var.name}-sessions" })
-  lifecycle { prevent_destroy = true }
+  final_snapshot    = true
 }
-resource "aws_iam_role" "host" {
-  name               = var.name
-  assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { Service = "ec2.amazonaws.com" }, Action = "sts:AssumeRole" }] })
-  tags               = local.tags
-}
-resource "aws_iam_role_policy_attachment" "ssm" {
-  role       = aws_iam_role.host.name
-  policy_arn = "${local.arn}:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-resource "aws_iam_role_policy" "host" {
-  role = aws_iam_role.host.id
-  policy = jsonencode({ Version = "2012-10-17", Statement = concat([
-    { Effect = "Deny", Action = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"], Resource = "*" },
-    { Effect = "Allow", Action = "s3:ListBucket", Resource = local.bucket, Condition = { StringLike = { "s3:prefix" = "${var.workspace_prefix}/*" } } },
-    { Effect = "Allow", Action = "s3:GetObject", Resource = ["${local.bucket}/${var.workspace_prefix}/*", "${local.bucket}/${var.source_archive_key}"] },
-    { Effect = "Allow", Action = "lambda:InvokeFunction", Resource = module.discovery.function_arn },
-    { Effect = "Allow", Action = "sts:AssumeRole", Resource = aws_iam_role.reader_invoker.arn },
-    { Effect = "Allow", Action = "secretsmanager:GetSecretValue", Resource = [var.model_secret_arn, aws_secretsmanager_secret.dashboard.arn] },
-    { Effect = "Allow", Action = "ec2:DescribeVolumes", Resource = "*" },
-    { Effect = "Allow", Action = "ec2:AttachVolume", Resource = aws_ebs_volume.sessions.arn },
-    { Effect = "Allow", Action = "ec2:AttachVolume", Resource = "${local.arn}:ec2:${var.region}:${var.account_id}:instance/*", Condition = { StringEquals = { "ec2:ResourceTag/Name" = var.name } } }
-    ], length(var.read_role_arns) == 0 ? [] : [
-    { Effect = "Allow", Action = ["sts:AssumeRole", "sts:SetSourceIdentity"], Resource = var.read_role_arns }
-    ], length(var.secret_kms_key_arns) == 0 ? [] : [
-    { Effect = "Allow", Action = "kms:Decrypt", Resource = var.secret_kms_key_arns, Condition = { StringEquals = { "kms:ViaService" = "secretsmanager.${var.region}.amazonaws.com", "kms:EncryptionContext:SecretARN" = [var.model_secret_arn, aws_secretsmanager_secret.dashboard.arn] } } }
-  ]) })
-}
-resource "aws_iam_instance_profile" "host" { role = aws_iam_role.host.name }
 resource "aws_security_group" "host" {
   name        = var.name
   description = "Native Hermes via SSM only"
@@ -136,6 +111,10 @@ resource "aws_launch_template" "host" {
     resource_type = "instance"
     tags          = local.tags
   }
+  tag_specifications {
+    resource_type = "volume"
+    tags          = local.tags
+  }
   tags = local.tags
 }
 resource "aws_autoscaling_group" "native" {
@@ -145,6 +124,14 @@ resource "aws_autoscaling_group" "native" {
   desired_capacity    = var.running ? 1 : 0
   vpc_zone_identifier = [var.subnet_id]
   capacity_rebalance  = false
+  dynamic "tag" {
+    for_each = local.tags
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = true
+    }
+  }
   mixed_instances_policy {
     instances_distribution {
       on_demand_base_capacity                  = 0
@@ -188,14 +175,6 @@ module "aws_read" {
   region           = var.region
   account_id       = var.account_id
   targets          = length(var.aws_read_targets) > 0 ? var.aws_read_targets : { default = { account_id = var.account_id, regions = [var.region], role_arn = "", external_id = "" } }
-}
-resource "aws_iam_role" "reader_invoker" {
-  name               = "${var.name}-reader-invoker"
-  assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { AWS = aws_iam_role.host.arn }, Action = "sts:AssumeRole" }] })
-}
-resource "aws_iam_role_policy" "reader_invoker" {
-  role   = aws_iam_role.reader_invoker.id
-  policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Action = "lambda:InvokeFunction", Resource = module.aws_read.function_arn }, { Effect = "Allow", Action = "s3:GetObject", Resource = [for p in ["raw/*", "normalized/*", "receipts/*", "scheduled/*"] : "${local.bucket}/${var.workspace_prefix}/${p}"] }] })
 }
 
 module "assurance" {

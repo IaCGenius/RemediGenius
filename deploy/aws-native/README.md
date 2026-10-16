@@ -1,14 +1,14 @@
 # Native Hermes CE
 
-An independent Spot host running the pinned official Hermes gateway, with one native `ce-desk` profile. No custom CE console, builder, or scheduled model work. Hermes receives temporary credentials restricted to invoking the CE read executor and reading its evidence prefix. This stack does not modify the earlier CE cloud workspace or the v2 engine.
+An independent Spot host running the pinned official Hermes gateway, with one native `ce-desk` profile. No custom CE console, builder, or scheduled model work. Hermes receives temporary credentials restricted to invoking the CE read executor and reading its evidence prefix.
 
 Required inputs: `account_id`, `region`, `subnet_id`, `bucket_name`, a new `workspace_prefix`, `source_archive_key`, `source_archive_sha256`, `model_secret_arn`, `model_name`, and `model_base_url`. The source ZIP must contain this bootstrap, `profiles/ce/desk` and `tools/native_data.py` at their repository-relative paths. Terraform separately packages `modules/native-source-discovery` and `modules/aws-read-executor` for Lambda. Upload only reviewed source, with no state, secrets or private fixtures. Bootstrap verifies the exact ZIP digest before extraction. The official `hermes_image` defaults to the existing CE upstream digest pin.
 
-`running=false` is the default. Set it true in private tfvars, review a Terraform plan, then apply to start the new ASG. The subnet must have outbound Internet connectivity; this deployment assigns a public IPv4 address but opens no inbound ports. It uses one x86 Spot instance (`t3.medium` / `t3a.medium` by default), with maximum ASG capacity one. Spot availability in the chosen subnet is not guaranteed.
+`running=false` is the default. Set it true in private tfvars, review a Terraform plan, then apply to start the new ASG. The subnet must have outbound Internet connectivity; public IPv4 is optional via associate_public_ip, and no inbound ports are opened. It uses one x86 Spot instance (`t3.large` / `t3a.large` by default), with maximum ASG capacity one. Spot availability in the chosen subnet is not guaranteed.
 
 The discovery module collects a bounded source-availability catalogue in the selected account and region. Bootstrap invokes it once through host IAM. A host-only timer hydrates verified S3 records every 30 seconds into `/data/shared`, mounted **read-only** at `/opt/data/shared` for Hermes. This timer performs no model calls and does not recollect the account. The `ce-aws-read` skill invokes a separate read-only Lambda executor using the AWS SDK. Its operation manifest controls supported calls; configured targets and IAM constrain accounts and regions. Returned source responses and deterministic summaries go to S3 with timestamps, hashes and receipts. The skill can read its exact result directly from S3 without waiting for the cache. Native terminal access does not confer the host's AWS role.
 
-S3 is authoritative for collected evidence, normalized records, receipts and catalogue. A separate encrypted EBS volume preserves the native Hermes home, sessions and working files; it is not a substitute for S3 evidence storage or a claim that sessions are backed up to S3. The volume has `prevent_destroy` and is retained when compute stops. No snapshot schedule is configured in this deployment. Replacement waits for the old host to release the volume and never force-detaches it; unavailable or unrecognized state fails closed.
+S3 is authoritative for collected evidence, normalized records, receipts and catalogue. A separate encrypted EBS volume preserves the native Hermes home, sessions and working files; it is not a substitute for S3 evidence storage or a claim that sessions are backed up to S3. The volume is retained when compute stops; Terraform destroy creates a final snapshot before deleting the volume. No snapshot schedule is configured in this deployment. Replacement waits for the old host to release the volume and never force-detaches it; unavailable or unrecognized state fails closed.
 
 Model credentials are read from the exact existing Secrets Manager ARN into root-only tmpfs and passed to Hermes as `MODEL_API_KEY`. A new dedicated dashboard secret is generated for this stack. Its generated values exist in private Terraform state, so protect state as well as tfvars. No credentials are printed as outputs; `dashboard_secret_arn` identifies where the operator retrieves the login privately.
 
@@ -28,3 +28,11 @@ Set `aws_read_targets` to an explicit map of account aliases, account IDs, regio
 An optional `knowledge_view` selects `s3://BUCKET/PREFIX/knowledge/VIEW/`. Publish only the intended view using the existing knowledge-library export, then upload that directory. The host syncs this selected prefix to the read-only `/opt/data/shared/knowledge` cache. It never uploads or treats all organizational documents as global policy automatically.
 
 Existing retained profiles are deliberately preserved on restart. Source updates must be applied explicitly with a backup; a new launch template alone does not overwrite operator customization.
+### Upgrading an older installation
+
+Keep the same Terraform state, stack name, evidence prefix, model secret and session
+volume. Review the plan before applying. If an older installation has a generated
+IAM instance-profile name, set `instance_profile_name` to its existing name from
+Terraform state; this avoids replacing it merely to adopt the newer naming default.
+Leave this input unset for a new installation. Back up the session volume before
+an upgrade and verify retained sessions and knowledge after the replacement boots.

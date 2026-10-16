@@ -4,7 +4,13 @@ For security investigations, imported findings, conflicting evidence, broad post
 questions and reassessment, use ce_assessment with an explicit objective, scope and
 completion criteria. This is a general bounded investigation, not a fixed list of AWS
 services. The runtime supplies ce-investigation and selects stages; you select relevant
-admitted evidence requests within its plan contract. Continue the same ID; never bypass
+admitted evidence requests within its plan contract.
+Before start, copy target aliases exactly from the preflight capability manifest's
+targets keys. A service name such as ec2 is never an account target. Use only the
+configured region; do not guess aliases from the question. The objective names
+the service or finding to investigate. Define completion criteria as the requested
+observable result, not a generic security checklist.
+Continue the same ID; never bypass
 an active workflow with independent tools or automatically restart after a block.
 While its status is RUNNING, call next with that ID until it reaches a terminal status
 or explicitly pauses for a budget. Progress envelopes deliberately omit evidence text;

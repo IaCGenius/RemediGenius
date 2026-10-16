@@ -143,7 +143,7 @@ After=docker.service
 Requires=docker.service
 [Service]
 ExecStartPre=-/usr/bin/docker rm -f rgce-native
-ExecStart=/usr/bin/docker run --rm --name rgce-native --network rgce-native --network rgce-native-validation --env-file /run/rgce-native/model.env -p 127.0.0.1:9120:9120 -v /data/hermes:/opt/data -v /data/shared:/opt/data/shared:ro -v /run/rgce-native-reader:/opt/ce-reader:ro -v /opt/rgce-native/profiles:/opt/rg-profiles:ro -v /opt/rgce-native/profiles/desk:/opt/ce-package:ro -v /opt/rgce-native/web_server_chat.py:/opt/hermes/hermes_cli/web_server_chat.py:ro --memory ''' + str(int(CFG.get('container_memory_mb', 3072))) + '''m --pids-limit 1024 ''' + CFG['image'] + ''' gateway run
+ExecStart=/usr/bin/docker run --rm --name rgce-native --network rgce-native --network rgce-native-validation --env-file /run/rgce-native/model.env -p 127.0.0.1:9120:9120 -v /data/hermes:/opt/data -v /data/shared:/opt/data/shared:ro -v /run/rgce-native-reader:/opt/ce-reader:ro -v /opt/rgce-native/profiles:/opt/rg-profiles:ro -v /opt/rgce-native/profiles/desk:/opt/ce-package:ro -v /opt/rgce-native/web_server_chat.py:/opt/hermes/hermes_cli/web_server_chat.py:ro --memory ''' + str(int(CFG.get('container_memory_mb', 6144))) + '''m --pids-limit 1024 ''' + CFG['image'] + ''' gateway run
 ExecStop=/usr/bin/docker stop -t 30 rgce-native
 Restart=always
 RestartSec=10
@@ -193,6 +193,12 @@ WantedBy=timers.target
         raise SystemExit('Discovery failed; inspect host-only collection receipt')
     run('systemctl','start','rgce-native-hydrate.service')
     run('docker','pull',CFG['image'])
+    run('docker','run','--rm','--entrypoint','/opt/hermes/.venv/bin/python',
+        '--env-file','/run/rgce-native/model.env',
+        '-v','/data/hermes:/opt/data:ro',
+        '-v',str(profiles/'desk')+':/opt/ce-package:ro',
+        '-v',str(SOURCE/'tools/model_probe.py')+':/probe.py:ro',
+        CFG['image'],'/probe.py','/opt/data/profiles/ce-desk/config.yaml','/opt/ce-package/config.yaml')
     # Preserve the former analyst home outside Hermes's active profile directory.
     # Stop writers before moving its databases; never delete conversation history.
     legacy = Path('/data/hermes/profiles/ce-analyst')

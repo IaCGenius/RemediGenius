@@ -1,12 +1,70 @@
 {
-  "cloudtrail": {"lookup_events":"cloudtrail:LookupEvents", "describe_trails":"cloudtrail:DescribeTrails", "get_trail_status":"cloudtrail:GetTrailStatus"},
-  "securityhub": {"get_findings":"securityhub:GetFindings", "describe_hub":"securityhub:DescribeHub", "list_finding_aggregators":"securityhub:ListFindingAggregators", "get_finding_aggregator":"securityhub:GetFindingAggregator", "list_members":"securityhub:ListMembers", "get_enabled_standards":"securityhub:GetEnabledStandards"},
-  "guardduty": {"list_detectors":"guardduty:ListDetectors", "get_detector":"guardduty:GetDetector", "list_findings":"guardduty:ListFindings", "get_findings":"guardduty:GetFindings", "list_members":"guardduty:ListMembers"},
-  "inspector2": {"list_findings":"inspector2:ListFindings", "list_coverage":"inspector2:ListCoverage", "batch_get_account_status":"inspector2:BatchGetAccountStatus"},
-  "config": {"describe_configuration_recorders":"config:DescribeConfigurationRecorders", "describe_configuration_recorder_status":"config:DescribeConfigurationRecorderStatus", "describe_configuration_aggregators":"config:DescribeConfigurationAggregators", "describe_configuration_aggregator_sources_status":"config:DescribeConfigurationAggregatorSourcesStatus", "select_aggregate_resource_config":"config:SelectAggregateResourceConfig", "get_aggregate_resource_config":"config:GetAggregateResourceConfig"},
-  "ec2": {"describe_instances":"ec2:DescribeInstances", "describe_security_groups":"ec2:DescribeSecurityGroups", "describe_network_interfaces":"ec2:DescribeNetworkInterfaces", "describe_route_tables":"ec2:DescribeRouteTables", "describe_vpcs":"ec2:DescribeVpcs", "describe_subnets":"ec2:DescribeSubnets", "describe_regions":"ec2:DescribeRegions"},
-  "accessanalyzer": {"list_analyzers":"access-analyzer:ListAnalyzers", "list_findings":"access-analyzer:ListFindings", "get_finding":"access-analyzer:GetFinding"},
-  "macie2": {"get_macie_session":"macie2:GetMacieSession", "list_findings":"macie2:ListFindings", "get_findings":"macie2:GetFindings"},
-  "securitylake": {"list_data_lakes":"securitylake:ListDataLakes", "list_log_sources":"securitylake:ListLogSources", "list_subscribers":"securitylake:ListSubscribers"},
-  "s3": {"list_buckets":"s3:ListAllMyBuckets", "get_public_access_block":"s3:GetBucketPublicAccessBlock", "get_bucket_policy_status":"s3:GetBucketPolicyStatus", "get_bucket_encryption":"s3:GetEncryptionConfiguration", "get_bucket_versioning":"s3:GetBucketVersioning", "get_bucket_logging":"s3:GetBucketLogging"}
+  "cloudtrail": {
+    "lookup_events": "cloudtrail:LookupEvents",
+    "describe_trails": "cloudtrail:DescribeTrails",
+    "get_trail_status": "cloudtrail:GetTrailStatus"
+  },
+  "securityhub": {
+    "get_findings": "securityhub:GetFindings",
+    "describe_hub": "securityhub:DescribeHub",
+    "list_finding_aggregators": "securityhub:ListFindingAggregators",
+    "get_finding_aggregator": "securityhub:GetFindingAggregator",
+    "list_members": "securityhub:ListMembers",
+    "get_enabled_standards": "securityhub:GetEnabledStandards"
+  },
+  "guardduty": {
+    "list_detectors": "guardduty:ListDetectors",
+    "get_detector": "guardduty:GetDetector",
+    "list_findings": "guardduty:ListFindings",
+    "get_findings": "guardduty:GetFindings",
+    "list_members": "guardduty:ListMembers"
+  },
+  "inspector2": {
+    "list_findings": "inspector2:ListFindings",
+    "list_coverage": "inspector2:ListCoverage",
+    "batch_get_account_status": "inspector2:BatchGetAccountStatus"
+  },
+  "config": {
+    "describe_configuration_recorders": "config:DescribeConfigurationRecorders",
+    "describe_configuration_recorder_status": "config:DescribeConfigurationRecorderStatus",
+    "describe_configuration_aggregators": "config:DescribeConfigurationAggregators",
+    "describe_configuration_aggregator_sources_status": "config:DescribeConfigurationAggregatorSourcesStatus",
+    "select_aggregate_resource_config": "config:SelectAggregateResourceConfig",
+    "get_aggregate_resource_config": "config:GetAggregateResourceConfig"
+  },
+  "ec2": {
+    "describe_instances": "ec2:DescribeInstances",
+    "describe_security_groups": "ec2:DescribeSecurityGroups",
+    "describe_network_interfaces": "ec2:DescribeNetworkInterfaces",
+    "describe_route_tables": "ec2:DescribeRouteTables",
+    "describe_vpcs": "ec2:DescribeVpcs",
+    "describe_subnets": "ec2:DescribeSubnets",
+    "describe_regions": "ec2:DescribeRegions"
+  },
+  "accessanalyzer": {
+    "list_analyzers": "access-analyzer:ListAnalyzers",
+    "list_findings": "access-analyzer:ListFindings",
+    "get_finding": "access-analyzer:GetFinding"
+  },
+  "macie2": {
+    "get_macie_session": "macie2:GetMacieSession",
+    "list_findings": "macie2:ListFindings",
+    "get_findings": "macie2:GetFindings"
+  },
+  "securitylake": {
+    "list_data_lakes": "securitylake:ListDataLakes",
+    "list_log_sources": "securitylake:ListLogSources",
+    "list_subscribers": "securitylake:ListSubscribers"
+  },
+  "s3": {
+    "list_buckets": "s3:ListAllMyBuckets",
+    "get_public_access_block": "s3:GetBucketPublicAccessBlock",
+    "get_bucket_policy_status": "s3:GetBucketPolicyStatus",
+    "get_bucket_encryption": "s3:GetEncryptionConfiguration",
+    "get_bucket_versioning": "s3:GetBucketVersioning",
+    "get_bucket_logging": "s3:GetBucketLogging"
+  },
+  "resourcegroupstaggingapi": {
+    "get_resources": "tag:GetResources"
+  }
 }

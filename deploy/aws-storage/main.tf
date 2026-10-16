@@ -19,6 +19,7 @@ variable "external_id" {
 provider "aws" {
   region              = var.region
   allowed_account_ids = [var.account_id]
+  default_tags { tags = { Project = "remedigenius-ce", Stack = var.bucket_name, ManagedBy = "terraform", CEVersion = "0.1.2" } }
 }
 resource "aws_s3_bucket" "workspace" {
   bucket        = var.bucket_name

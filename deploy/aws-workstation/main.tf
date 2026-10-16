@@ -51,6 +51,9 @@ variable "schedule_checks" {
 provider "aws" {
   region              = var.region
   allowed_account_ids = [var.account_id]
+  default_tags {
+    tags = { Project = "remedigenius-ce", Stack = var.name, ManagedBy = "terraform", CEVersion = "0.1.3" }
+  }
 }
 data "aws_partition" "current" {}
 locals {
@@ -59,8 +62,8 @@ locals {
   schedule_region = length(var.targets) > 0 ? var.targets[local.schedule_target].regions[0] : var.region
 }
 resource "aws_s3_bucket" "evidence" {
-  bucket = "${var.name}-${var.account_id}-${var.region}"
-  lifecycle { prevent_destroy = true }
+  bucket        = "${var.name}-${var.account_id}-${var.region}"
+  force_destroy = var.delete_evidence_on_destroy
 }
 resource "aws_s3_bucket_public_access_block" "evidence" {
   bucket                  = aws_s3_bucket.evidence.id
@@ -92,17 +95,6 @@ module "reader" {
   account_id       = var.account_id
   targets          = length(var.targets) > 0 ? var.targets : { default = { account_id = var.account_id, regions = [var.region], role_arn = "", external_id = "" } }
 }
-resource "aws_iam_role" "invoker" {
-  name               = "${var.name}-invoker"
-  assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { AWS = var.operator_arn }, Action = "sts:AssumeRole" }] })
-}
-resource "aws_iam_role_policy" "invoker" {
-  role = aws_iam_role.invoker.id
-  policy = jsonencode({ Version = "2012-10-17", Statement = [
-    { Effect = "Allow", Action = "lambda:InvokeFunction", Resource = module.reader.function_arn },
-    { Effect = "Allow", Action = "s3:GetObject", Resource = [for p in ["raw/*", "normalized/*", "receipts/*", "scheduled/*"] : "${aws_s3_bucket.evidence.arn}/${local.prefix}/${p}"] }
-  ] })
-}
 module "assurance" {
   source         = "../../modules/assurance-schedule"
   name           = var.name
@@ -118,4 +110,10 @@ module "assurance" {
 }
 output "workstation_backend" {
   value = { region = var.region, bucket = aws_s3_bucket.evidence.id, prefix = local.prefix, reader_function = module.reader.function_arn, reader_role_arn = aws_iam_role.invoker.arn }
+}
+
+variable "delete_evidence_on_destroy" {
+  type        = bool
+  default     = false
+  description = "Destructive opt-in: remove all evidence objects and versions on destroy. Apply true before destroy only after backing up wanted data."
 }

@@ -70,16 +70,16 @@ variable "secret_kms_key_arns" {
 }
 variable "instance_type" {
   type    = string
-  default = "t3.medium"
+  default = "t3.large"
 }
 variable "spot_instance_types" {
   type        = list(string)
-  default     = ["t3.medium", "t3a.medium"]
+  default     = ["t3.large", "t3a.large"]
   description = "Compatible x86 Nitro Spot choices in the session volume's Availability Zone. Empty uses instance_type."
 }
 variable "container_memory_mb" {
   type    = number
-  default = 3072
+  default = 6144
   validation {
     condition     = var.container_memory_mb >= 1024 && floor(var.container_memory_mb) == var.container_memory_mb
     error_message = "Use an integer MiB limit of at least 1024, leaving memory for the host."
@@ -131,4 +131,19 @@ variable "scheduled_checks" {
     condition     = length(var.scheduled_checks) <= 4 && alltrue([for c in var.scheduled_checks : c.max_pages >= 1 && c.max_pages <= 3])
     error_message = "At most four checks, each capped at one to three pages."
   }
+}
+
+variable "dashboard_recovery_days" {
+  type        = number
+  default     = 7
+  description = "Dashboard secret deletion recovery: 7-30 days, or explicitly 0 for immediate deletion."
+  validation {
+    condition     = var.dashboard_recovery_days == 0 || (var.dashboard_recovery_days >= 7 && var.dashboard_recovery_days <= 30 && floor(var.dashboard_recovery_days) == var.dashboard_recovery_days)
+    error_message = "Use 0 or an integer from 7 to 30."
+  }
+}
+variable "instance_profile_name" {
+  description = "Optional existing instance-profile name when upgrading an older installation. Leave unset for a new stack."
+  type        = string
+  default     = null
 }

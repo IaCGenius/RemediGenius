@@ -15,18 +15,18 @@ updating the official image; a changed source hash stops preparation explicitly.
 
 ## 1. Get the public source and prerequisites
 
-Use AWS `us-east-1` and Qwen 3.8 Max for the release baseline. Install Git, Python 3.11+, Docker with Linux containers, Terraform 1.10+ and AWS CLI v2. The examples below use PowerShell; run them from the repository root. Windows is the accepted workstation baseline.
+Use AWS `us-east-1` and DeepSeek v4.1 Flash for the release baseline. Install Git, Python 3.11+, Docker with Linux containers, Terraform 1.10+ and AWS CLI v2. The examples use Bash on Ubuntu 24.04 LTS (native or WSL2); run them from the repository root. PowerShell helpers remain secondary.
 
-```powershell
+```bash
 git clone https://github.com/IaCGenius/RemediGenius.git
 cd RemediGenius
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install -e ".[aws,documents]"
-New-Item -ItemType Directory -Force .rgce | Out-Null
+mkdir -p .rgce
 ```
 
-The documents extra installs conversion dependencies for selected knowledge files; it does not start the legacy console. If PowerShell blocks activation, use `.\.venv\Scripts\python.exe` in place of `python` in subsequent Python commands.
+The documents extra installs conversion dependencies for selected knowledge files; it does not start the legacy console. Use the activated Python environment in each Bash terminal.
 
 ## 2. Authenticate to AWS first
 
@@ -43,8 +43,8 @@ Use your actual SSO details. Confirm the returned account matches Terraform's
 `account_id`. Set `"aws_profile": "ce-operator"` in workstation JSON. Before running
 Terraform, select that same profile in its terminal:
 
-```powershell
-$env:AWS_PROFILE = "ce-operator"
+```bash
+export AWS_PROFILE=ce-operator
 ```
 
 For bash/zsh, use `export AWS_PROFILE=ce-operator`. Reauthenticate with `aws sso
@@ -66,7 +66,7 @@ After provisioning, the runtime operator needs `sts:AssumeRole` for the generate
 role/user ARN, not the `arn:...:sts::...:assumed-role/.../session` returned for an
 assumed session. Your AWS administrator can supply the correct IAM role ARN.
 If model credentials come from Secrets Manager, add the separate secret-read/KMS
-permissions described in [preview onboarding](ONBOARDING.md).
+permissions described in [v0.1.3 release onboarding](ONBOARDING.md).
 
 Connection flow:
 
@@ -95,15 +95,15 @@ These operator credentials stay on the workstation and are not mounted in Hermes
    or assumed-role session, use its IAM role ARN, not its STS session ARN.
 2. Initialize and inspect the plan, then apply it:
 
-```powershell
-Copy-Item deploy/aws-workstation/terraform.tfvars.example .rgce/workstation.tfvars
+```bash
+cp deploy/aws-workstation/terraform.tfvars.example .rgce/workstation.tfvars
 # Edit .rgce/workstation.tfvars before continuing; set region = "us-east-1".
-$inputs = (Resolve-Path .rgce/workstation.tfvars).Path
-$plan = Join-Path (Resolve-Path .rgce).Path "workstation.tfplan"
+inputs=$(realpath .rgce/workstation.tfvars)
+plan="$(pwd)/.rgce/workstation.tfplan"
 terraform -chdir=deploy/aws-workstation init
 terraform -chdir=deploy/aws-workstation plan "-var-file=$inputs" "-out=$plan"
 # Review the displayed resource/permission changes before applying the saved plan.
-terraform -chdir=deploy/aws-workstation apply $plan
+terraform -chdir=deploy/aws-workstation apply "$plan"
 terraform -chdir=deploy/aws-workstation output -json workstation_backend
 ```
 
@@ -129,12 +129,13 @@ model/base URL. Supply the model key through the named environment variable, or
 set `model_secret_arn` to a Secrets Manager secret containing the raw API key.
 Never commit keys or private deployment configuration.
 
-```powershell
-Copy-Item deploy/aws-workstation/workstation.example.json .rgce/workstation.json
+```bash
+cp deploy/aws-workstation/workstation.example.json .rgce/workstation.json
 # Edit backend fields, aws_profile, model_name and model_base_url first.
-# Baseline model_name: qwen3.8-max (confirm the identifier with your provider).
-# PowerShell 7: prompt privately; do not paste the key into this JSON or chat.
-$env:MODEL_API_KEY = Read-Host "Your model API key" -MaskInput
+# Baseline model_name: deepseek-v4.1-flash (confirm the identifier with your provider).
+# Prompt privately; do not paste the key into this JSON or chat.
+read -rsp "Your model API key: " MODEL_API_KEY; echo
+export MODEL_API_KEY
 python tools/native_workstation.py run --config .rgce/workstation.json
 ```
 
@@ -148,7 +149,7 @@ one hour unless you run `refresh` yourself.
 
 Leave the run terminal open. In a second terminal at this checkout, activate the same Python environment and explicitly retrieve your locally generated dashboard login:
 
-```powershell
+```bash
 python tools/native_workstation.py login --config .rgce/workstation.json
 ```
 
@@ -175,7 +176,7 @@ Use [the knowledge walkthrough](NATIVE-KNOWLEDGE-QUICKSTART.md) to import one po
 
 Ctrl+C in the launcher terminal stops local Hermes. Or, from another terminal:
 
-```powershell
+```bash
 python tools/native_workstation.py stop --config .rgce/workstation.json
 ```
 
@@ -271,3 +272,9 @@ python tools/native_workstation.py login --config .rgce/workstation.json
 python tools/native_workstation.py stop --config .rgce/workstation.json
 unset MODEL_API_KEY
 ```
+
+## Operator reference
+
+[Platform, state, costs and removal](PLATFORM-AND-REMOVAL.md) · [IAM roles and operator policies](IAM.md) · [Troubleshooting](TROUBLESHOOTING.md).
+
+Startup makes one small model tool-call probe before opening the dashboard. No AWS data or knowledge is sent. First validator build downloads its pinned dependencies.

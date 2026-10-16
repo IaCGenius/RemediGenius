@@ -1,6 +1,6 @@
 # Your first CE investigation
 
-This preview is qualified with **AWS us-east-1 and Qwen 3.8 Max**. You supply your
+This v0.1.2 release is qualified with **AWS us-east-1 and Qwen 3.8 Max**. You supply your
 own AWS access and model credentials. CE uses native Hermes as its agent and UI;
 the scoped reader collects AWS facts, and S3 retains their receipts. Start with
 [the architecture](diagrams/ce-mvp-architecture.html).
@@ -61,7 +61,7 @@ Ask Hermes to help draft a short policy or application note. Review it, save it 
 Markdown, and follow [the knowledge walkthrough](NATIVE-KNOWLEDGE-QUICKSTART.md)
 to import it, select a view, and activate that view for your deployment. Supported
 document conversion uses MarkItDown. Chat text or an uploaded attachment alone
-does not publish shared knowledge in this preview.
+does not publish shared knowledge in this v0.1.2 release.
 
 Ask:
 
@@ -100,5 +100,5 @@ Stopping Hermes does not stop that schedule; disable it separately when needed.
 
 Keep deployment inputs and secrets private. Back up your conversation/case volume;
 S3 evidence alone does not restore the Kanban database. The setup guides explain
-stop/restart and credential renewal. This is a single-operator preview with bounded
+stop/restart and credential renewal. This is a single-operator v0.1.2 release with bounded
 collection, not continuous monitoring of every AWS resource or automatic remediation.

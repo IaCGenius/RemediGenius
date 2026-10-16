@@ -9,20 +9,20 @@ subnet and adds Spot compute with retained EBS.
 
 ## 1. Get the source, authenticate and choose inputs
 
-Preview baseline: **AWS `us-east-1`, Qwen 3.8 Max, one `ce-desk` profile**.
+v0.1.3 release baseline: **AWS `us-east-1`, DeepSeek v4.1 Flash, one `ce-desk` profile**.
 Use Git, Python 3.11+, Terraform 1.10+, AWS CLI v2 and the AWS Session Manager plugin.
-The commands below use PowerShell. Work from the repository root:
+The commands below use Bash on Ubuntu 24.04 LTS (native or WSL2). PowerShell helpers remain secondary. Work from the repository root:
 
-```powershell
+```bash
 git clone https://github.com/IaCGenius/RemediGenius.git
 cd RemediGenius
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install -e ".[aws,documents]"
-New-Item -ItemType Directory -Force .rgce | Out-Null
+mkdir -p .rgce
 aws configure sso --profile ce-operator
 aws sso login --profile ce-operator
-$env:AWS_PROFILE = "ce-operator"
+export AWS_PROFILE=ce-operator
 aws sts get-caller-identity
 ```
 
@@ -45,8 +45,20 @@ creates scoped IAM, Lambda, a Spot ASG, retained encrypted EBS and a dashboard
 secret; it does not create the bucket or VPC. Protect Terraform state: it contains
 the generated dashboard login. Review [all input meanings](ONBOARDING.md#inputs-and-what-they-control).
 
-The default Spot pool offers `t3.medium` and `t3a.medium` (2 vCPU, 4 GiB RAM),
-using price-capacity-optimized selection and a 3 GiB container memory limit.
+The default Spot pool offers `t3.large` and `t3a.large` (2 vCPU, 8 GiB RAM),
+using price-capacity-optimized selection and a 6 GiB Hermes container limit.
+The validator has a separate 1 GiB limit; these are ceilings, not measured usage.
+
+| Sizing input | Default | Change deliberately |
+|---|---|---|
+| `instance_type` | `t3.large` | Used when the pool is empty |
+| `spot_instance_types` | `["t3.large", "t3a.large"]` | Same-AZ x86 Spot alternatives |
+| `container_memory_mb` | `6144` | Leave room for validator and host |
+
+`t3.medium` / `t3a.medium` with 3072 MiB was tested in v0.1.2, but is tight: the
+Hermes and validator limits total all 4 GiB before host overhead. Use large for the
+new default. Spot prices vary by type, AZ and time; do not assume a fixed 2x Spot cost.
+
 The CE compatibility overlay bounds native dashboard terminals to two, with a
 ten-minute detached TTL. It checks the exact upstream source before applying;
 an image update needs overlay review. Finish a run before starting another chat.
@@ -68,7 +80,7 @@ The model receives selected AWS records and knowledge needed for the question.
 1. Read `deploy/aws-native/README.md` and the IAM/module source.
 2. Package this checkout:
 
-   ```powershell
+   ```bash
    python tools/package_native_hermes.py --output .rgce/native-source.zip
    ```
 
@@ -85,12 +97,12 @@ The model receives selected AWS records and knowledge needed for the question.
      "name": "rgce-native",
      "subnet_id": "YOUR_SUBNET_ID",
      "bucket_name": "YOUR_PRIVATE_BUCKET",
-     "workspace_prefix": "ce-preview",
+     "workspace_prefix": "ce",
      "running": true,
      "source_archive_key": "native-source/YOUR_DIGEST.zip",
      "source_archive_sha256": "YOUR_DIGEST",
      "model_secret_arn": "YOUR_SECRET_ARN",
-     "model_name": "qwen3.8-max",
+     "model_name": "deepseek-v4.1-flash",
      "model_base_url": "https://YOUR_PROVIDER/v1",
      "schedule_enabled": true,
      "schedule_interval_hours": 24
@@ -100,17 +112,17 @@ The model receives selected AWS records and knowledge needed for the question.
    This walkthrough explicitly enables daily bounded AWS collection. Set
    `schedule_enabled` to false before applying if you do not want background reads.
    The underlying Spot Terraform default remains off. Confirm your provider's
-   Qwen model identifier and endpoint; no key is bundled.
+   DeepSeek model identifier and endpoint; no key is bundled.
 4. Upload the archive with your normal AWS operator credentials:
 
-   ```powershell
+   ```bash
    aws s3 cp .rgce/native-source.zip s3://YOUR_PRIVATE_BUCKET/native-source/YOUR_DIGEST.zip
-   $inputs = (Resolve-Path .rgce/aws.tfvars.json).Path
-   $plan = Join-Path (Resolve-Path .rgce).Path "aws.tfplan"
+   inputs=$(realpath .rgce/aws.tfvars.json)
+   plan="$(pwd)/.rgce/aws.tfplan"
    terraform -chdir=deploy/aws-native init
    terraform -chdir=deploy/aws-native plan "-var-file=$inputs" "-out=$plan"
    # Review resources and permissions before applying the saved plan.
-   terraform -chdir=deploy/aws-native apply $plan
+   terraform -chdir=deploy/aws-native apply "$plan"
    ```
 
    The upload location must match `bucket_name` plus `source_archive_key` exactly.
@@ -124,12 +136,12 @@ The model receives selected AWS records and knowledge needed for the question.
 
 ## 3. Retrieve your login, open the tunnel and select ce-desk
 
-In a private PowerShell terminal at this checkout, using the same authenticated
+In a private Bash terminal at this checkout, using the same authenticated
 AWS operator profile:
 
-```powershell
-$env:AWS_PROFILE = "ce-operator"
-.\tools\open-native-hermes.ps1 -Region us-east-1 -Name rgce-native -WithLogin
+```bash
+export AWS_PROFILE=ce-operator
+bash tools/open-native-hermes.sh --region us-east-1 --name rgce-native --with-login
 ```
 
 Replace `rgce-native` if you chose another stack name. The helper displays the
@@ -138,7 +150,7 @@ opens a localhost SSM tunnel. It does not show the model API key. Leave the term
 open; do not record it in screenshots. Your identity needs secret-read access to
 that dashboard secret, Auto Scaling discovery and SSM session access.
 
-1. Open `http://127.0.0.1:9121/chat?profile=ce-desk`.
+1. Open `http://127.0.0.1:9125/chat?profile=ce-desk`.
 2. Enter the displayed dashboard username and password.
 3. Confirm **ce-desk** in Chat; start a new conversation.
 4. Keep the tunnel running. After a laptop reboot or Spot replacement, rerun the
@@ -150,7 +162,7 @@ that dashboard secret, Auto Scaling discovery and SSM session access.
 
 Continue with [the illustrated first investigation and knowledge walkthrough](WALKTHROUGH.md).
 
-Use `-ShowLogin` to retrieve only the login, or omit both login switches to open
+Use `--show-login` to retrieve only the login, or omit both login switches to open
 only a tunnel. If connection fails, first confirm `running=true`, a healthy SSM
 instance, a free local port and your unexpired AWS login. A changed source image
 can take several minutes to download; refresh after startup completes.
@@ -221,3 +233,9 @@ checks (minimum one hour). It keeps running when Spot is stopped. Set
 [daily checks and saved findings](OPERATING-LOOP.md) for scope and follow-up.
 
 Network input: `associate_public_ip` defaults to false. Use a private subnet with outbound connectivity, or explicitly set true for a public subnet without NAT. See [upgrade/network notes](UPGRADING.md#post-v010-network-and-reader-changes).
+
+## Operator reference
+
+[Platform, state, costs and removal](PLATFORM-AND-REMOVAL.md) · [IAM roles and operator policies](IAM.md) · [Troubleshooting](TROUBLESHOOTING.md).
+
+Startup makes one small model tool-call probe before opening the dashboard. No AWS data or knowledge is sent. First validator build downloads its pinned dependencies.

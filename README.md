@@ -9,11 +9,11 @@ reassess after your change window.
 By design, the agent requests bounded reads from a separate collector with a
 configured allowlist. Fixes are proposals you review and apply yourself.
 
-AWS us-east-1 · Qwen 3.8 Max · Self-hosted · Apache-2.0 · [v0.1.2](https://github.com/IaCGenius/RemediGenius/releases/tag/v0.1.2)
+AWS us-east-1 · DeepSeek v4.1 Flash · Self-hosted · Apache-2.0 · [v0.1.3](https://github.com/IaCGenius/RemediGenius/releases/tag/v0.1.3)
 
 Provided as-is. You choose your model provider and AWS backend and are responsible
 for their configuration, data handling and charges. See [your responsibility](docs/LIMITS.md#your-responsibility).
-Validated configuration: AWS us-east-1 and Qwen 3.8 Max. Other supported models are your choice.
+Validated configuration: AWS us-east-1 and DeepSeek v4.1 Flash. Other supported models are your choice.
 
 ![Agent helps identify the decisions needed before preparing a fix](docs/images/hermes-remediation-decisions.jpg)
 
@@ -35,7 +35,7 @@ Validated configuration: AWS us-east-1 and Qwen 3.8 Max. Other supported models 
 
 Hermes is an open-source agent runtime by Nous Research. CE adds the `ce-desk`
 profile, scoped AWS tools and readable security skills. Bring a model supported
-by Hermes; the tested configuration is Qwen 3.8 Max.
+by Hermes; the tested configuration is DeepSeek v4.1 Flash.
 
 CE reuses Hermes's conversation, skills, model routing and manual Kanban. A small native runtime plugin admits bounded operations and shares retrieved context with a critic. Separate deterministic Lambda collectors retrieve AWS records and write receipts to S3. The model interprets evidence; it does not rewrite source observations or apply customer-cloud fixes.
 
@@ -63,9 +63,9 @@ model key or cloud deployment. [What this demo shows](docs/DEMO.md). This is not
 
 ## What you get
 
-[Community skills](docs/COMMUNITY-SKILLS.md) add focused IAM, S3, framework-mapping, CloudTrail, reassessment and case-summary guidance. These are included in v0.1.2, together with receipt-derived collection summaries and a conservative one-page default.
+[Community skills](docs/COMMUNITY-SKILLS.md) add focused IAM, S3, framework-mapping, CloudTrail, reassessment and case-summary guidance. These are included in v0.1.3, together with receipt-derived collection summaries and a conservative one-page default.
 
-| Included in v0.1.2 | Boundary |
+| Included in v0.1.3 | Boundary |
 |---|---|
 | Scoped AWS reads, records, counts and receipts | Bounded queries; unavailable services are not healthy services |
 | Selected organizational knowledge | Import files, publish/mount a view, show sources and their effect on advice |

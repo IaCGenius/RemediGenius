@@ -1,6 +1,27 @@
 # Upgrade an existing CE installation
 
-## v0.1.1
+## v0.1.3
+
+Back up retained state first. Keep the existing stack name, Terraform state, model
+secret, evidence prefix and Docker/EBS volume. Apply the AWS infrastructure changes
+with the same inputs; inspect the plan before proceeding. The larger default Spot
+pool is t3.large/t3a.large with a 6144 MiB Hermes memory limit.
+
+Boot recovery preserves installed user/profile files. Updating the mounted package
+alone does **not** upgrade retained skills: use the explicit profile-upgrade helper
+and restart the service during your maintenance window. Workstation `run --upgrade`
+performs this step and keeps backups. For Spot, run the packaged
+`tools/upgrade_native_profile.py` as the profile owner with the reviewed package
+mounted at `/opt/ce-package`, `--home /opt/data/profiles/ce-desk --guard-default`.
+Quiesce the service before mounting its retained home into an upgrade container;
+restart afterward and verify package integrity, sessions and the selected knowledge.
+Do not mount the volume into two running Hermes agents.
+
+Retained model settings are preserved. The tested DeepSeek configuration is not a
+forced migration of your provider or credentials. A successful startup probe checks
+one tool call; follow it with a scoped investigation and inspect its actual receipts.
+
+## Historical v0.1.1
 
 v0.1.1 keeps the official Hermes image and existing model settings. It updates
 the CE skills, runtime plugin and AWS read executor. Upgrade both the native

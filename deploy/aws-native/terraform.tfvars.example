@@ -5,12 +5,12 @@ region                = "us-east-1"
 # Existing subnet and private bucket in the deployment region.
 subnet_id             = "YOUR_SUBNET_ID"
 bucket_name           = "YOUR_PRIVATE_BUCKET"
-workspace_prefix      = "ce-preview"
+workspace_prefix      = "ce"
 name                  = "rgce-native"
 running               = false
-instance_type         = "t3.medium"
-spot_instance_types   = ["t3.medium", "t3a.medium"]
-container_memory_mb   = 3072
+instance_type         = "t3.large"
+spot_instance_types   = ["t3.large", "t3a.large"]
+container_memory_mb   = 6144
 source_archive_key    = "native-source/YOUR_DIGEST.zip"
 source_archive_sha256 = "YOUR_64_CHARACTER_SHA256"
 # Your raw API key in Secrets Manager; only the ARN belongs here.
