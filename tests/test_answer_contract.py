@@ -32,6 +32,16 @@ def test_layout_and_labels_are_owned_by_runtime():
     assert 'Proposals —' not in text
 
 
+def test_exhausted_run_followup_is_runtime_owned():
+    run=record();run.update(outcome='INCONCLUSIVE_BUDGET',reads=6,actions=6,pages=60,
+                           limits={'reads':6,'actions':12,'pages':60})
+    value=answer();value['next_step']='Resume this completed run with more reads.'
+    text=w.render_answer(value,run)
+    assert value['next_step'] not in text
+    assert 'cannot resume' in text and 'new follow-up' in text
+    assert 'reads=6/6' in text and 'pages=60/60' in text
+
+
 @pytest.mark.parametrize('field,bad', [('evidence',['E999']),('evidence',[]),('evidence','E1')])
 def test_invented_or_absent_evidence_rejected(field,bad):
     a=answer();a['observations'][0][field]=bad

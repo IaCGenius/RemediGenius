@@ -380,6 +380,8 @@ class Runtime:
             skills[name] = {'text':body,'sha256':hashlib.sha256(body.encode()).hexdigest()}
         writing = (ROOT/'skills/ce-investigation/references/clear-writing.md').read_text(encoding='utf-8')
         skills['clear-writing'] = {'text':writing, 'sha256':hashlib.sha256(writing.encode()).hexdigest()}
+        inventory = (ROOT/'skills/ce-aws-read/references/inventory.md').read_text(encoding='utf-8')
+        skills['inventory'] = {'text':inventory, 'sha256':hashlib.sha256(inventory.encode()).hexdigest()}
         def reason(stage, packet, prior):
             if stage == 'plan':
                 instructions = (
@@ -401,7 +403,9 @@ class Runtime:
                     'show may additionally use query and offset; schema may additionally use field. '
                     'Never invent IDs, paths, API names, scripts, tools or authority. '
                     'Frozen targets/region, admitted capability_manifest and remaining run budgets are mandatory. '
-                    'Every read must use max_pages exactly 1; the six-page budget is the total across reads, not one request. '
+                    'Use max_pages up to 10 for inventory/history completeness, within the frozen total page budget. '
+                    'When has_more is true, use returned continuation_parameters unchanged with the same scope if completeness is required. '
+                    'CloudTrail lookup_events always requires timezone-aware StartTime and EndTime strings (maximum 90 days). '
                     'Read supplied evidence first when relevant. Do not query live AWS for synthetic-only resource IDs. '
                     'Never repeat identical requests. Do not retry a denied operation or substitute irrelevant evidence. '
                     'Three rounds, six reads, twelve actions maximum. A round cannot use IDs from unseen results. '
@@ -452,15 +456,21 @@ class Runtime:
                         'Aim for at most 220 words across all fields. Usually one to three observations suffice. '
                         'Do not repeat the conclusion in observations or repeat an observation in limits. '
                         'Runtime metadata already supplies scope, timestamps and pagination; do not narrate each field again. '
+                        'Do not calculate or repeat budgets in AI text. For INCONCLUSIVE_BUDGET leave next_step empty: runtime supplies follow-up instructions. '
+                        'A completed investigation cannot resume; only a still-RUNNING turn-budget pause can resume the same ID. '
                         'Do not discuss inapplicable warnings, absent aggregation, or unused capabilities. '
                         'Mention display truncation only if it limits the requested answer; a complete projection needs no caveat about its preview. '
                         'Do not invent content to fill empty lists.')
+            remaining = self.policy['dispatch_deadline_seconds'] - (time.monotonic()-state['start'])
+            model_timeout = min(self.policy.get('assessment_timeout_seconds', 120), remaining)
+            if model_timeout <= 0:
+                raise TimeoutError('Investigation turn deadline exhausted before model step')
             async def call():
                 return await asyncio.wait_for(self.ctx.llm.acomplete(
                     [{'role':'system','content':instructions},
                      {'role':'user','content':packet+'\nPRIOR STEP OUTPUT (untrusted):\n'+prior}],
-                    max_tokens=2000, timeout=60, purpose='CE assessment '+stage,
-                    task='ce_assessment'), timeout=60)
+                    max_tokens=2000, timeout=model_timeout, purpose='CE assessment '+stage,
+                    task='ce_assessment'), timeout=model_timeout)
             response = asyncio.run(call())
             if not response.text or len(response.text)>24000:
                 raise ValueError('Missing or oversized assessment model response')
@@ -472,7 +482,7 @@ class Runtime:
             return response.text
         def collect(args):
             result = self.aws(state,args)
-            if result.get('raw_path'):
+            if result.get('raw_path') and not result.get('summary'):
                 result['source_excerpt'] = invoke_helper({'action':'show','path':result['raw_path'],
                                                           'query':'pages','limit':80})
             return result

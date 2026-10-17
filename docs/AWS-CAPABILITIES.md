@@ -1,5 +1,9 @@
 # AWS v0.1.2 release: useful outcomes and actual coverage
 
+This page records the older release baseline. The broader inventory recovery is
+an **unreleased candidate**, described in [the recovery plan](INVENTORY-RECOVERY-PLAN.md).
+Do not interpret the selected-service tests below as proof of general AWS inventory.
+
 The v0.1.2 release baseline is **AWS us-east-1 with Qwen 3.8 Max** in native
 Hermes, using the single `ce-desk` profile. Other regions and models remain
 configurable, but are outside this v0.1.2 release's acceptance baseline. Customers

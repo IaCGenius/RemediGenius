@@ -28,10 +28,11 @@ variable "object_arns" {
 }
 
 locals {
+  inventory_operations = jsondecode(file("${path.module}/../aws-read-executor/operations.json"))
   read_policy = {
     Version = "2012-10-17"
     Statement = concat([
-      { Effect = "Allow", Action = ["ec2:DescribeSecurityGroups", "ec2:DescribeNetworkInterfaces", "securityhub:GetFindings", "cloudtrail:LookupEvents"], Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = var.regions } } }
+      { Effect = "Allow", Action = distinct(flatten([for methods in values(local.inventory_operations) : values(methods)])), Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = var.regions } } }
       ], length(var.log_group_arns) == 0 ? [] : [
       { Effect = "Allow", Action = ["logs:FilterLogEvents"], Resource = var.log_group_arns, Condition = { StringEquals = { "aws:RequestedRegion" = var.regions } } }
       ], length(var.object_arns) == 0 ? [] : [

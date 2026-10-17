@@ -109,7 +109,12 @@ def render_answer(value, run):
     lines += ['', '**Limits / next step**']
     lines += ['- '+safe(x) for x in value['limits']]
     lines.append('Process outcome: '+safe(run.get('outcome','UNKNOWN'))+'. This is not a security verdict.')
-    if value['next_step']: lines.append(safe(value['next_step']))
+    if run.get('outcome')=='INCONCLUSIVE_BUDGET':
+        limits=run.get('limits',{})
+        lines.append('Runtime budget: '+', '.join(f'{name}={run.get(name,0)}/{limits.get(name,"unknown")}'
+                     for name in ('reads','actions','pages'))+'. Pages are reserved request limits, not actual pages returned.')
+        lines.append('This investigation is complete and cannot resume. Ask for a new follow-up investigation using the saved receipts to address remaining gaps; no automatic restart occurs.')
+    elif value['next_step']: lines.append(safe(value['next_step']))
     return '\n'.join(lines)
 
 
@@ -257,7 +262,7 @@ class Investigation(Assessment):
                 ('skills','packet','draft','knowledge','capability_manifest','plan','signatures','critique','results','plan_attempts')}
         result['results']=[{'request':item['request'],'question':item.get('question',''),
                           'result':{k:v for k,v in item['result'].items() if k in
-                                    ('status','run_id','observed_at','has_more','receipt_path','raw_path','errors','path','sha256','truncated')}}
+                                    ('status','run_id','observed_at','has_more','receipt_path','raw_path','errors','path','sha256','truncated','summary','source_excerpt','pages_returned','stop_reason','continuation_parameters')}}
                          for item in run['results']]
         return result
 
@@ -277,7 +282,7 @@ class Investigation(Assessment):
         run.update(version=2, answer_contract=1, objective=objective, criteria=criteria, evidence_paths=paths,
                    baseline_ids=baselines, plan=[], round=0, actions=0, reads=0, pages=0,
                    signatures=[], decisions=[], plan_repairs=0, capability_manifest=self.capabilities,
-                   limits={'rounds':3,'actions':12,'reads':6,'pages':6,'planning_repairs':1},
+                   limits={'rounds':3,'actions':12,'reads':6,'pages':60,'planning_repairs':1},
                    created_at=now(), stage='context')
         self.save(run)
         return self.view(run)
@@ -336,8 +341,8 @@ class Investigation(Assessment):
             if action=='read':
                 if req.get('target') not in run['targets'] or req.get('region')!=run['region']:
                     raise ValueError('Request changes frozen scope')
-                if type(req.get('max_pages')) is not int or req['max_pages']!=1 or not isinstance(req.get('parameters'),dict):
-                    raise ValueError('Reads require parameters object and max_pages=1')
+                if type(req.get('max_pages')) is not int or not 1<=req['max_pages']<=10 or not isinstance(req.get('parameters'),dict):
+                    raise ValueError('Reads require parameters object and max_pages between 1 and 10')
                 for previous in run['results']:
                     old=previous['request']
                     same_scope=all(old.get(k)==req.get(k) for k in ('target','region','service','operation'))
@@ -345,7 +350,7 @@ class Investigation(Assessment):
                                for error in previous['result'].get('errors',[]) if isinstance(error,dict))
                     if same_scope and denied:
                         raise ValueError('Previously denied operation cannot be retried in this run')
-                reads+=1;pages+=1
+                reads+=1;pages+=req['max_pages']
             if action=='show' and req.get('path') not in known_paths:
                 raise ValueError('Evidence path was not supplied or returned by a prior step')
             if action=='show' and (type(req.get('limit',80)) is not int or not 1<=req.get('limit',80)<=200 or type(req.get('offset',1)) is not int or req.get('offset',1)<1):
@@ -355,7 +360,7 @@ class Investigation(Assessment):
             signature=json.dumps(req,sort_keys=True)
             if signature in seen: raise ValueError('Repeated identical request is not permitted')
             seen.add(signature)
-        if reads>6 or pages>6 or run['actions']+len(steps)>12:
+        if reads>run['limits']['reads'] or pages>run['limits']['pages'] or run['actions']+len(steps)>run['limits']['actions']:
             raise ValueError('Plan exceeds remaining investigation budget')
         return value
 
@@ -419,6 +424,9 @@ class Investigation(Assessment):
                     'Process complete, not a security certification. Evidence sufficiency and conclusions are AI judgments; gaps and budgets remain explicit.')
             else:raise ValueError('Invalid investigation stage')
         except Exception as exc:
-            run.update(status='BLOCKED',reason=str(exc)[:300])
+            run.update(status='BLOCKED',reason=(type(exc).__name__+': '+(str(exc) or 'Step failed without further diagnostic text'))[:300],
+                       failed_stage=run['stage'], evidence_retained=True)
+            if run['stage']=='collect' and run.get('cursor',0)<len(run.get('plan',[])):
+                run['failed_request']=run['plan'][run.get('cursor',0)]['request']
         run.pop('inflight',None);self.save(run);return self.view(run)
 

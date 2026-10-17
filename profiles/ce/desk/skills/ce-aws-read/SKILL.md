@@ -6,6 +6,8 @@ license: Apache-2.0
 
 # Scoped AWS execution
 
+For resource inventory and source failures, follow [Inventory and source fallback](references/inventory.md). The controller loads this procedure for every investigation.
+
 For security interpretation and proposals load ce-aws-security. This skill explains
 execution, not conclusions. Native preflight supplies current UTC time, target
 aliases/account IDs/regions and supported operations. READY proves executor

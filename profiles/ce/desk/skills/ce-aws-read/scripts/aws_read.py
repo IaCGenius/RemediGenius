@@ -33,11 +33,18 @@ if a.action=='schema':
     name=next((n for n in model.operation_names if xform_name(n)==a.operation),None)
     if not name: raise SystemExit('Unknown SDK operation')
     shape=model.operation_model(name).input_shape
+    traversed=[]
     for field in filter(None,a.field.split('.')):
-        if shape.type_name=='list': shape=shape.member
-        if shape.type_name!='structure' or field not in shape.members:
-            raise SystemExit('Unknown input field; inspect its parent schema')
+        if shape is not None and shape.type_name=='list': shape=shape.member
+        if shape is None or shape.type_name!='structure' or field not in shape.members:
+            print(json.dumps({'status':'ERROR','source':'installed AWS SDK input model',
+                'service':a.service,'operation':a.operation,'field':a.field,
+                'errors':[{'code':'UNKNOWN_SCHEMA_FIELD','message':'Inspect the parent schema before selecting a child field'}],
+                'parent_field':'.'.join(traversed),
+                'available_fields':list(shape.members) if shape is not None and shape.type_name=='structure' else []}))
+            raise SystemExit(0)
         shape=shape.members[field]
+        traversed.append(field)
     def describe(value,depth=1):
         if value is None: return {'type':'none'}
         result={'type':value.type_name}

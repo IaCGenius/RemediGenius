@@ -60,7 +60,9 @@ def test_config_status_preserves_source_and_durable_receipt(monkeypatch, outcome
     assert raw['errors'] == ([{'code': 'AccessDeniedException'}] if outcome == 'denied' else [])
     receipt = json.loads(objects['evidence/' + result['receipt_path']])
     assert receipt['files'][0]['sha256'] == hashlib.sha256(raw_bytes).hexdigest()
-    assert result['summary'] == {}  # No invented security/coverage verdict.
+    assert result['summary']['collection_counts'] == (
+        {} if outcome == 'denied' else {'ConfigurationRecordersStatus':len(expected['ConfigurationRecordersStatus'])})
+    assert 'verdict' not in result['summary']
 
 
 def test_config_status_does_not_admit_recording_mutations(monkeypatch):
@@ -96,3 +98,33 @@ def test_default_and_explicit_page_budgets_stop_sdk_iteration(monkeypatch, budge
     result = module.handler(request, None)
     assert len(fetched) == expected == result['pages_returned'] == result['scope']['max_pages']
     assert result['status'] == 'PARTIAL' and result['has_more'] is True
+
+
+def test_cloudcontrol_cannot_choose_other_role_or_private_handler(monkeypatch):
+    module=load_executor()
+    monkeypatch.setenv('TARGETS',json.dumps({'default':{'regions':['us-east-1'],'account_id':'unit-test'}}))
+    monkeypatch.setattr(module.boto3,'Session',lambda:pytest.fail('Rejected request reached AWS'))
+    for params in ({'TypeName':'Private::Handler::Resource'},
+                   {'TypeName':'AWS::EC2::Instance','RoleArn':'arn:aws:iam::123456789012:role/Admin'}):
+        with pytest.raises(ValueError,match='configured read identity'):
+            module.handler({'action':'read','target':'default','region':'us-east-1','service':'cloudcontrol',
+                            'operation':'list_resources','parameters':params},None)
+
+
+def test_continuation_is_last_retained_page_not_omitted_page(monkeypatch):
+    module=load_executor()
+    class Paginator:
+        _pagination_cfg={'input_token':'NextToken','output_token':'NextToken'}
+        def paginate(self,**kwargs):
+            yield {'Resources':[{'id':'first'}],'NextToken':'after-first'}
+            yield {'Resources':[{'id':'x'*4000000}],'NextToken':'after-omitted'}
+    sdk=SimpleNamespace(can_paginate=lambda op:True,get_paginator=lambda op:Paginator())
+    monkeypatch.setattr(module.boto3,'Session',lambda:SimpleNamespace(client=lambda *a,**k:sdk))
+    monkeypatch.setattr(module.boto3,'client',lambda *a,**k:SimpleNamespace(put_object=lambda **kw:None))
+    for k,v in {'TARGETS':json.dumps({'default':{'regions':['us-east-1'],'account_id':'unit-test'}}),
+                'ACCOUNT_ID':'unit-test','BUCKET':'unit-test','PREFIX':'evidence'}.items():monkeypatch.setenv(k,v)
+    result=module.handler({'action':'read','target':'default','region':'us-east-1','service':'cloudcontrol',
+        'operation':'list_resources','parameters':{'TypeName':'AWS::EC2::Instance'},'max_pages':10},None)
+    assert result['pages_returned']==1 and result['has_more']
+    assert result['stop_reason']=='BYTE_LIMIT'
+    assert result['continuation_parameters']['NextToken']=='after-first'

@@ -93,3 +93,20 @@ def test_budget_is_not_reset_by_new_plan(tmp_path):
     req={'action':'read','target':'default','region':'us-east-1','service':'ec2',
          'operation':'describe_instances','parameters':{},'max_pages':1}
     with pytest.raises(ValueError,match='budget'):e.validate_plan(saved,json.dumps(plan(req)))
+
+
+def test_ten_page_read_and_timeout_preserve_collected_facts(tmp_path):
+    req={'action':'read','target':'default','region':'us-east-1','service':'ec2',
+         'operation':'describe_instances','parameters':{},'max_pages':10}
+    e,r,c,m=make(tmp_path,[plan(req)])
+    e.collect=lambda req:{'status':'PARTIAL','summary':{'count':50},'has_more':True,
+        'receipt_path':'receipts/test.json','continuation_parameters':{'NextToken':'next'}}
+    for _ in range(3):r=e.advance(r['id'])
+    assert r['pages']==10
+    def timeout(*args):raise TimeoutError()
+    e.reason=timeout
+    r=e.advance(r['id'])
+    assert r['status']=='BLOCKED' and r['reason'].startswith('TimeoutError:')
+    assert r['results'][0]['result']['summary']['count']==50
+    assert r['results'][0]['result']['continuation_parameters']=={'NextToken':'next'}
+    assert e.cancel(r['id'])['results']==r['results']

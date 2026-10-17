@@ -3,6 +3,7 @@
   "max_cloud_reads": 6,
   "max_identical_reads": 2,
   "dispatch_deadline_seconds": 480,
+  "assessment_timeout_seconds": 120,
   "review_timeout_seconds": 60,
   "review_max_tokens": 1600,
   "review_enabled": true,

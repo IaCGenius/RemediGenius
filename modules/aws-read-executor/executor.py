@@ -42,6 +42,10 @@ def handler(event, context):
     pages_limit = event.get('max_pages', 1)
     if not isinstance(parameters, dict) or type(pages_limit) is not int or not 1 <= pages_limit <= 10 or len(encoded(parameters)) > 16000:
         raise ValueError('Invalid parameters or page budget')
+    if service == 'cloudcontrol':
+        if not str(parameters.get('TypeName','')).startswith('AWS::') or any(
+                k in parameters for k in ('RoleArn','TypeVersionId')):
+            raise ValueError('Cloud Control requires an AWS:: type and configured read identity; role/version overrides are not allowed')
     if service == 'cloudtrail' and operation == 'lookup_events':
         parameters = dict(parameters)
         for field in ('StartTime','EndTime'):
@@ -61,6 +65,7 @@ def handler(event, context):
     run = uuid.uuid4().hex
     observed = datetime.now(timezone.utc).isoformat()
     pages, errors, total, partial = [], [], 0, False
+    continuation, stop_reason = None, None
     began = time.monotonic()
     try:
         session = boto3.Session()
@@ -68,16 +73,23 @@ def handler(event, context):
             args = {'RoleArn':target['role_arn'],'RoleSessionName':'rgce-read','DurationSeconds':900,
                     'Policy':json.dumps({'Version':'2012-10-17','Statement':[{'Effect':'Allow','Action':OPERATIONS[service][operation],'Resource':'*'}]})}
             if target.get('external_id'): args['ExternalId'] = target['external_id']
+            if service == 'cloudcontrol':
+                partition = target['role_arn'].split(':')[1]
+                # Allow downstream metadata reads, intersected with the target role.
+                args['PolicyArns'] = [{'arn':f'arn:{partition}:iam::aws:policy/{p}'} for p in
+                                     ('SecurityAudit','job-function/ViewOnlyAccess')]
             creds = session.client('sts', config=CONFIG).assume_role(**args)['Credentials']
             session = boto3.Session(aws_access_key_id=creds['AccessKeyId'],aws_secret_access_key=creds['SecretAccessKey'],aws_session_token=creds['SessionToken'])
         client = session.client(service, region_name=region, config=CONFIG)
         if client.can_paginate(operation):
-            iterator = iter(client.get_paginator(operation).paginate(**parameters))
+            paginator = client.get_paginator(operation)
+            iterator = iter(paginator.paginate(**parameters))
         else:
             iterator = iter([getattr(client, operation)(**parameters)])
         for n in range(pages_limit):
             if time.monotonic()-began > 55 or (context and context.get_remaining_time_in_millis() < 20000):
                 partial = True
+                stop_reason = 'TIME_LIMIT'
                 break
             if n and service == 'cloudtrail': time.sleep(.6)
             try: page = next(iterator)
@@ -86,10 +98,21 @@ def handler(event, context):
             if total > 4000000:
                 errors.append({'code':'BYTE_LIMIT','notice':'Last page omitted; narrower selection required'})
                 partial = True
+                stop_reason = 'BYTE_LIMIT'
                 break
             pages.append(page)
             # Preserve service tokens and label a bounded pagination stop honestly.
             partial = any(page.get(k) for k in ('NextToken','nextToken','Marker','NextMarker','ContinuationToken','NextContinuationToken')) or bool(page.get('IsTruncated'))
+            if partial and client.can_paginate(operation):
+                import jmespath
+                cfg = getattr(paginator, '_pagination_cfg', {})
+                inputs, outputs = cfg.get('input_token', []), cfg.get('output_token', [])
+                inputs = [inputs] if isinstance(inputs,str) else inputs
+                outputs = [outputs] if isinstance(outputs,str) else outputs
+                tokens = {key:jmespath.search(expr,page) for key,expr in zip(inputs,outputs)}
+                if tokens and all(value is not None for value in tokens.values()):
+                    continuation = {**parameters, **tokens}
+            if not partial: continuation = None
             if not partial: break
     except ParamValidationError as exc:
         errors.append({'code':'ParamValidationError','message':str(exc)[:3000],
@@ -98,12 +121,14 @@ def handler(event, context):
         errors.append({'code':exc.response.get('Error',{}).get('Code','AWS_ERROR')})
     except Exception as exc:
         errors.append({'code':type(exc).__name__})
+    if partial and not stop_reason: stop_reason = 'PAGE_LIMIT'
     scope = {'target':event['target'],'execution_account':os.environ['ACCOUNT_ID'],'account_id':target['account_id'], 'region':region,
              'service':service,'operation':operation,'parameters':parameters,'max_pages':pages_limit,
              'notice':'Administrator APIs may include member-account records. Preserve source IDs and check actual membership/coverage.'}
     result = {'schema_version':'rgce-aws-read/1','run_id':run,'observed_at':observed,'scope':scope,
               'status':'ERROR' if errors and not pages else 'PARTIAL' if errors or partial else 'OK',
               'pages_returned':len(pages),'has_more':partial,'errors':errors,'pages':pages,
+              'stop_reason':stop_reason,'continuation_parameters':continuation,
               'notice':'Source response, not a security verdict. OK describes this bounded request, not organization-wide coverage.'}
     s3 = boto3.client('s3',config=CONFIG)
     files=[]
@@ -115,6 +140,22 @@ def handler(event, context):
     save(raw_path,result,'raw')
     # Deterministic activity extraction; same CloudTrail capability for any EventSource/identity/resource filter.
     summary = {}
+    if service in ('config','cloudcontrol','cloudformation','resource-explorer-2'):
+        collections = {}
+        for page in pages:
+            for key,value in page.items():
+                if isinstance(value,list): collections.setdefault(key,[]).extend(value)
+        summary = {'collection_counts':{k:len(v) for k,v in collections.items()},
+                   'records_preview':{k:v[:15] for k,v in collections.items()},
+                   'preview_truncated':any(len(v)>15 for v in collections.values())}
+        if service == 'cloudcontrol' and operation == 'get_resource':
+            summary['resources'] = [p.get('ResourceDescription',{}) for p in pages]
+        if service == 'cloudformation' and operation == 'describe_type':
+            summary['schemas'] = []
+            for p in pages:
+                schema=json.loads(p.get('Schema','{}'))
+                summary['schemas'].append({k:schema.get(k) for k in
+                    ('typeName','primaryIdentifier','readOnlyProperties','writeOnlyProperties','handlers')})
     if service=='cloudtrail' and operation=='lookup_events':
         events={e['EventId']:e for p in pages for e in p.get('Events',[]) if e.get('EventId')}
         timeline=[]
@@ -157,4 +198,4 @@ def handler(event, context):
              'scope':f'Bounded {service}.{operation} query; see receipt for exact scope', 'sources':[], 'files':files,'receipt_path':receipt,
              'limitations':['Only the selected query was executed; use prior receipts for other sources.','Source records may include sensitive identifiers; expose only what the question requires.']}
     s3.put_object(Bucket=os.environ['BUCKET'],Key=os.environ['PREFIX']+'/catalog.json',Body=encoded(catalog),ContentType='application/json')
-    return json.loads(encoded({k:result[k] for k in ('run_id','observed_at','scope','status','pages_returned','has_more','errors')} | {'receipt_path':receipt,'raw_path':raw_path,'files':files,'summary':summary}))
+    return json.loads(encoded({k:result[k] for k in ('run_id','observed_at','scope','status','pages_returned','has_more','errors','stop_reason','continuation_parameters')} | {'receipt_path':receipt,'raw_path':raw_path,'files':files,'summary':summary}))

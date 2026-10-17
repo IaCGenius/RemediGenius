@@ -10,6 +10,10 @@ targets keys. A service name such as ec2 is never an account target. Use only th
 configured region; do not guess aliases from the question. The objective names
 the service or finding to investigate. Define completion criteria as the requested
 observable result, not a generic security checklist.
+For inventory, load ce-aws-read and its inventory reference before start. Do not
+restrict the objective to a guessed tool list: Config and Cloud Control can cover
+resource families without a service-specific tool. Follow the documented source
+fallback procedure and preserve the user's requested scope.
 Continue the same ID; never bypass
 an active workflow with independent tools or automatically restart after a block.
 While its status is RUNNING, call next with that ID until it reaches a terminal status

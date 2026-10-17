@@ -14,3 +14,11 @@ resource "aws_iam_role_policy" "read" {
   role   = aws_iam_role.read.id
   policy = jsonencode(local.read_policy)
 }
+
+data "aws_partition" "current" {}
+
+resource "aws_iam_role_policy_attachment" "inventory" {
+  for_each   = toset(["SecurityAudit", "job-function/ViewOnlyAccess"])
+  role       = aws_iam_role.read.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/${each.value}"
+}

@@ -5,6 +5,14 @@ resource "aws_iam_role" "executor" {
   assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { Service = "lambda.amazonaws.com" }, Action = "sts:AssumeRole" }] })
 }
 
+# Cloud Control uses downstream metadata reads under the caller identity.
+# API admission remains separate from IAM permissions.
+resource "aws_iam_role_policy_attachment" "inventory" {
+  for_each   = toset(["SecurityAudit", "job-function/ViewOnlyAccess"])
+  role       = aws_iam_role.executor.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/${each.value}"
+}
+
 resource "aws_iam_role_policy" "executor" {
   role = aws_iam_role.executor.id
   policy = jsonencode({ Version = "2012-10-17", Statement = concat([

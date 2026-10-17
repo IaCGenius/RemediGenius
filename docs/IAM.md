@@ -3,21 +3,42 @@
 The operator provisions CE. Hermes never receives administrator credentials.
 The authoritative policies below are readable Terraform, separated into `iam.tf`.
 
-| Role | Who assumes it | Can do | Cannot do through this role | Source |
+| Role | Who assumes it | Can do | Boundary / limits | Source |
 |---|---|---|---|---|
-| Read executor | Lambda | Allowlisted AWS reads in configured regions, assume explicit member roles, write evidence prefixes and logs | Apply cloud fixes or read arbitrary S3 object contents | `modules/aws-read-executor/iam.tf` |
+| Read executor | Lambda | AWS SecurityAudit/ViewOnlyAccess metadata permissions, explicit inventory actions, assume configured member roles, write evidence prefixes and logs | CE tools do not admit cloud mutations or arbitrary object-content reads | `modules/aws-read-executor/iam.tf` |
 | Discovery collector | Lambda | Describe native-source availability; write its catalog and logs | Remediate resources | `modules/native-source-discovery/iam.tf` |
 | Scheduled worker | Lambda | Invoke read executor, read/write scheduled evidence, write logs | Call a model or apply fixes | `modules/assurance-schedule/iam.tf` |
 | Scheduler invocation | EventBridge Scheduler | Invoke scheduled worker | Investigate or read the account directly | `modules/assurance-schedule/iam.tf` |
 | Workstation invoker | Explicit operator IAM principal | Invoke executor and read returned evidence prefixes | Direct customer-resource mutations | `deploy/aws-workstation/iam.tf` |
 | Spot reader invoker | Spot host | Invoke executor and read returned evidence prefixes | Host/admin permissions | `deploy/aws-native/iam.tf` |
 | Spot host | EC2 | Bootstrap S3 source, exact model/dashboard secrets, attach retained volume, SSM, invoke discovery and assume reader role | Model does not receive host credentials; explicit SSM parameter deny | `deploy/aws-native/iam.tf` |
-| Member read role | Exact trusted executor with configured external ID | Configured read actions in member account | Write remediation | `deploy/aws-native/member-read-role.json` |
-| Optional generic read role | Configured principal | Selected read actions | Write fixes | `modules/aws-read-access/iam.tf` |
+| Member read role | Exact trusted executor with configured external ID | SecurityAudit/ViewOnlyAccess plus inventory reads in member account | CE tools do not admit remediation | `deploy/aws-native/member-read-role.json` |
+| Optional generic read role | Configured principal with external ID | SecurityAudit/ViewOnlyAccess plus inventory reads | CE tools do not admit fixes | `modules/aws-read-access/iam.tf` |
 | Optional storage role | Configured principal | Dedicated storage prefixes per module policy | Arbitrary account administration | `modules/workspace-storage/iam.tf` |
 
 Resource addresses remain unchanged when IAM moves between files. Before an
 upgrade, inspect the plan: a file split alone must not replace roles.
+
+## Inventory identity and execution boundary
+
+The inventory candidate expands IAM metadata-read permission using AWS-managed
+SecurityAudit and ViewOnlyAccess policies. These policies are broader than CE's
+admitted tool catalog and AWS can update them. Review their current contents before
+deployment. The managed attachments do not inherit the region condition on the
+separate inline policy; the executor enforces the configured target/region on each
+request. Organizational SCPs and permission boundaries remain effective.
+
+Hermes submits structured SDK requests to Lambda; it never assumes the customer
+role itself. Lambda assumes a configured member role with its external ID and a
+session policy. Ordinary requests retain their single-operation session policy.
+Cloud Control requests also use audit/view session policies so AWS resource handlers
+can perform downstream reads. The target role must grant those permissions too.
+The chat cannot select RoleArn or a private Cloud Control handler. No direct
+Bedrock provisioning or model-invocation API is admitted by this inventory change.
+
+Responses and receipts go to the configured evidence prefix in S3. A missing
+handler permission is returned as a failed source read; it does not trigger an
+automatic permission grant or an administrator-credential fallback.
 
 ## Operator policies
 

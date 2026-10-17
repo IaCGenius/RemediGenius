@@ -21,6 +21,13 @@ Identify the objective, configured account aliases, region, selected evidence an
 knowledge, and one to six completion criteria. Preserve explicit user filters/time
 windows. Pass configured aliases (for example `default`), not raw account IDs, in targets.
 Ask when a material scope choice is ambiguous; do not invent identifiers.
+For resource inventory, keep the objective about the requested resources and
+scope. Do not rewrite it as a restriction to specific services or tools. A missing
+service-specific API does not mean inventory is unavailable: Config and Cloud
+Control are generic inventory paths. Read ce-aws-read and its inventory reference
+before starting. The procedure is Config aggregator, account-local Config, then
+Cloud Control when coverage is missing; the planner chooses queries within that
+procedure and the available budget.
 Use ce_assessment start with these inputs, then next with the same ID. The tool name
 is retained for compatibility; it now runs a general investigation. An optional broad
 AWS assessment is just one objective, not a mandatory set of service queries.
@@ -59,10 +66,13 @@ it does not certify security. Distinguish a useful answer with gaps from a verif
 Do not query every AWS service, retry denied operations, or request another page simply
 to make the answer longer. An additional round needs a named evidence gap.
 
-The runtime allows at most three investigation rounds, six cloud reads, six requested
-pages and twelve actions per run. One invalid-plan repair is allowed. Budgets persist
+The runtime allows at most three investigation rounds, six cloud reads, sixty requested
+pages (up to ten per read) and twelve actions per run. One invalid-plan repair is allowed. Budgets persist
 across turns. On exhaustion or unavailable evidence, provide an inconclusive outcome,
 what was learned, and the specific missing evidence. Do not automatically restart.
+INCONCLUSIVE_BUDGET is a completed investigation, not a resumable turn pause. The
+runtime supplies its budget counts and follow-up instruction; do not calculate
+budgets or tell the user to resume that completed ID in AI prose.
 
 ## Explain and retain
 
@@ -99,7 +109,7 @@ one direct-path critique may review the additional proposal or tracking result.
 Do not re-review the investigation or claim a validated draft was executed.
 
 A BLOCKED run is terminal unless the tool explicitly provides a supported resume action.
-Report the failed step and retained evidence briefly. Do not bypass it with direct tools,
+Use ce_assessment show to retrieve retained summaries and report the failed step plus actual collected facts. Cancellation retains evidence; never claim it discards receipts. Do not bypass it with direct tools,
 restart it automatically, or tell the operator to repair infrastructure based only on a
 generic helper error. An invalid model query is not proof of broken infrastructure.
 Do not promise that `next` resumes a terminal run; the operator can cancel or explicitly

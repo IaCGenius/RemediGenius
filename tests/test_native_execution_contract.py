@@ -47,6 +47,24 @@ def test_assessment_blocks_independent_tools(rt):
     assert rt.gate('ce_assessment',{'action':'next'},session_id='session',turn_id='turn')['action']=='modify'
 
 
+def test_assessment_model_timeout_respects_remaining_turn(rt):
+    received=[]
+    async def answer(*args,**kwargs):
+        received.append(kwargs['timeout'])
+        return SimpleNamespace(text=json.dumps({'decision':'inconclusive','rationale':'No evidence supplied','steps':[]}),model='test')
+    rt.ctx=SimpleNamespace(llm=SimpleNamespace(acomplete=answer))
+    rt.knowledge=lambda args: {'path':args['path'],'content':''}
+    state=rt.turns[('session','turn')]
+    state['session_id']='session'
+    run=rt.assessment(state,{'action':'start','objective':'Inventory resources','criteria':['List resources'],
+                             'targets':['default'],'region':'us-east-1','knowledge_paths':[]})
+    rt.assessment(state,{'action':'next','id':run['id']})
+    state['start']=time.monotonic()-rt.policy['dispatch_deadline_seconds']+5
+    result=rt.assessment(state,{'action':'next','id':run['id']})
+    assert received and 0<received[0]<=5
+    assert result['status']=='RUNNING'
+
+
 def test_assessment_final_output_cannot_be_rewritten_by_outer_model(rt):
     rt.turns[('session','turn')]['assessment_result']={
         'id':'a'*32,'notice':'Not a secure verdict','results':[],

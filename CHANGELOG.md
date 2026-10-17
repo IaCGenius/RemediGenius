@@ -1,5 +1,33 @@
 # Changes
 
+## Inventory recovery candidate — not release-qualified
+
+2026-10-17. See [the recovery plan](docs/INVENTORY-RECOVERY-PLAN.md).
+
+- Expand the read catalog to account-local Config inventory, Cloud Control and
+  resource-schema discovery, with AWS audit/view IAM policy attachments for
+  downstream metadata reads. Existing installations require policy review/apply.
+- Allow multi-page reads inside investigations and return continuation parameters
+  and explicit pagination stop reasons. Retain source batches and receipts in S3.
+- Include retained summaries in blocked assessment output and preserve exception
+  types. Load the generic inventory fallback procedure into planning context.
+- Unknown nested SDK schema fields return a recoverable error and available
+  parent fields. Failed collection hops retain the precise request for diagnosis.
+- Inventory framing preserves the user's objective rather than restricting it
+  to a guessed tool list. Model hops have a configurable 120-second timeout,
+  capped by the remaining 480-second turn deadline; no automatic retry is added.
+- Runtime supplies follow-up instructions and budget counters for exhausted
+  investigations. A completed run cannot be resumed with a fresh budget.
+- Validation so far: 101 targeted local regression/boundary tests and Terraform
+  validation passed. Live collector reads verified Config, Cloud Control and
+  multi-page history with S3 receipt hashes. Native UI tests exposed framing,
+  timeout and schema-error issues, then verified Config fallback and a real Cloud
+  Control resource. A separate UI run returned matching VPC/log-group counts and
+  completed four-page collection. Bedrock family coverage remains bounded/partial.
+  Creation-history UI testing completed three pages (101 events), distinguished
+  successful creates from denied attempts, and matched independent AWS reads.
+  Wider qualification remains incomplete; existing release tags are unchanged.
+
 ## Unreleased — main after v0.1.3
 
 2026-10-16. Package version remains unchanged. The v0.1.3 tag and release downloads
