@@ -13,6 +13,7 @@ import boto3
 from package_native_hermes import package
 from native_session_limits import prepare as prepare_session_limits
 import native_validator
+import native_ui
 
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE = 'nousresearch/hermes-agent:stable@sha256:444b42594e7f467425872fc35e077a227d377f0fe0726bc818706d62175fad8b'
@@ -71,6 +72,7 @@ class Workstation:
         return True
 
     def stop(self):
+        native_ui.stop(self.name)
         if self.owned(): command('docker','stop','-t','30',self.name)
         native_validator.stop(self.name)
         (self.root/'runtime.env').unlink(missing_ok=True)
@@ -153,6 +155,8 @@ class Workstation:
         except Exception:
             self.stop()
             raise
+        if self.cfg.get('hermes_ui', False):
+            native_ui.start(self.name, int(self.cfg.get('ui_port', 9126)))
         print(f'Native CE: http://127.0.0.1:{self.port}/chat?profile=ce-desk')
         print('Temporary reader credentials expire at '+expires+'. Use run for automatic refresh, or refresh before expiry.')
 

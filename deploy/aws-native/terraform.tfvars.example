@@ -30,3 +30,6 @@ schedule_interval_hours = 24
 
 # false requires private-subnet outbound connectivity; true for public subnet without NAT.
 associate_public_ip = false
+
+# Optional additional browser UI; same gateway, login and CE profile.
+hermes_ui = false

@@ -121,3 +121,10 @@ See [scope and limits](docs/LIMITS.md) for what is not included and [model/data 
 Validation is scoped to the documented release baseline. Never include credentials, Terraform state, private policies or unredacted transcripts in public issues.
 
 See [deterministic remediation validation](docs/REMEDIATION-VALIDATION.md) for the pinned tools and validation workflow.
+
+## Optional browser UI
+
+Use the [additional Hermes browser UI](docs/HERMES-UI.md) with the same `ce-desk`
+profile, model, skills and knowledge. The native dashboard remains available.
+Enable it with `hermes_ui` in your workstation configuration or Spot tfvars.
+See the guide for setup, login, tested capabilities and known UI limitations.

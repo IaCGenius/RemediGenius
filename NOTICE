@@ -22,3 +22,8 @@ https://github.com/microsoft/markitdown
 
 No model-provider client or personal memory content is copied into CE.
 Historical console/builder distribution notices remain with the archived source.
+
+The optional Hermes browser UI is third-party MIT-licensed software from
+https://github.com/przbadu/hermes-ui, based on the Nous Research desktop renderer.
+Its license is preserved in deploy/hermes-ui/UPSTREAM-LICENSE. It is built only
+when enabled; see docs/HERMES-UI.md for the upstream revision and CE patch.

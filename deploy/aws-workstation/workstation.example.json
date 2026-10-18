@@ -9,5 +9,7 @@
   "reader_role_arn": "COPY_FROM_TERRAFORM_OUTPUT",
   "model_name": "YOUR_HERMES_COMPATIBLE_MODEL",
   "model_base_url": "YOUR_PROVIDER_BASE_URL",
-  "model_key_env": "MODEL_API_KEY"
+  "model_key_env": "MODEL_API_KEY",
+  "hermes_ui": false,
+  "ui_port": 9126
 }

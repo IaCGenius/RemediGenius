@@ -147,3 +147,9 @@ variable "instance_profile_name" {
   type        = string
   default     = null
 }
+
+variable "hermes_ui" {
+  type        = bool
+  default     = false
+  description = "Build and serve the optional Hermes browser UI on loopback 9122; native dashboard remains on 9120."
+}

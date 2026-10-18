@@ -25,6 +25,7 @@ locals {
     image               = var.hermes_image, model_secret = var.model_secret_arn, dashboard_secret = aws_secretsmanager_secret.dashboard.arn,
     toolsets            = var.hermes_toolsets,
     container_memory_mb = var.container_memory_mb,
+    hermes_ui           = var.hermes_ui,
     model_name          = var.model_name, model_base_url = var.model_base_url, profiles_dir = var.profiles_dir,
     reader_function     = module.aws_read.function_arn, reader_invoker_role = aws_iam_role.reader_invoker.arn,
     knowledge_view      = var.knowledge_view,

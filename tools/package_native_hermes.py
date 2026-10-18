@@ -20,15 +20,15 @@ def package(output):
     manifest = {'version':'ce-runtime/0.1.3','files':{
         p.relative_to(desk).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(reviewed)}}
-    selected = [root / 'tools/native_data.py', root / 'tools/upgrade_native_profile.py',
+    selected = [root / 'tools/native_data.py', root / 'tools/native_ui.py', root / 'tools/upgrade_native_profile.py',
                 root / 'tools/native_session_limits.py', root / 'tools/native_validator.py', root / 'tools/model_probe.py']
-    extensions = {'.py', '.tf', '.md', '.yaml', '.yml', '.tftpl', '.sh', '.json'}
-    for directory in ('deploy/aws-native', 'deploy/validator', 'profiles/ce'):
+    extensions = {'.py', '.tf', '.md', '.yaml', '.yml', '.tftpl', '.sh', '.json', '.conf'}
+    for directory in ('deploy/aws-native', 'deploy/validator', 'deploy/hermes-ui', 'profiles/ce'):
         for path in (root / directory).rglob('*'):
             parts = path.relative_to(root).parts
             if (path.is_file() and not any(p.startswith('.') or p == '__pycache__' for p in parts)
                     and '.tfstate' not in path.name and '.tfvars' not in path.name
-                    and (path.suffix in extensions or path.name in ('LICENSE','Dockerfile'))):
+                    and (path.suffix in extensions or path.name in ('LICENSE','UPSTREAM-LICENSE','Dockerfile'))):
                 selected.append(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:

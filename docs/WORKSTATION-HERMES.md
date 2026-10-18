@@ -278,3 +278,7 @@ unset MODEL_API_KEY
 [Platform, state, costs and removal](PLATFORM-AND-REMOVAL.md) · [IAM roles and operator policies](IAM.md) · [Troubleshooting](TROUBLESHOOTING.md).
 
 Startup makes one small model tool-call probe before opening the dashboard. No AWS data or knowledge is sent. First validator build downloads its pinned dependencies.
+
+For the optional desktop-style browser interface, add `"hermes_ui": true` and
+`"ui_port": 9126` to the private workstation configuration. The native dashboard
+remains on its original port. See [setup, login and limitations](HERMES-UI.md).

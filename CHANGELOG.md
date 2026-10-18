@@ -1,5 +1,10 @@
 # Changes
 
+## Unreleased
+
+- Add opt-in Hermes browser UI for workstation and Spot deployments. Keep the native dashboard, profile data and CE runtime. Pin upstream source, preserve its MIT license, and patch selected-profile WebSocket routing.
+- Document login, profile-scoped model secrets, tested chat/knowledge flows and UI parity limits.
+
 ## Inventory recovery candidate — not release-qualified
 
 2026-10-17. See [the recovery plan](docs/INVENTORY-RECOVERY-PLAN.md).

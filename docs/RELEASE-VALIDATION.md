@@ -65,3 +65,21 @@ Historical qualification is preserved with the earlier GitHub releases and tags.
 Vendored skill references were checked against their provenance lock. The final
 source preserves those bytes across Git checkout. Runtime text line endings were
 canonicalized; payload comparisons excluded no executable or prompt content.
+
+### Optional Hermes UI packaging validation (2026-10-18)
+
+- Pinned-source Docker build passed, including TypeScript and Vite production build.
+- Packaged nginx runtime served HTTP 200, passed `nginx -t`, ran as 101:101 with
+  read-only root and no volume mounts. Disposable smoke-test container removed.
+- Three focused tests passed: sidecar isolation, refusal to remove an unrelated
+  container, and inclusion of required UI files/license in the CE ZIP.
+- `terraform fmt -check` and `terraform validate` passed for aws-native.
+- Earlier live DeepSeek tests of this pinned frontend plus the same profile patch
+  verified CE skills, knowledge, review, sessions and refresh; see HERMES-UI.md.
+- New automatic Spot bootstrap and workstation opt-in wiring have not had a full
+  fresh deployment/replacement acceptance run. Existing Spot was not replaced.
+- A broader existing execution-contract suite was not completed in this packaging
+  pass (default temporary-directory setup errors, then a stalled rerun); it is
+  not counted as passing. No CE execution-plugin code changed in this addition.
+- Upstream CSS/font/optional SkillsView build warnings remain. Bots panel remains
+  a known issue. Release tag unchanged.

@@ -36,3 +36,7 @@ IAM instance-profile name, set `instance_profile_name` to its existing name from
 Terraform state; this avoids replacing it merely to adopt the newer naming default.
 Leave this input unset for a new installation. Back up the session volume before
 an upgrade and verify retained sessions and knowledge after the replacement boots.
+
+Optional additional chat interface: set `hermes_ui = true` and follow the
+[Hermes browser UI guide](../../docs/HERMES-UI.md). The native dashboard stays
+on port 9120; the optional interface uses loopback 9122 through SSM.

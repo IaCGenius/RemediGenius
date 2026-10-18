@@ -238,6 +238,15 @@ WantedBy=timers.target
                     '--guard-default-only'], input=(SOURCE/'tools/upgrade_native_profile.py').read_text(),
                     text=True,check=True)
     run('systemctl','restart','rgce-native.service')
+    import native_ui
+    if CFG.get('hermes_ui', False):
+        for _ in range(30):
+            if subprocess.run(['docker','exec','rgce-native','true'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+                break
+            time.sleep(2)
+        native_ui.start('rgce-native', 9122)
+    else:
+        native_ui.stop('rgce-native')
     # Boot service owns gateway startup so reboot cannot race volume/secrets setup.
     run('systemctl','enable','rgce-native-boot.service')
     run('systemctl','enable','--now','rgce-native-hydrate.timer')
