@@ -37,6 +37,15 @@ The guides clone `main`. It includes [tested source updates after v0.1.3](CHANGE
 without changing the published tag or downloads. Use `git checkout v0.1.3` after
 cloning if you want that exact release. Record your source commit before deployment.
 
+The latest inventory changes on `main` passed live Spot/Hermes tests for Config
+fallback, Cloud Control inventory, paginated log-group counts and CloudTrail
+creation history with DeepSeek. Whole-service inventory remains bounded and
+partial; a populated Config aggregator and member-account deployment still need
+acceptance testing. These changes have not been qualified as a new release.
+See [tested behavior and pending work](docs/INVENTORY-RECOVERY-PLAN.md#current-validation-status).
+Existing installations must review and apply the expanded collector IAM policies;
+updating skills alone does not grant the required reads.
+
 Hermes is an open-source agent runtime by Nous Research. CE adds the `ce-desk`
 profile, scoped AWS tools and readable security skills. Bring a model supported
 by Hermes; the tested configuration is DeepSeek v4.1 Flash.
