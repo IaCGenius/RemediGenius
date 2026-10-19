@@ -1,5 +1,12 @@
 # Changes
 
+## Documentation updates after v0.2.0
+
+- Separate current setup and recovery diagrams; embed static images for GitHub.
+- Explain compute, model, IAM, evidence and retained-state boundaries.
+- Archive old Lambda diagrams and the obsolete multi-cloud concept in v2.
+- No runtime, deployment or release-tag changes.
+
 ## v0.2.0 — single-compute deployment
 
 - Run deterministic collection on the Docker workstation or Spot host. New AWS

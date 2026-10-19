@@ -23,22 +23,30 @@ Validated configuration: AWS us-east-1 and DeepSeek v4.1 Flash. Other supported 
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  U[Operator] --> UI[Hermes dashboard or optional hermes-ui]
-  UI --> H[Hermes ce-desk: model and CE skills]
-  H --> G[CE scope, workflow and budget checks]
-  G --> S[Local Unix socket]
-  S --> C[Deterministic Python collector]
-  C --> AWS[AWS metadata and security APIs]
-  C --> B[Private versioned S3 bucket]
-  G --> V[Isolated Linux fix validator]
-  H --> D[Retained sessions, cases and model configuration]
-  D --> CP[SQLite-aware checkpoint every two minutes]
-  CP --> B
-  B --> R[Verified restore before Hermes starts]
-  R --> D
-```
+![Current CE setup and collection path](docs/diagrams/ce-current-setup.svg)
+
+**Read the flow:** questions and selected knowledge reach Hermes. The model reasons;
+CE checks tool requests. The local collector reads AWS and saves evidence in S3.
+Results return through the same tool connection. The validator checks fix drafts;
+the operator applies them. Answers appear in chat; decisions can be saved in native Kanban.
+
+- **Spot:** browser access uses SSM; collection uses the instance role.
+- **Workstation:** browser access uses localhost; collection uses your configured AWS credentials.
+- **Model provider:** receives selected context and retrieved evidence. Self-hosted
+  compute does not mean model processing stays inside your AWS account.
+
+[Diagram sources and component map](docs/diagrams/README.md).
+
+### State and recovery
+
+![Retained state, private S3 checkpoints and startup recovery](docs/diagrams/ce-current-recovery.svg)
+
+Existing EBS or Docker state takes priority. Only an empty runtime home is restored
+from a verified S3 checkpoint. Evidence is saved during collection; state checkpoints
+run every two minutes. Activity since the last successful checkpoint can be lost.
+State archives can contain credentials: keep them private. Daily checks pause when
+compute is off.
+
 
 The collector runs on the same compute as Hermes: the Docker workstation or the
 Spot EC2 host. It is deterministic Python, not a model, and it writes raw

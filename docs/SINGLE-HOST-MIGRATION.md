@@ -13,22 +13,9 @@ calls AWS through the SDK and writes raw responses, normalized summaries and
 receipts to S3. It does not ask the model to write collection code. There is no
 Lambda function and no EventBridge schedule.
 
-```mermaid
-flowchart LR
-  U[Operator] --> UI[Hermes dashboard or optional hermes-ui]
-  UI --> H[Hermes ce-desk: model and CE skills]
-  H --> G[CE scope, workflow and budget checks]
-  G --> S[Local Unix socket]
-  S --> C[Deterministic Python collector]
-  C --> AWS[AWS metadata and security APIs]
-  C --> B[Private versioned S3 bucket]
-  G --> V[Isolated Linux fix validator]
-  H --> D[Retained sessions, cases and model configuration]
-  D --> CP[SQLite-aware checkpoint]
-  CP --> B
-  B --> R[Verified restore before Hermes starts]
-  R --> D
-```
+![Current setup](diagrams/ce-current-setup.svg)
+
+See [the component map](diagrams/README.md) for source paths and access boundaries.
 
 Skills guide investigation. Code enforces the allowed operations, scope,
 pagination bounds and workflow. A model cannot gain more AWS permissions by
@@ -63,6 +50,8 @@ and [Amazon Linux 2023 Python guidance](https://docs.aws.amazon.com/linux/al2023
 
 ## Storage and interruption
 
+![State and recovery](diagrams/ce-current-recovery.svg)
+
 S3 evidence is written during collection. Sessions and cases use retained EBS
 while the instance is running. A two-minute timer makes SQLite-aware checkpoints
 to S3. An immutable checkpoint is uploaded first; the latest manifest is updated
@@ -86,7 +75,7 @@ manifest or your required recovery copies.
 ## Model and knowledge
 
 An existing model secret can be supplied; the host reads only that secret and
-returns `GetSecretValue` for that exact ARN. For a customer-managed encryption
+uses `GetSecretValue` for that exact ARN. For a customer-managed encryption
 key, grant the specific decrypt permission. Otherwise configure the provider and
 key inside Hermes after login. Keep the custom OpenAI-compatible route
 (`provider: custom`, `key_env: MODEL_API_KEY`). Never put a key in a chat message
