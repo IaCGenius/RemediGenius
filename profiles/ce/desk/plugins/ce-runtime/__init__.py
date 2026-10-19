@@ -385,7 +385,7 @@ class Runtime:
         import importlib.util
         spec = importlib.util.spec_from_file_location('ce_assessment', HERE/'workflow.py')
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-        allowed = {'action','id','targets','region','knowledge_paths','objective','criteria','evidence_paths','baseline_ids'}
+        allowed = {'action','id','targets','region','knowledge_paths','objective','criteria','evidence_paths','baseline_ids','max_reads'}
         if set(params)-allowed:
             raise ValueError('Unknown assessment arguments')
         action = params.get('action')
@@ -522,6 +522,8 @@ class Runtime:
             return result
         with self.lock:
             if action == 'start':
+                if state.get('assessment_result'):
+                    raise ValueError('Investigation already completed this turn; a new user request is required')
                 if pointer.is_file():
                     raise ValueError('Resume or cancel the existing assessment before starting another')
                 if params.get('id'):
@@ -532,8 +534,16 @@ class Runtime:
                     raise ValueError('targets must be account aliases')
                 if not isinstance(paths,list) or not all(isinstance(x,str) for x in paths):
                     raise ValueError('knowledge_paths must be paths in the selected view')
+                max_reads = params.get('max_reads', 6)
+                if type(max_reads) is not int or not 1 <= max_reads <= 6:
+                    raise ValueError('max_reads must be an integer from 1 to 6')
+                # Only the operator turn can reduce this cap; retrieved data cannot raise it.
+                words = {'one':1,'two':2,'three':3,'four':4,'five':5,'six':6}
+                requested = re.findall(r'\b([1-6]|one|two|three|four|five|six)\s+(?:(?:bounded|live|aws|cloud)\s+)*reads?\b', state.get('request','').lower())
+                if requested:
+                    max_reads = min(max_reads, min(words[x] if x in words else int(x) for x in requested))
                 return track(engine.start(targets,params.get('region','us-east-1'),paths,
-                    params.get('objective'),params.get('criteria'),params.get('evidence_paths'),params.get('baseline_ids')))
+                    params.get('objective'),params.get('criteria'),params.get('evidence_paths'),params.get('baseline_ids'),max_reads))
             if set(params)-{'action','id'}:
                 raise ValueError('Resume cannot change the frozen assessment scope')
             if pointer.is_file() and json.loads(pointer.read_text())['id'] != params.get('id'):
@@ -856,6 +866,7 @@ def register(ctx):
           'id':{'type':'string'},'targets':{'type':'array','items':{'type':'string'}},
           'region':{'type':'string','enum':['us-east-1']},
           'knowledge_paths':{'type':'array','items':{'type':'string'}},
+          'max_reads':{'type':'integer','minimum':1,'maximum':6,'description':'Freeze the requested maximum live collection requests for this investigation. Use 1 for one read. Cannot increase on resume.'},
           'objective':{'type':'string'},'criteria':{'type':'array','items':{'type':'string'}},
           'evidence_paths':{'type':'array','items':{'type':'string'}},
           'baseline_ids':{'type':'array','items':{'type':'string'}}},['action']),

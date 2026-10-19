@@ -83,8 +83,9 @@ Existing knowledge remains operator supplied. Its source, scope and hash must
 remain visible. Chat intake now stages a Markdown note, shows its scope and asks
 the operator to send an exact publication phrase. Published notes are ordinary
 files with a content hash. They are included in state checkpoints. File-based
-knowledge views still use the existing import/export tools. Full replacement
-recovery and file-view migration remain acceptance checks.
+knowledge views still use the existing import/export tools. Spot replacement retained the published note and conversations. A separate empty
+Docker volume restored the checkpointed file view with a matching content hash.
+These checks do not imply zero data loss between checkpoints.
 
 ## Scheduling
 

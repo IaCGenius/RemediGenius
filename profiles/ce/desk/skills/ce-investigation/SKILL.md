@@ -21,6 +21,11 @@ Identify the objective, configured account aliases, region, selected evidence an
 knowledge, and one to six completion criteria. Preserve explicit user filters/time
 windows. Pass configured aliases (for example `default`), not raw account IDs, in targets.
 Ask when a material scope choice is ambiguous; do not invent identifiers.
+Preserve a requested read count in `max_reads` when starting the investigation.
+For "one bounded read", pass `max_reads: 1`; choose the single relevant operation,
+not additional status or coverage calls. The runtime freezes this limit and shows
+it in the packet. One read means one collection request; its page limit is separate.
+Do not start a second investigation to evade the cap. Explain any unanswered part.
 For resource inventory, keep the objective about the requested resources and
 scope. Do not rewrite it as a restriction to specific services or tools. A missing
 service-specific API does not mean inventory is unavailable: Config and Cloud

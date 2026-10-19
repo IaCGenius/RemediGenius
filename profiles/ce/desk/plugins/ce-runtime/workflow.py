@@ -266,7 +266,7 @@ class Investigation(Assessment):
                          for item in run['results']]
         return result
 
-    def start(self, targets, region, knowledge_paths, objective, criteria, evidence_paths=None, baseline_ids=None):
+    def start(self, targets, region, knowledge_paths, objective, criteria, evidence_paths=None, baseline_ids=None, max_reads=6):
         if not isinstance(objective, str) or not 1 <= len(objective) <= 8000:
             raise ValueError('Supply a bounded investigation objective')
         if not isinstance(criteria, list) or not 1 <= len(criteria) <= 6 or not all(isinstance(x,str) and 0<len(x)<=500 for x in criteria):
@@ -277,12 +277,14 @@ class Investigation(Assessment):
         baselines = baseline_ids or []
         if len(baselines)>6 or not all(isinstance(x,str) and re.fullmatch('[a-f0-9]{32}',x) for x in baselines):
             raise ValueError('Invalid baseline run IDs')
+        if type(max_reads) is not int or not 1 <= max_reads <= 6:
+            raise ValueError('max_reads must be an integer from 1 to 6')
         initial=super().start(targets, region, knowledge_paths)
         run=self.load(initial['id'])
         run.update(version=2, answer_contract=1, objective=objective, criteria=criteria, evidence_paths=paths,
                    baseline_ids=baselines, plan=[], round=0, actions=0, reads=0, pages=0,
                    signatures=[], decisions=[], plan_repairs=0, capability_manifest=self.capabilities,
-                   limits={'rounds':3,'actions':12,'reads':6,'pages':60,'planning_repairs':1},
+                   limits={'rounds':3,'actions':12,'reads':max_reads,'pages':60,'planning_repairs':1},
                    created_at=now(), stage='context')
         self.save(run)
         return self.view(run)
@@ -384,7 +386,7 @@ class Investigation(Assessment):
                 run['knowledge']=[self.knowledge({'path':p,'limit':200}) for p in run['knowledge_paths']]
                 run['stage']='plan'
             elif stage=='plan':
-                if run['round']>=3 or run['actions']>=12 or run['reads']>=6:
+                if any(run[k]>=run['limits'][limit] for k,limit in (('round','rounds'),('actions','actions'),('reads','reads'))):
                     run['outcome']='INCONCLUSIVE_BUDGET';run['stage']='interpret'
                 else:
                     output=self.reason('plan',self.packet(run),run.get('plan_error',''))
@@ -403,6 +405,10 @@ class Investigation(Assessment):
                             run['stage']='interpret'
             elif stage=='collect':
                 step=run['plan'][run['cursor']];req=step['request']
+                # Recheck persisted limits immediately before dispatch, including resumed plans.
+                if run['actions'] >= run['limits']['actions'] or (req['action']=='read' and
+                        (run['reads'] >= run['limits']['reads'] or run['pages']+req['max_pages'] > run['limits']['pages'])):
+                    raise ValueError('Dispatch exceeds frozen investigation budget')
                 run['actions']+=1;run['signatures'].append(json.dumps(req,sort_keys=True))
                 if req['action']=='read':run['reads']+=1;run['pages']+=req['max_pages']
                 # Persist consumption before dispatch: crash cannot reset budgets.

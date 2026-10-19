@@ -8,7 +8,7 @@ import time
 ROOT=Path(__file__).resolve().parents[1]
 
 def run(*args):
-    return subprocess.run(args,check=True,capture_output=True,text=True).stdout
+    return subprocess.run(args,check=True,capture_output=True,text=True,encoding="utf-8").stdout
 
 def refresh(session, directory):
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
@@ -30,7 +30,7 @@ t=p/'credentials.pending';t.write_bytes(sys.stdin.buffer.read());os.chown(t,1000
 c=p/'config';c.write_text('[default]\\ncredential_process = python /app/credentials.py\\n');os.chown(c,10000,10000);os.chmod(c,0o600)
 """
     subprocess.run(['docker','run','--rm','-i','--network','none','--user','0:0','-v',name+'-operator:/run/operator',
-                    'remedigenius-collector:local','python','-c',writer],input=json.dumps(value),text=True,check=True,capture_output=True)
+                    'remedigenius-collector:local','python','-c',writer],input=json.dumps(value),text=True,encoding="utf-8",check=True,capture_output=True)
     return expiry.isoformat()
 
 def prepare_state(name, config, directory, state_volume):
@@ -51,6 +51,11 @@ def import_view(name, state_volume, source):
     source=Path(source).resolve()
     if not (source/'index.md').is_file() or any(p.is_symlink() for p in source.rglob('*')):
         raise ValueError('Knowledge view needs index.md and must not contain symbolic links')
+    # Older Docker bind mounts left this directory owned by root. Repair only
+    # the CE shared directory, not the operator's source or the whole data volume.
+    run('docker','run','--rm','--network','none','--user','0:0','-v',state_volume+':/state',
+        'remedigenius-collector:local','python','-c',
+        "from pathlib import Path; import os; p=Path('/state/shared'); p.mkdir(exist_ok=True); os.chown(p,10000,10000)")
     script="""from pathlib import Path
 import shutil,uuid
 root=Path('/state/shared');root.mkdir(parents=True,exist_ok=True)
@@ -89,7 +94,7 @@ def start(name, config, directory, state_volume):
     raise RuntimeError('Local collector did not start. Inspect its container logs; do not share credentials.')
 
 def stop(name):
-    result=subprocess.run(['docker','inspect',name+'-collector'],capture_output=True,text=True)
+    result=subprocess.run(['docker','inspect',name+'-collector'],capture_output=True,text=True,encoding="utf-8")
     if result.returncode:return
     if json.loads(result.stdout)[0]['Config'].get('Labels',{}).get('com.remedigenius.ce')!='collector':
         raise ValueError('Collector container is not owned by this launcher')

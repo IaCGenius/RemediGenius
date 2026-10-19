@@ -121,3 +121,24 @@ def test_returned_normalized_artifact_is_admitted_but_invented_sibling_is_not(tm
     assert e.view(saved)['results'][0]['result']['files'][0]['path']=='normalized/actual/findings.json'
     with pytest.raises(ValueError,match='Evidence path'):
         e.validate_plan(saved,json.dumps(plan({'action':'show','path':'normalized/invented/findings.json'})))
+
+def test_lower_read_cap_is_frozen_and_prevents_followup_read(tmp_path):
+    req={'action':'read','target':'default','region':'us-east-1','service':'ec2',
+         'operation':'describe_instances','parameters':{},'max_pages':1}
+    e,_,calls,models=make(tmp_path,[plan(req)])
+    run=e.start(['default'],'us-east-1',[],'One read only',['Report result'],max_reads=1)
+    for _ in range(8):run=e.advance(run['id'])
+    assert len(calls)==1 and run['limits']['reads']==1
+    assert run['status']=='COMPLETE' and run['outcome']=='INCONCLUSIVE_BUDGET'
+    assert len([s for s,p in models if s=='plan'])==1
+
+
+def test_dispatch_rechecks_saved_plan_read_budget(tmp_path):
+    e,r,c,m=make(tmp_path,[])
+    run=e.load(r['id']);run.update(stage='collect',reads=1,cursor=0)
+    run['limits']['reads']=1
+    run['plan']=[{'question':'Must not execute','request':{'action':'read','target':'default',
+        'region':'us-east-1','service':'ec2','operation':'describe_instances','parameters':{},'max_pages':1}}]
+    e.save(run)
+    result=e.advance(r['id'])
+    assert result['status']=='BLOCKED' and not c

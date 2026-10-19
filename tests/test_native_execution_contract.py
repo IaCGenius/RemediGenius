@@ -367,3 +367,9 @@ def test_active_home_uses_hermes_profile_context_not_process_environment(monkeyp
     finally:
         selected.reset(token)
     assert runtime.active_home()==tmp_path/'default'
+
+def test_operator_read_limit_cannot_be_expanded_by_model(rt):
+    rt.turns[('session','turn')]['request']='Check Config with one bounded read.'
+    result=rt.assessment(rt.turns[('session','turn')],{'action':'start','objective':'Check Config',
+        'criteria':['Report current state'],'knowledge_paths':[], 'max_reads':6})
+    assert result['limits']['reads']==1
