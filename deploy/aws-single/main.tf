@@ -31,7 +31,8 @@ variable "name" {
   default = "rgce-simple"
 }
 variable "running" {
-  default = false
+  description = "Start CE on first apply. Set false to stop compute after initial setup."
+  default = true
 }
 variable "source_zip" {
   type = string

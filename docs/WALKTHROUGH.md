@@ -3,7 +3,7 @@
 The v0.1.3 baseline is **AWS us-east-1 and DeepSeek v4.1 Flash**. You supply your
 own AWS access and model credentials. CE uses native Hermes as its agent and UI;
 the scoped reader collects AWS facts, and S3 retains their receipts. Start with
-[the architecture](diagrams/ce-mvp-architecture.html).
+[the architecture](SINGLE-HOST-MIGRATION.md).
 
 The screenshots show the existing native UI, not a new qualification of every
 source update. Current `main` adds [structured investigation answers](ANSWER-CONTRACT.md);
@@ -16,7 +16,7 @@ see the [change log](../CHANGELOG.md) for differences from the published tag.
 | Your workstation, Docker | [Workstation setup](WORKSTATION-HERMES.md) | Named Docker volume for conversations/cases; AWS S3 for collected evidence |
 | Your AWS account, Spot EC2 | [AWS setup](NATIVE-CE-QUICKSTART.md) | Retained EBS for conversations/cases; S3 for evidence and selected knowledge |
 
-Both paths use the AWS read executor and your configured scope. Local Docker is
+Both paths use the local deterministic collector and your configured scope. Local Docker is
 not an offline AWS simulator. Review the supplied Terraform before applying it.
 The guides distinguish operator credentials, the bounded reader identity, model
 credentials, and the dashboard login. Never paste any of these secrets into chat.
@@ -61,10 +61,10 @@ have no findings in this account. CE does not enable services for you.
 
 ## 4. Bring one piece of organizational context
 
-Ask Hermes to help draft a short policy or application note. Review it, save it as
+Ask CE to stage a short policy with its scope. Review the draft and send the exact publication phrase it returns. For file-based intake, save the source as
 Markdown, and follow [the knowledge walkthrough](NATIVE-KNOWLEDGE-QUICKSTART.md)
 to import it, select a view, and activate that view for your deployment. Supported
-document conversion uses MarkItDown. Chat text or an uploaded attachment alone
+document conversion uses MarkItDown. Unpublished chat text or an uploaded attachment alone
 does not publish shared knowledge.
 
 Ask:
@@ -99,10 +99,10 @@ See [the operating loop](OPERATING-LOOP.md) for closure reasons and limitations.
 Enable the deterministic schedule explicitly in your deployment configuration
 and start with 24 hours. Ask **“Show the latest scheduled checks, freshness and
 what changed.”** The schedule does not call an LLM and runs independently of the
-Spot instance. More frequent checks cost additional AWS requests/storage.
-Stopping Hermes does not stop that schedule; disable it separately when needed.
+model conversation while the collector is running. More frequent checks cost additional AWS requests/storage.
+Stopping the collector stops collection. Spot defaults to daily bounded checks; workstation checks must be selected explicitly.
 
 Keep deployment inputs and secrets private. Back up your conversation/case volume;
-S3 evidence alone does not restore the Kanban database. The setup guides explain
+S3 evidence alone does not restore the Kanban database; the separate private state checkpoint does. The setup guides explain
 stop/restart and credential renewal. This is a single-operator release with bounded
 collection, not continuous monitoring of every AWS resource or automatic remediation.

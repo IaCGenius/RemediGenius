@@ -8,6 +8,7 @@ import secrets
 import subprocess
 import time
 import zipfile
+import yaml
 
 import boto3
 from package_native_hermes import package
@@ -34,6 +35,13 @@ def private_directory(path):
     else:
         path.chmod(0o700)
 
+
+def seed_config(text, key, name, base_url):
+    """Fill CE's profile model from the launcher, or omit it when keyless so
+    Hermes shows its native model onboarding instead of a ready-looking model."""
+    if key:
+        return text.replace('__MODEL_NAME__',json.dumps(name)).replace('__MODEL_BASE_URL__',json.dumps(base_url))
+    return yaml.safe_dump({k:v for k,v in yaml.safe_load(text).items() if k!='model'},sort_keys=False)
 
 class Workstation:
     def __init__(self, config):
@@ -88,10 +96,11 @@ class Workstation:
             raise ValueError('CE source changed. Review it, back up the volume, then pass --upgrade to apply it.')
         with zipfile.ZipFile(archive) as source:
             source.extractall(self.root/'source') # generated locally by the reviewed packager
+        key=(self.session().client('secretsmanager').get_secret_value(SecretId=self.cfg['model_secret_arn'])['SecretString']
+             if self.cfg.get('model_secret_arn') else os.environ.get(self.cfg.get('model_key_env','MODEL_API_KEY'),''))
         profile=self.root/'source/profiles/ce/desk'
         cfg=profile/'config.yaml'
-        cfg.write_text(cfg.read_text(encoding='utf-8').replace('__MODEL_NAME__',json.dumps(self.cfg['model_name']))
-                       .replace('__MODEL_BASE_URL__',json.dumps(self.cfg['model_base_url'])),encoding='utf-8')
+        cfg.write_text(seed_config(cfg.read_text(encoding='utf-8'),key,self.cfg['model_name'],self.cfg['model_base_url']),encoding='utf-8')
         shared=self.root/'shared'; shared.mkdir(exist_ok=True)
         knowledge=self.cfg.get('knowledge_dir')
         if knowledge and not (Path(knowledge)/'index.md').is_file():
@@ -102,8 +111,6 @@ class Workstation:
         if not login_path.exists():
             login_path.write_text(json.dumps({'username':'ce','password':secrets.token_urlsafe(24),'secret':secrets.token_urlsafe(32)}))
         login=json.loads(login_path.read_text())
-        key=(self.session().client('secretsmanager').get_secret_value(SecretId=self.cfg['model_secret_arn'])['SecretString']
-             if self.cfg.get('model_secret_arn') else os.environ.get(self.cfg.get('model_key_env','MODEL_API_KEY'),''))
         values={'MODEL_API_KEY':key,'HERMES_DASHBOARD':'1','HERMES_DASHBOARD_PORT':'9120',
                 'HERMES_DASHBOARD_BASIC_AUTH_USERNAME':login['username'],
                 'HERMES_DASHBOARD_BASIC_AUTH_PASSWORD':login['password'],

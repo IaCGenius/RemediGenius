@@ -21,23 +21,59 @@ Validated configuration: AWS us-east-1 and DeepSeek v4.1 Flash. Other supported 
 [![Release](https://img.shields.io/github/v/release/IaCGenius/RemediGenius)](https://github.com/IaCGenius/RemediGenius/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-![CE architecture: user and selected knowledge through Hermes, scoped execution, durable evidence and follow-up](docs/diagrams/ce-mvp-architecture.png)
+## Architecture
 
-[Explore the architecture](docs/diagrams/ce-mvp-architecture.html) · [Architecture and capability detail](docs/CURRENT-CE-OFFERING.md)
+```mermaid
+flowchart LR
+  U[Operator] --> UI[Hermes dashboard or optional hermes-ui]
+  UI --> H[Hermes ce-desk: model and CE skills]
+  H --> G[CE scope, workflow and budget checks]
+  G --> S[Local Unix socket]
+  S --> C[Deterministic Python collector]
+  C --> AWS[AWS metadata and security APIs]
+  C --> B[Private versioned S3 bucket]
+  G --> V[Isolated Linux fix validator]
+  H --> D[Retained sessions, cases and model configuration]
+  D --> CP[SQLite-aware checkpoint every two minutes]
+  CP --> B
+  B --> R[Verified restore before Hermes starts]
+  R --> D
+```
 
-## Deployment simplification in progress
+The collector runs on the same compute as Hermes: the Docker workstation or the
+Spot EC2 host. It is deterministic Python, not a model, and it writes raw
+responses, normalized summaries and receipts to S3. There is no Lambda function
+and no EventBridge schedule. The earlier Lambda deployment is archived in the
+separate v2 project. Detail: [architecture and recovery boundaries](docs/SINGLE-HOST-MIGRATION.md)
+and [capability detail](docs/CURRENT-CE-OFFERING.md).
 
-The working tree now replaces Lambda collection with the same deterministic local
-collector on Docker or Spot. S3 stores evidence and private state checkpoints.
-This migration is being tested; the published v0.1.3 tag is unchanged.
+AWS credentials stay in the collector. On Spot, the instance role supplies the
+collector's metadata/security reads plus narrow access to CE's own bucket and
+retained EBS volume; Hermes receives no AWS credentials and runs with
+`AWS_EC2_METADATA_DISABLED=true`. A model cannot widen its own access by changing
+a prompt. See [permissions](docs/IAM.md).
 
-- [New Spot setup](deploy/aws-single/README.md)
-- [New Docker setup](docs/LOCAL-COMPUTE-WORKSTATION.md)
+## Deployment status
+
+The working tree replaces Lambda collection with the same deterministic collector
+on Docker or Spot. This migration is being acceptance-tested; the published
+v0.1.3 tag is unchanged, and a clean-deployment validation is still pending. The
+release tag link above is historic.
+
+- [Single AWS Spot walkthrough](deploy/aws-single/README.md) — read this for the current path
+- [Docker workstation setup](docs/LOCAL-COMPUTE-WORKSTATION.md)
 - [Architecture and recovery boundaries](docs/SINGLE-HOST-MIGRATION.md)
 
-The earlier deployment is archived in the separate v2 project for hosted reuse.
-Do not apply the new Terraform against an old stack's state. Older architecture
-images and release-validation records below describe the published baseline.
+Do not apply the new Terraform against an old stack's state. The earlier
+deployment is archived in the separate v2 project for hosted reuse. Older
+release-validation records and any archived diagram describe the published
+baseline, not this working tree.
+
+Model access is the operator's. The tested configuration is DeepSeek v4.1 Flash
+through a custom OpenAI-compatible endpoint. Supply a key as an existing Secrets
+Manager secret, or configure the provider in Hermes after login. **Without a
+working model key, CE is not ready to investigate.** Never put a key in a chat
+message or in tfvars.
 
 ## Start with a useful question
 
@@ -47,9 +83,10 @@ images and release-validation records below describe the published baseline.
 
 ## Choose your setup
 
-The guides clone `main`. It includes [tested source updates after v0.1.3](CHANGELOG.md)
+The guides clone `main`, which includes [tested source updates after v0.1.3](CHANGELOG.md)
 without changing the published tag or downloads. Use `git checkout v0.1.3` after
-cloning if you want that exact release. Record your source commit before deployment.
+cloning to build that exact release, and record your source commit before
+deployment.
 
 The latest inventory changes on `main` passed live Spot/Hermes tests for Config
 fallback, Cloud Control inventory, paginated log-group counts and CloudTrail
@@ -65,8 +102,6 @@ profile, scoped AWS tools and readable security skills. Bring a model supported
 by Hermes; the tested configuration is DeepSeek v4.1 Flash.
 
 CE reuses Hermes's conversation, skills, model routing and manual Kanban. A small native runtime plugin admits bounded operations and shares retrieved context with a critic. A separate deterministic local collector retrieves AWS records and writes receipts to S3. The model interprets evidence; it does not rewrite source observations or apply customer-cloud fixes.
-
-
 
 | | Workstation | Your AWS account |
 |---|---|---|
@@ -105,12 +140,12 @@ model key or cloud deployment. [What this demo shows](docs/DEMO.md). This is not
 
 See [scope and limits](docs/LIMITS.md) for what is not included and [model/data choices](docs/MODELS.md) before connecting your account.
 
-[Illustrated first-use walkthrough](docs/WALKTHROUGH.md) · [Login and profile screenshots](docs/NATIVE-CE-QUICKSTART.md#3-retrieve-your-login-open-the-tunnel-and-select-ce-desk)
+[Illustrated first-use walkthrough](docs/WALKTHROUGH.md) · [Login and profile screenshots](docs/WALKTHROUGH.md#2-sign-in-and-select-ce-desk)
 
 ## Bring context, see it used, return later
 
 1. Ask Hermes what sources and scope it can actually read, then collect one bounded result.
-2. Follow [the knowledge walkthrough](docs/NATIVE-KNOWLEDGE-QUICKSTART.md) to import one real policy or ownership note. Generated views are readable; edit originals and re-import rather than editing view hashes.
+2. Follow [the knowledge walkthrough](docs/NATIVE-KNOWLEDGE-QUICKSTART.md) to import one real policy or ownership note. Generated views are readable; edit originals and re-import rather than editing view hashes. To add a short operator note through chat, ask CE to stage it, review the exact text and scope, then send the returned `publish knowledge <id>` phrase.
 3. Ask: “Which knowledge did you use, why does it apply, and what changed in your recommendation?” Conflicts and unknown applicability stay explicit.
 4. Prepare a proposal and save it on [native Kanban](docs/OPERATING-LOOP.md). After your change process, return to the case and collect fresh evidence.
 
@@ -128,7 +163,7 @@ See [scope and limits](docs/LIMITS.md) for what is not included and [model/data 
 |---|---|
 | Native profile and readable skills | `profiles/ce/desk` |
 | Runtime gate and bounded critic | `profiles/ce/desk/plugins/ce-runtime` |
-| Deterministic collection | `modules/aws-read-executor` |
+| Deterministic collection | `deploy/collector` |
 | Workstation storage / Spot Terraform | `deploy/workstation-storage` / `deploy/aws-single` |
 | Launchers and verification | `tools` / `tests` |
 
@@ -141,4 +176,6 @@ See [deterministic remediation validation](docs/REMEDIATION-VALIDATION.md) for t
 Use the [additional Hermes browser UI](docs/HERMES-UI.md) with the same `ce-desk`
 profile, model, skills and knowledge. The native dashboard remains available.
 Enable it with `hermes_ui` in your workstation configuration or Spot tfvars.
-See the guide for setup, login, tested capabilities and known UI limitations.
+Known limitations (for example the Bots panel can stay loading; use Sessions) are
+being fixed separately and are not part of the current validation claim. See the
+guide for setup, login, tested capabilities and known UI limitations.

@@ -1,53 +1,124 @@
-# Single-compute Spot setup
+# Deploy CE on a single Spot host (AWS)
 
-This replacement deployment is undergoing live acceptance testing. The existing
-Lambda deployment is preserved separately; do not destroy it during migration.
+This is the current AWS deployment path. It creates one Spot Auto Scaling group
+in an existing subnet, runs Hermes and the deterministic collector on that host,
+and stores evidence plus private recovery checkpoints in a private S3 bucket.
 
-## Prerequisites
+**Status:** the local-compute migration is being acceptance-tested. The published
+v0.1.3 tag is unchanged and a clean-deployment validation is still pending. Do not
+apply this stack against an old Lambda deployment's Terraform state. The existing
+Lambda implementation is preserved in the separate v2 project and has not been
+removed.
 
-Use Bash on Linux or WSL2, Terraform >= 1.10, AWS CLI v2 and Python. Sign in to
-AWS with an operator identity allowed to provision this stack. Provisioning needs
-write permissions; the runtime's customer-resource operations remain reads.
-Install the AWS Session Manager plugin for the local tunnel.
+For the equivalent local path, see [Docker workstation](../../docs/LOCAL-COMPUTE-WORKSTATION.md).
+For architecture and recovery boundaries, see [single-host migration](../../docs/SINGLE-HOST-MIGRATION.md).
 
-Use an existing subnet in **us-east-1** with outbound HTTPS access. The stack
-creates no VPC or NAT gateway. A public subnet requires an Internet Gateway route;
-a private subnet needs suitable outbound connectivity. No inbound port is opened.
+## Before you begin
 
-## Create
+Use Bash on Linux or WSL2. Install:
 
-From the repository root:
+- Terraform >= 1.10
+- AWS CLI v2 and the AWS Session Manager plugin
+- Python 3.11+
+
+You need:
+
+- An **operator/provisioning identity** allowed to create IAM roles, EC2/S3
+  resources and the Auto Scaling group. Terraform uses this identity. It is not
+  the runtime identity and is not used by the agent.
+- An **existing subnet in us-east-1** with outbound HTTPS. The stack creates no
+  VPC or NAT gateway. A public subnet needs an Internet Gateway route; a private
+  subnet needs suitable egress. No inbound port is opened.
+- Your own model account and key for the model provider you intend to use.
+
+The default Spot instance types are `t3.large` / `t3a.large` and Hermes is capped
+at 6144 MiB. Leave host memory for the collector, validator and Docker if you
+change these values.
+
+## 1. Get the source and package it
 
 ```bash
+git clone https://github.com/IaCGenius/RemediGenius.git
+cd RemediGenius
 python tools/package_native_hermes.py --output .rgce/spot-source.zip
+```
+
+The packager prints a SHA-256 digest and writes a ZIP. Terraform uploads that ZIP
+and verifies its hash at boot. The packager does not read credentials or upload
+anything.
+
+## 2. Configure and provision
+
+```bash
 cd deploy/aws-single
 cp example.tfvars local.tfvars
-# Edit account_id, subnet_id and the optional model settings.
+# Edit local.tfvars: account_id, subnet_id and any optional settings.
 terraform init
 terraform plan -var-file=local.tfvars
 terraform apply -var-file=local.tfvars
 ```
 
-The default `running = false` provisions durable resources without launching
-compute. Set `running = true` and apply to start the Spot instance. The pool is
-`t3.large` / `t3a.large`; Hermes has a 6144 MiB limit. Leave memory for the collector,
-validator and host when changing these values.
+Variables (see `main.tf` and `example.tfvars`):
 
-The instance builds pinned containers. Bootstrap can take several minutes.
-Read `/var/log/cloud-init-output.log` and the `rgce-native-boot` service through SSM
-if it does not become ready. Do not paste model configuration or secrets in issues.
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `account_id` | yes | Must match the account the provider signs in as; a mismatch fails the plan. |
+| `subnet_id` | yes | Existing subnet in us-east-1 only. |
+| `source_zip` | yes | Path to the packaged ZIP, normally `../../.rgce/spot-source.zip`. |
+| `name` | no | Stack name, default `rgce-simple`. Used for AWS resource names; runtime container names are fixed within that host. |
+| `running` | no | Default `true` starts the Spot instance on first apply. Set `false` and apply to stop it after setup. |
+| `spot_instance_types` | no | Default `["t3.large", "t3a.large"]`. |
+| `container_memory_mb` | no | Hermes limit, default `6144`; valid range 1024–131072. |
+| `hermes_ui` | no | Default `true`; enables the optional browser UI. |
+| `model_secret_arn` | no | Existing Secrets Manager secret holding only the model API key. |
+| `model_name`, `model_base_url` | no | Initial seeds for a new profile. Configure the provider in Hermes for real use. |
+| `model_secret_kms_keys` | no | Customer-managed KMS key ARNs for that secret, if used. |
+| `delete_data_on_destroy` | no | Default `false`. `true` allows irreversible bucket deletion. |
 
-## Connect
+Do not put the model API key in `local.tfvars`, `example.tfvars` or chat. Only the
+secret ARN or the Hermes-side configuration belongs there.
 
-Find the instance with the stack's ASG name, then start a local tunnel:
+What the stack creates: a private, versioned, TLS-only S3 bucket; a Spot Auto
+Scaling group and launch template; a security group with no inbound rules; an
+encrypted 20 GiB retained EBS volume; an instance role and profile; and starts
+the optional UI at boot when `hermes_ui = true`. It creates no Lambda function,
+EventBridge schedule, VPC or NAT gateway.
+
+### Identity split
+
+- **Operator/provisioning identity:** your own credentials, used only for
+  `terraform apply` and the SSM session. It never enters the host.
+- **Runtime instance role:** the collector uses it through IMDSv2. It attaches
+  `SecurityAudit` and `ViewOnlyAccess`, plus narrow `s3:ListBucket`/`s3:GetObject`/
+  `s3:PutObject` on CE's own bucket, `ec2:AttachVolume` for the retained volume,
+  and `secretsmanager:GetSecretValue` for the exact secret you supplied.
+- **Hermes:** receives no AWS credentials. The Hermes container runs with
+  `AWS_EC2_METADATA_DISABLED=true` and requires IMDSv2 (`http_tokens = "required"`,
+  hop limit 1). The model cannot call IMDS or widen its access through a prompt.
+
+Terraform state contains generated dashboard credentials and bucket names. Keep
+it private and back it up.
+
+## 3. Start and log in
+
+The first boot builds pinned containers and can take several minutes. Watch
+`/var/log/cloud-init-output.log` and the `rgce-native-boot` service through SSM
+if it does not become ready.
 
 From the repository root, the helper can show the login privately and open the
-tunnel: `bash tools/open-native-hermes.sh --name rgce-simple --with-login`.
-Use your chosen stack name. The helper reads the retained login through SSM;
-it does not require a dashboard secret in Secrets Manager. Your organization's
-SSM session logging settings apply. The PowerShell helper remains a secondary option.
+tunnel:
 
-For a tunnel without displaying credentials:
+```bash
+bash tools/open-native-hermes.sh --name rgce-simple --with-login
+```
+
+Use your chosen `name`. The helper finds the InService instance from the ASG,
+reads `/data/hermes/ce-login.json` through SSM, and forwards the dashboard to
+`127.0.0.1:9125`. It does not need a dashboard secret in Secrets Manager. Your
+organization's SSM session logging applies. A PowerShell helper
+(`tools/open-native-hermes.ps1`) remains a secondary option.
+
+To open the tunnel without displaying credentials:
 
 ```bash
 aws ssm start-session --region us-east-1 --target i-YOUR_INSTANCE \
@@ -55,44 +126,122 @@ aws ssm start-session --region us-east-1 --target i-YOUR_INSTANCE \
   --parameters 'portNumber=9120,localPortNumber=9125'
 ```
 
-In a separate SSM shell, read `/data/hermes/ce-login.json` privately to obtain the
-username and password. Open `http://127.0.0.1:9125/chat?profile=ce-desk` and sign in.
-Do not paste the login in chat. The optional UI uses remote port 9122; forward it
-to another local port and use the same login, then select **ce-desk**.
+Then, in a separate SSM shell, read the login privately:
 
-## Model and first use
+```bash
+sudo cat /data/hermes/ce-login.json
+```
 
-Use your own model account. CE has been exercised with DeepSeek v4.1 Flash and
-Qwen through the configured custom endpoint; this does not validate every provider.
-Use a reasoning model with reliable tool calling and sufficient context capacity.
+Open `http://127.0.0.1:9125/chat?profile=ce-desk` and sign in. Keep the password
+out of chat and screenshots. The optional UI uses remote port 9122; forward it to
+another local port and use the same login, then select **ce-desk**:
 
-An optional existing Secrets Manager secret can seed `MODEL_API_KEY`. This stack
-does not create a model key. If omitted, configure the provider, model and key with
-Hermes before an investigation. Never put a key into a chat message or tfvars.
+```bash
+aws ssm start-session --region us-east-1 --target i-YOUR_INSTANCE \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters 'portNumber=9122,localPortNumber=9123'
+```
+
+## 4. Configure the model
+
+The tested configuration is a reasoning model with reliable tool calling and
+64k+ context, reached through a custom OpenAI-compatible endpoint. CE has been
+exercised with DeepSeek v4.1 Flash. Use your own provider account.
+
+Two supported ways to supply the key:
+
+1. **Existing Secrets Manager secret (optional seed).** Create a secret in the
+   deployment region whose value is only the raw API key (no JSON, no trailing
+   newline). Put only its ARN in `model_secret_arn`. Attach
+   `model_secret_kms_keys` if the secret uses a customer-managed key.
+2. **Hermes native configuration.** Leave `model_secret_arn` empty and configure
+   the provider and key in Hermes after login, using the Hermes Models
+   page/config. Keep the custom OpenAI-compatible route (`provider: custom`,
+   `key_env: MODEL_API_KEY`) that CE seeds; switching to a native provider can
+   require other environment variables the launcher does not inject.
+
+At each boot the host runs one bounded tool-calling probe. The result codes
+(`CE-MODEL-AUTH`, `CE-MODEL-ENDPOINT`, `CE-MODEL-CONTEXT`, `CE-MODEL-TOOLS`, and
+others) are listed in [startup model probe](../../docs/TROUBLESHOOTING.md#startup-model-probe).
 A model ID alone does not prove access. Retained Hermes configuration takes
-precedence over initial seeds; do not expect changing tfvars to replace it.
+precedence over the tfvars seed, so changing `model_name` later may not replace
+an existing profile.
 
-Try: `What AWS target can you access? Separate configured access from tested reads.`
-Then ask for a bounded inventory or findings investigation. To supply context,
-ask CE to stage a short organization policy with its scope. Review the draft and
-send the exact publication phrase returned by the knowledge tool. This records
-an operator assertion, not an independently verified AWS fact.
+**Without a working model key, CE is not ready to investigate.** The collector
+and dashboard still run, but model-backed investigation fails. Never put a key in
+a chat message or in tfvars.
 
-## Persistence, stop and remove
+## 5. First real question
 
-Raw evidence and receipts go to the private versioned S3 bucket during collection.
-Sessions, cases, knowledge and model configuration live on retained EBS and are
-checkpointed to S3 every two minutes. This is a recovery interval, not zero data
-loss. Check `systemctl status rgce-state.timer` and `rgce-state.service`.
-Model credentials can be included in state backups. Protect bucket access.
+Ask: `What AWS target can you access? Separate configured access from tested reads.`
 
-Set `running = false` and apply to stop compute while retaining data. Scheduled
-checks also stop. On restart, at most one overdue check runs; missed intervals
-are not replayed. Read-only scheduled checks do not call an LLM.
+Then request one bounded investigation, for example a current Security Hub
+findings read or a CloudTrail management-event lookup. The model interprets
+deterministic evidence; it does not collect records itself.
 
-Back up Terraform state and the S3 bucket before removal. Use `terraform destroy`
-with the same var-file. By default a non-empty bucket prevents complete removal.
-The retained session volume creates a final snapshot when destroyed. Existing
-model secrets are not owned or deleted by CE. Deliberately setting
-`delete_data_on_destroy = true` permits deletion of the bucket and its contents;
-this is irreversible and should only be used after choosing what to retain.
+## 6. Receipts, knowledge and cases
+
+- **Receipts.** Collection writes raw responses, normalized summaries and a
+  receipt to the private bucket under `<prefix>/raw`, `<prefix>/normalized`,
+  `<prefix>/receipts` and `<prefix>/catalog.json`. Ask CE to cite the exact
+  receipt path and inspect it before trusting a claim. A receipt describes a
+  bounded request, not organization-wide coverage.
+- **Knowledge.** Ask CE to stage a short organization note with its scope.
+  Review the exact Markdown and scope, then send the returned confirmation phrase
+  `publish knowledge <id>` in a separate message. Published notes are ordinary
+  hashed files under the retained profile and are never treated as AWS facts.
+- **Cases.** Use the native Hermes Kanban through the `ce_case` tool. Reads are
+  `list`/`show`; `create`, `comment`, `wait`, `verify`, `close` and `archive`
+  save local case activity only. There are no cloud changes.
+
+## 7. Persistence
+
+Raw evidence and receipts go to the private versioned S3 bucket during
+collection. Sessions, cases, knowledge and model configuration live on the
+retained EBS volume and are checkpointed to S3 every two minutes. The restore is
+hash-checked and runs before Hermes opens its databases; existing EBS wins.
+
+The two-minute interval is a recovery interval, not zero-data-loss replication.
+An abrupt loss can drop activity since the last successful checkpoint. Check
+`systemctl status rgce-state.timer` and `rgce-state.service`. Model credentials
+can be included in state backups, so protect the whole state prefix. The
+model-facing evidence reader cannot read that prefix.
+
+## 8. Stop, back up, remove
+
+Stop compute while retaining data:
+
+```bash
+# In local.tfvars: running = false
+terraform apply -var-file=local.tfvars
+```
+
+Scheduled checks also stop. On restart at most one overdue check runs; missed
+intervals are not replayed. Read-only scheduled checks do not call a model.
+
+Back up the Terraform state and the S3 bucket before removal. Then:
+
+```bash
+terraform destroy -var-file=local.tfvars
+```
+
+By default a non-empty bucket prevents complete removal. The retained session
+volume creates a final snapshot when destroyed. Existing model secrets are not
+owned or deleted by CE. Setting `delete_data_on_destroy = true` permits deletion
+of the bucket and its contents; this is irreversible and only appropriate after
+you choose what to retain.
+
+## Screenshots
+
+Fresh-deployment screenshots for this path are added after the current
+acceptance run. No image links are published here until that run is captured.
+Existing baseline screenshots: [login and profile](../../docs/WALKTHROUGH.md#2-sign-in-and-select-ce-desk).
+
+## Optional browser UI
+
+`hermes_ui = true` builds and starts the additional browser UI on remote port
+9122. It is a second interface to the same gateway and `ce-desk` profile; the
+native dashboard stays available. Known limitations (for example the Bots panel
+can stay loading; use Sessions; skill category search can return no results) are
+being fixed separately and are not part of the current validation claim. See
+[the optional UI guide](../../docs/HERMES-UI.md).

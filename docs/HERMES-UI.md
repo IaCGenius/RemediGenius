@@ -54,11 +54,10 @@ There are no new security-group ingress rules or IAM permissions.
 
 ## Login and use
 
-1. Use the **same dashboard username/password**, obtained through the normal
+1. On first visit, the UI redirects to the native gateway login. Use the **same dashboard username/password**, obtained through the normal
    workstation `login` command or the Spot host's retained `ce-login.json` through SSM. Never paste a
    model key into chat. The gateway handles authentication.
-2. Choose **Sessions**, then an existing `ce-desk` conversation or **New session
-   in ce-desk**. Confirm the profile before sending sensitive context.
+2. Select **ce-desk** in the UI profile selector, then open or create a session. The optional UI does not use the native dashboard's `?profile=ce-desk` URL parameter. Confirm the profile before sending context.
 3. Ask a question, inspect the tool cards, and continue with follow-up questions.
    For example: “List our shared knowledge,” then “Open the encryption rule.”
 4. Use the original dashboard for controls whose parity is not verified below.
@@ -108,4 +107,3 @@ Source: `deploy/hermes-ui/` and `tools/native_ui.py`. Upstream is pinned to comm
 the selected profile in cookie-ticket and token WebSocket URLs. If the upstream
 connector changes, the build fails for review rather than silently skipping the
 patch. The final nginx image is digest-pinned; no upstream backend is installed.
-

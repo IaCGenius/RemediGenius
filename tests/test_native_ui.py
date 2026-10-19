@@ -40,3 +40,9 @@ def test_package_contains_ui_without_private_files(tmp_path):
     for f in ['Dockerfile','patch_profile.py','nginx.conf','UPSTREAM-LICENSE']:
         assert 'deploy/hermes-ui/'+f in names
     assert not any('.env' in p or '.rgce' in p for p in names)
+
+def test_ui_redirects_unauthenticated_to_native_login():
+    conf = (Path(native_ui.ROOT) / 'deploy/hermes-ui/nginx.conf').read_text(encoding='utf-8')
+    assert 'auth_request /__authcheck' in conf
+    assert 'proxy_pass $gateway/api/auth/me' in conf
+    assert 'error_page 401 = @login' in conf

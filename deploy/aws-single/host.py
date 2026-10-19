@@ -1,5 +1,5 @@
 """Single-host CE bootstrap; cloud collection stays on this host."""
-import json,os,shutil,sys,subprocess,time,urllib.request,secrets
+import json,os,re,shutil,sys,subprocess,time,urllib.request,secrets
 from pathlib import Path
 from datetime import datetime,timezone
 ROOT=Path('/opt/rgce-native')
@@ -105,7 +105,17 @@ def install(upgrade=False):
     runtime=Path('/run/rgce-native');runtime.mkdir(exist_ok=True,mode=0o700)
     envpath=runtime/'model.env';envpath.write_text(''.join(k+'='+v+'\n' for k,v in values.items()));envpath.chmod(0o600)
     profiles=ROOT/'profiles';shutil.copytree(SOURCE/'profiles/ce/desk',profiles/'desk',dirs_exist_ok=True)
-    cfg=profiles/'desk/config.yaml';cfg.write_text(cfg.read_text().replace('__MODEL_NAME__',json.dumps(CFG['model_name'])).replace('__MODEL_BASE_URL__',json.dumps(CFG['model_base_url'])))
+    cfg=profiles/'desk/config.yaml'
+    seed=cfg.read_text()
+    if model:
+        seed=seed.replace('__MODEL_NAME__',json.dumps(CFG['model_name'])).replace('__MODEL_BASE_URL__',json.dumps(CFG['model_base_url']))
+    else:
+        # This reviewed template starts with a model mapping. Leave it unset on
+        # keyless first boot so native Hermes onboarding remains visible. The
+        # retained profile is not overwritten on subsequent boots.
+        seed,count=re.subn(r'\Amodel:\n(?:[ \t]+.*\n)*','',seed,count=1)
+        if count!=1:raise RuntimeError('Unexpected CE model template; refuse an unconfigured model seed')
+    cfg.write_text(seed)
     native_validator.start('rgce-native')
     native_session_limits.prepare(CFG['image'],ROOT/'web_server_chat.py')
     units={

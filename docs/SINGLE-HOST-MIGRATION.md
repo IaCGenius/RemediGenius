@@ -2,14 +2,17 @@
 
 Implementation is in progress. This page describes the new deployment; it is
 not a release-readiness claim. Keep an existing deployment until the replacement
-passes the acceptance checks below.
+passes the acceptance checks below. Only AWS us-east-1 and DeepSeek v4.1 Flash
+are validated. The published v0.1.3 tag is unchanged, and a clean-deployment
+validation is still pending.
 
 ## What changes
 
 Both deployments use Hermes, the CE skills and execution rules, a local Python
-collector, and the Linux remediation validator. The collector calls AWS through
-the SDK and writes raw responses, normalized summaries and receipts to S3.
-It does not ask the model to write collection code.
+collector (`deploy/collector`) and the Linux remediation validator. The collector
+calls AWS through the SDK and writes raw responses, normalized summaries and
+receipts to S3. It does not ask the model to write collection code. There is no
+Lambda function and no EventBridge schedule.
 
 ```mermaid
 flowchart LR
@@ -43,8 +46,12 @@ endpoint must exist. The dashboard listens on loopback and is reached with SSM.
 
 The instance role combines AWS metadata/security reads with narrow access to
 CE's own bucket and retained volume. Those operational writes are necessary;
-the role as a whole is not read-only. Hermes receives no AWS credentials.
-The collector runs separately and uses temporary instance-role credentials.
+the role as a whole is not read-only. Hermes receives no AWS credentials and runs
+with `AWS_EC2_METADATA_DISABLED=true`. The instance requires IMDSv2
+(`http_tokens = "required"`) with a response hop limit of 1, so a process inside
+the Hermes container cannot fetch the SDK's temporary credentials. The collector
+runs separately and uses temporary instance-role credentials. The operator's own
+provisioning credentials are used only for Terraform and SSM, not by the host.
 
 Amazon Linux 2023 is the host. Amazon Linux 2 is no longer a suitable new
 baseline. The upstream Hermes image stays pinned. CE's collector uses one pinned
@@ -74,16 +81,20 @@ archives as diagnostic bundles.
 
 ## Model and knowledge
 
-An existing model secret can be supplied; the host reads only that secret.
-For a customer-managed encryption key, grant the specific decrypt permission.
-Without a supplied key, model onboarding must occur in Hermes before an
-investigation. A configured model name is not proof of model access.
+An existing model secret can be supplied; the host reads only that secret and
+returns `GetSecretValue` for that exact ARN. For a customer-managed encryption
+key, grant the specific decrypt permission. Otherwise configure the provider and
+key inside Hermes after login. Keep the custom OpenAI-compatible route
+(`provider: custom`, `key_env: MODEL_API_KEY`). Never put a key in a chat message
+or in tfvars. **Without a working model key, the stack is not ready to
+investigate.** A configured model name is not proof of model access.
 
 Existing knowledge remains operator supplied. Its source, scope and hash must
-remain visible. Chat intake now stages a Markdown note, shows its scope and asks
-the operator to send an exact publication phrase. Published notes are ordinary
-files with a content hash. They are included in state checkpoints. File-based
-knowledge views still use the existing import/export tools. Spot replacement retained the published note and conversations. A separate empty
+remain visible. Chat intake can stage a Markdown note, show its scope and ask the
+operator to send an exact `publish knowledge <id>` phrase. Published notes are
+ordinary files with a content hash. They are included in state checkpoints.
+File-based knowledge views still use the existing import/export tools. Spot
+replacement retained the published note and conversations. A separate empty
 Docker volume restored the checkpointed file view with a matching content hash.
 These checks do not imply zero data loss between checkpoints.
 
@@ -93,6 +104,13 @@ Checks run on the collector's compute. S3 holds the last check report. A restart
 can run one overdue bounded check; it does not replay every missed interval.
 No scheduled collection runs while both local and Spot compute are off. Checks
 collect and compare evidence; they do not silently start model investigations.
+
+## Optional browser UI
+
+The optional `hermes-ui` is a second interface to the same gateway and profile.
+It has known limitations (for example the Bots panel can stay loading and skill
+category search can return no results) that are being fixed separately. It is not
+part of the current validation claim; keep the native dashboard available.
 
 ## Acceptance before cutover
 
@@ -105,5 +123,6 @@ collect and compare evidence; they do not silently start model investigations.
 - Fix validation remains isolated and applies no changes to AWS.
 - Public setup, stop, recovery and removal instructions match the tested path.
 
-The previous Lambda implementation is preserved as a tracked-source archive in
-the separate v2 repository. Existing deployed resources have not been removed.
+The list is not yet fully checked. The previous Lambda implementation is
+preserved as a tracked-source archive in the separate v2 repository. Existing
+deployed resources have not been removed.
