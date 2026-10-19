@@ -37,6 +37,13 @@ the operator applies them. Answers appear in chat; decisions can be saved in nat
 
 [Diagram sources and component map](docs/diagrams/README.md).
 
+Both deployments run deterministic collection on the same host as Hermes. Neither
+uses Lambda or EventBridge. The Spot role grants metadata/security reads plus
+limited access to CE's own storage; it is not an exclusively read-only role.
+Hermes receives no AWS credentials. See [permissions](docs/IAM.md) and
+[deployment and recovery boundaries](docs/SINGLE-HOST-MIGRATION.md).
+
+
 ### State and recovery
 
 ![Retained state, private S3 checkpoints and startup recovery](docs/diagrams/ce-current-recovery.svg)
@@ -47,19 +54,6 @@ run every two minutes. Activity since the last successful checkpoint can be lost
 State archives can contain credentials: keep them private. Daily checks pause when
 compute is off.
 
-
-The collector runs on the same compute as Hermes: the Docker workstation or the
-Spot EC2 host. It is deterministic Python, not a model, and it writes raw
-responses, normalized summaries and receipts to S3. There is no Lambda function
-and no EventBridge schedule. The earlier Lambda deployment is archived in the
-separate v2 project. Detail: [architecture and recovery boundaries](docs/SINGLE-HOST-MIGRATION.md)
-and [capability detail](docs/CURRENT-CE-OFFERING.md).
-
-AWS credentials stay in the collector. On Spot, the instance role supplies the
-collector's metadata/security reads plus narrow access to CE's own bucket and
-retained EBS volume; Hermes receives no AWS credentials and runs with
-`AWS_EC2_METADATA_DISABLED=true`. A model cannot widen its own access by changing
-a prompt. See [permissions](docs/IAM.md).
 
 ## Deployment
 

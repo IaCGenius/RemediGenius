@@ -34,3 +34,16 @@ State archives may contain credentials; evidence-read tools cannot access them.
 
 Historical Lambda diagrams and the obsolete multi-cloud concept page are archived
 in the separate v2 project. Earlier release tags retain their original history.
+
+## Documentation verification
+
+Checked on 2026-10-19: both Archify HTML artifacts passed all nine showcase
+checks with no warnings. The static SVG exports use a fixed light palette and
+larger text for README readability. Both published GitHub images were visually
+reviewed at normal README width, including their lower sections. SVG XML parses,
+and all 153 local documentation links resolve. Automated Archify browser checks
+were not run; the browser review was of the published GitHub rendering.
+
+This is a documentation-only update. No runtime or infrastructure changes, model
+calls, or new functional-test claims are included. The v0.2.0 tag is unchanged.
+
