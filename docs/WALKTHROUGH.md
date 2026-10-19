@@ -1,6 +1,6 @@
 # Your first CE investigation
 
-The v0.1.3 baseline is **AWS us-east-1 and DeepSeek v4.1 Flash**. You supply your
+The tested model and region are **AWS us-east-1 and DeepSeek v4.1 Flash**. You supply your
 own AWS access and model credentials. CE uses native Hermes as its agent and UI;
 the scoped reader collects AWS facts, and S3 retains their receipts. Start with
 [the architecture](SINGLE-HOST-MIGRATION.md).
@@ -14,7 +14,7 @@ see the [change log](../CHANGELOG.md) for differences from the published tag.
 | Choice | Follow | What persists |
 |---|---|---|
 | Your workstation, Docker | [Workstation setup](WORKSTATION-HERMES.md) | Named Docker volume for conversations/cases; AWS S3 for collected evidence |
-| Your AWS account, Spot EC2 | [AWS setup](NATIVE-CE-QUICKSTART.md) | Retained EBS for conversations/cases; S3 for evidence and selected knowledge |
+| Your AWS account, Spot EC2 | [AWS setup](NATIVE-CE-QUICKSTART.md) | Retained EBS for conversations/cases; S3 for evidence and private recovery checkpoints |
 
 Both paths use the local deterministic collector and your configured scope. Local Docker is
 not an offline AWS simulator. Review the supplied Terraform before applying it.
@@ -63,7 +63,8 @@ have no findings in this account. CE does not enable services for you.
 
 Ask CE to stage a short policy with its scope. Review the draft and send the exact publication phrase it returns. For file-based intake, save the source as
 Markdown, and follow [the knowledge walkthrough](NATIVE-KNOWLEDGE-QUICKSTART.md)
-to import it, select a view, and activate that view for your deployment. Supported
+to import it, select a view, and mount it in the workstation launcher. The current
+Spot stack uses chat-published notes; it does not activate uploaded file views. Supported
 document conversion uses MarkItDown. Unpublished chat text or an uploaded attachment alone
 does not publish shared knowledge.
 
@@ -106,3 +107,33 @@ Keep deployment inputs and secrets private. Back up your conversation/case volum
 S3 evidence alone does not restore the Kanban database; the separate private state checkpoint does. The setup guides explain
 stop/restart and credential renewal. This is a single-operator release with bounded
 collection, not continuous monitoring of every AWS resource or automatic remediation.
+
+## Fresh single-host examples
+
+These are actual captures from the 19 October 2026 fresh AWS installation using
+DeepSeek v4.1 Flash. Identifiers are masked in the browser before capture; the
+policy, actions and validator results are unchanged. The policy was supplied by
+the operator for this test. It is not a default rule for all CE installations.
+
+### Review and publish knowledge
+
+The optional UI shows the same ce-desk conversation: draft first, explicit
+publication phrase second. The selected note is available to later investigations.
+
+![Review and publish an organization note](images/ce-single-host-knowledge.png)
+
+### Validate a proposal
+
+The actual CloudFormation validator returned an error. Hermes corrected the
+property and validation passed on attempt two. This checks the template; it does
+not deploy it or prove that it is safe for your environment.
+
+![Actual validator failure and repair in the shared conversation](images/ce-single-host-validation.png)
+
+### Keep a case for your change process
+
+The native Kanban card tracks the observed Config finding and its proposed fix.
+Closing it does not suppress the original Security Hub finding. Reassess with
+fresh evidence after the operator applies a change.
+
+![Native Kanban case for a real observed finding](images/ce-single-host-case.png)

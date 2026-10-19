@@ -6,7 +6,7 @@ Status: work in progress; not release acceptance. No new release tag.
 
 An existing connected account must support a useful inventory investigation without
 requiring a new collector for each question. Hermes chooses evidence within the
-fixed process. The Lambda executes admitted SDK reads, handles pagination, and
+fixed process. The deterministic collector executes admitted SDK reads, handles pagination, and
 saves source responses and receipts to S3. Credentials stay in the executor.
 
 ## Discovery procedure

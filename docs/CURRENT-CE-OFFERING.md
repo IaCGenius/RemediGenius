@@ -1,20 +1,22 @@
 # Current native CE offering
 
-Updated 2026-10-15. [Open the architecture diagram](diagrams/ce-mvp-architecture.html).
+[Architecture and data flow](SINGLE-HOST-MIGRATION.md).
 
-**v0.1.0 validated baseline: AWS `us-east-1` and Qwen 3.8 Max.** Configuration remains extensible; other regions/models are outside the validated baseline.
+**Scope: AWS `us-east-1`, DeepSeek v4.1 Flash, one operator.** See the validation record for the exact tests and source version.
 
 ## What an AWS operator gets
 
 One Hermes profile on workstation Docker or AWS Spot, using the operator's model.
-Both use independent scoped Lambda execution and S3 evidence. Sessions/cases use
-retained Docker volume or EBS; S3 alone does not restore conversations. Multiple
-accounts require explicit role onboarding, not automatic organization enrollment.
+Both use a separate deterministic collector on the same compute and S3 evidence.
+Sessions/cases use a retained Docker volume or EBS, with private S3 recovery
+checkpoints. The setup guides configure one account; extra executor targets are
+not exposed as a supported multi-account onboarding flow.
 
 The loop: inspect coverage → investigate existing findings/activity → apply
 business context → prepare CLI/Terraform/CloudFormation proposals → save a manual
 Kanban case → reassess after the operator's change process. Daily bounded checks
-run independently of Hermes. Frequency is configurable. Checks do not call a model,
+run without model calls on the same compute. They stop while that compute is off.
+Frequency is configurable. Checks do not call a model,
 apply fixes or automatically close cases. See [operating loop](OPERATING-LOOP.md).
 
 ## Skills, not additional profiles
@@ -58,7 +60,5 @@ applicability is resolved. Refresh means re-importing changed originals and
 publishing a new selected view. Explicit `--replaces` excludes an old revision from new views while preserving
 its original and prior views. Automatic sync or authority decisions are not implemented.
 See [the knowledge quickstart](NATIVE-KNOWLEDGE-QUICKSTART.md).
-
-See [release validation](RELEASE-VALIDATION.md) and [known limits](LIMITS.md).
 
 See [release validation](RELEASE-VALIDATION.md) and [known limits](LIMITS.md).

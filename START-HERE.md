@@ -5,9 +5,8 @@ knowledge and fix validation. The operator applies fixes. Collection runs on the
 same Docker workstation or Spot host; evidence and private recovery checkpoints
 are stored in S3.
 
-**The local-compute migration is being acceptance-tested.** The published v0.1.3
-release is unchanged, and a clean-deployment validation is still pending. This is
-not yet a readiness claim.
+Use the [validation record](docs/RELEASE-VALIDATION.md) for the tested source,
+model, deployment paths and remaining boundaries.
 
 | Choose | What you need | Guide |
 | --- | --- | --- |
@@ -29,8 +28,8 @@ knowledge publication, receipts, cases and stop/remove.
   credentials and cannot read instance metadata.
 
 Both paths offer the native Hermes dashboard and the optional hermes-ui. The
-optional UI has known limitations being fixed separately; keep the native
-dashboard available.
+optional UI provides chat and session access; use the native dashboard for Kanban
+and other controls described in the [UI guide](docs/HERMES-UI.md).
 
 ## First run
 

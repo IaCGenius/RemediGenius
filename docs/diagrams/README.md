@@ -1,3 +1,9 @@
-# Current architecture
+# Architecture diagrams
 
-Open [the native CE diagram](ce-mvp-architecture.html), its [static image](ce-mvp-architecture.png), or the [component guide](ce-mvp-architecture.md). Earlier rejected console diagrams and rendering checks are preserved in Git history and the maintainer archive, not this release.
+The current single-compute architecture and recovery flow are in
+[the main README](../../README.md#architecture) and
+[the deployment guide](../SINGLE-HOST-MIGRATION.md).
+
+The `ce-mvp-architecture` files in this folder describe the historical
+Lambda-based deployment. They are retained for comparison and must not be used
+as setup instructions for the current release.

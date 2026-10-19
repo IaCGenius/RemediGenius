@@ -14,8 +14,8 @@ CE is a public, single-operator release. The validated baseline is AWS us-east-1
 with DeepSeek v4.1 Flash. Other models/regions are configurable, not yet qualified.
 
 - Collection is bounded by configured accounts, regions, operations and IAM.
-  Explicit additional account targets exist; automatic organization enrollment
-  does not. CE is not artificially restricted to one account.
+  The setup guides configure one account. Extra target/role support exists in
+  the executor, but multi-account onboarding is not wired into these launchers.
 - Hermes prepares fixes; it does not apply customer-cloud changes. Generated
   CLI/Terraform/CloudFormation needs operator validation.
 - Daily checks collect configured evidence without model calls. They do not
@@ -38,9 +38,9 @@ and [security](../SECURITY.md). Legacy console and prototype deployments are arc
 
 ### Collection limits
 
-The reader enforces numeric page budgets independently of the model. In v0.1.1,
-an omitted page budget collects one page, consistently across the runtime, CLI
-helper and Lambda. Explicit multi-page requests remain supported within the
+The reader enforces numeric page budgets independently of the model.
+An omitted page budget collects one page across the runtime and deterministic
+collector. Explicit multi-page requests remain supported within the
 configured ceiling. Service parameters such as MaxResults control page size,
 not the number of pages. Scheduled checks retain their explicit configured budgets.
 

@@ -9,7 +9,7 @@ reassess after your change window.
 By design, the agent requests bounded reads from a separate collector with a
 configured allowlist. Fixes are proposals you review and apply yourself.
 
-AWS us-east-1 · DeepSeek v4.1 Flash · Self-hosted · Apache-2.0 · [v0.1.3](https://github.com/IaCGenius/RemediGenius/releases/tag/v0.1.3)
+AWS us-east-1 · DeepSeek v4.1 Flash · Self-hosted · Apache-2.0 · [Releases](https://github.com/IaCGenius/RemediGenius/releases)
 
 Provided as-is. You choose your model provider and AWS backend and are responsible
 for their configuration, data handling and charges. See [your responsibility](docs/LIMITS.md#your-responsibility).
@@ -53,27 +53,12 @@ retained EBS volume; Hermes receives no AWS credentials and runs with
 `AWS_EC2_METADATA_DISABLED=true`. A model cannot widen its own access by changing
 a prompt. See [permissions](docs/IAM.md).
 
-## Deployment status
+## Deployment
 
-The working tree replaces Lambda collection with the same deterministic collector
-on Docker or Spot. This migration is being acceptance-tested; the published
-v0.1.3 tag is unchanged, and a clean-deployment validation is still pending. The
-release tag link above is historic.
-
-- [Single AWS Spot walkthrough](deploy/aws-single/README.md) — read this for the current path
-- [Docker workstation setup](docs/LOCAL-COMPUTE-WORKSTATION.md)
-- [Architecture and recovery boundaries](docs/SINGLE-HOST-MIGRATION.md)
-
-Do not apply the new Terraform against an old stack's state. The earlier
-deployment is archived in the separate v2 project for hosted reuse. Older
-release-validation records and any archived diagram describe the published
-baseline, not this working tree.
-
-Model access is the operator's. The tested configuration is DeepSeek v4.1 Flash
-through a custom OpenAI-compatible endpoint. Supply a key as an existing Secrets
-Manager secret, or configure the provider in Hermes after login. **Without a
-working model key, CE is not ready to investigate.** Never put a key in a chat
-message or in tfvars.
+Choose [AWS Spot](deploy/aws-single/README.md) for a persistent browser-accessible
+installation, or [Docker workstation](docs/LOCAL-COMPUTE-WORKSTATION.md) to use your
+own machine. Both use the same CE profile and deterministic collector.
+See the [validation record](docs/RELEASE-VALIDATION.md) for exact test scope.
 
 ## Start with a useful question
 
@@ -83,19 +68,14 @@ message or in tfvars.
 
 ## Choose your setup
 
-The guides clone `main`, which includes [tested source updates after v0.1.3](CHANGELOG.md)
-without changing the published tag or downloads. Use `git checkout v0.1.3` after
-cloning to build that exact release, and record your source commit before
-deployment.
+The guides clone `main`. For a reproducible installation, select the published
+release tag you intend to run and record `git rev-parse HEAD` plus the package
+SHA-256. Earlier tags retain their original deployment design; do not use their
+Terraform state with the single-compute stack.
 
-The latest inventory changes on `main` passed live Spot/Hermes tests for Config
-fallback, Cloud Control inventory, paginated log-group counts and CloudTrail
-creation history with DeepSeek. Whole-service inventory remains bounded and
-partial; a populated Config aggregator and member-account deployment still need
-acceptance testing. These changes have not been qualified as a new release.
-See [tested behavior and pending work](docs/INVENTORY-RECOVERY-PLAN.md#current-validation-status).
-Existing installations must review and apply the expanded collector IAM policies;
-updating skills alone does not grant the required reads.
+Inventory is bounded by supported operations, configured scope, permissions and
+pagination budgets. A populated Config aggregator and member-account deployment
+are not covered by the current acceptance run. See [the validation record](docs/RELEASE-VALIDATION.md).
 
 Hermes is an open-source agent runtime by Nous Research. CE adds the `ce-desk`
 profile, scoped AWS tools and readable security skills. Bring a model supported
@@ -125,16 +105,16 @@ model key or cloud deployment. [What this demo shows](docs/DEMO.md). This is not
 
 ## What you get
 
-[Community skills](docs/COMMUNITY-SKILLS.md) add focused IAM, S3, framework-mapping, CloudTrail, reassessment and case-summary guidance. These are included in v0.1.3, together with receipt-derived collection summaries and a conservative one-page default.
+[Community skills](docs/COMMUNITY-SKILLS.md) add focused IAM, S3, framework-mapping, CloudTrail, reassessment and case-summary guidance. These are included with receipt-derived collection summaries and a conservative one-page default.
 
-| Included in v0.1.3 | Boundary |
+| Included | Boundary |
 |---|---|
 | Scoped AWS reads, records, counts and receipts | Bounded queries; unavailable services are not healthy services |
 | Selected organizational knowledge | Import files, publish/mount a view, show sources and their effect on advice |
 | Layered prioritization | Coverage, exposure, business context and existing control metadata; no compliance certification |
 | CLI-first remediation proposals | Ask for Terraform/CloudFormation alternatives or source-specific edits; drafts need operator review |
 | Saved findings and reassessment | Native manual Kanban and fresh evidence; no automatic closure |
-| Configurable daily collection | Deterministic AWS checks, independent of agent compute; no unattended model investigation |
+| Configurable daily collection | Deterministic AWS checks on the selected compute; pause when it is off; no unattended model investigation |
 | Linux tool validation | Pinned Terraform/AWS provider, AWS CLI and cfn-lint; real diagnostics and up to three correction attempts; no deployment |
 | Bounded AI critique | Same loaded references and bounded evidence; not a substitute for tool validation |
 

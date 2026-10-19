@@ -11,10 +11,19 @@ Try: **“Help me build useful knowledge for this AWS account. Tell me what you
 already have, then ask for the most useful missing context.”**
 
 Give a short application description, an ownership note, or a real policy.
-Hermes should offer a short Markdown draft for you to review, suggest a collection,
-and show how to import it. It must say when something exists only in chat.
-The current native runtime cannot publish shared knowledge or import a chat
-attachment for you. The operator runs the following commands from a CE installation.
+Ask Hermes to **stage a knowledge note** with its title, collection and scope.
+Review the exact Markdown. Then send the returned `publish knowledge <id>` phrase
+as a separate message. Publication saves the hashed note in the retained profile
+and makes it available to later investigations. The note also enters private
+runtime checkpoints. Ask Hermes to list the knowledge and explain which note
+changed its recommendation.
+
+Staging alone does not publish. Do not put secrets in a note. Unknown scope,
+conflicting policies or an unconfirmed exception remain explicit uncertainties;
+a note does not change AWS findings or grant cloud permissions.
+
+For larger files, use the operator tools below. A chat attachment or pasted URL
+is not automatically imported into the shared library.
 
 ## Prepare the operator tools
 
@@ -44,17 +53,18 @@ The view is a readable copy of explicitly selected collections. Repeat
 
 For workstation Docker, set `knowledge_dir` in your workstation configuration to
 the reviewed view directory and restart through the existing launcher. An S3 copy
-is optional for this local read-only mount. For AWS Spot, publish as follows.
+is optional for this local read-only mount. On the single-host Spot stack, use
+the chat note workflow above. That stack does not yet mount an operator-published
+file view automatically; do not add a `knowledge_view` Terraform variable.
 
 ## Preview and publish to S3
 
-Use your existing CE AWS tfvars JSON (or workstation JSON for an optional S3 copy).
-Use `.rgce/native.tfvars.json` from the AWS quickstart or
-`.rgce/workstation.json` from the workstation guide in place of `./ce-config.json`
-below. HCL `.tfvars` files are not accepted by this publisher. The destination is
-`bucket_name` + `workspace_prefix` for Spot, or `bucket` + `prefix` for workstation,
-plus `region` and optional `aws_profile`. The command reads those destination
-fields, not model credentials:
+For an optional file-view archive, use the workstation JSON or a separate private
+JSON containing `bucket`, `prefix`, `region` and optional `aws_profile`.
+On Spot, obtain the bucket with `terraform output -raw bucket` and use prefix
+`ce`. This archive is not automatically activated on Spot. Do not pass Terraform
+HCL inputs to this publisher. The command reads destination fields, not model
+credentials:
 
 ```powershell
 python -m rgce.knowledge_publish --view ./views/security-001 --config ./ce-config.json
@@ -75,13 +85,11 @@ command. Bucket default encryption is retained. It does not change IAM or activa
 the view. Permissions needed: list the selected prefix, get/put its objects, and
 any permissions required by the bucket's configured KMS key.
 
-After `PUBLISHED_VERIFIED_NOT_ACTIVATED`, select the returned `knowledge_view` in
-your AWS deployment configuration and review/apply the normal deployment plan.
-Do not select a view whose publication failed. The old view remains available for
-rollback by reselecting it. For more detail see
-[the deployment workflow](AWS-READ-EXECUTION.md#durable-evidence-and-selected-knowledge).
-Ask Hermes to read its index and relevant source to confirm activation. Uploading
-or importing on your laptop alone does not update the running agent's selection.
+`PUBLISHED_VERIFIED_NOT_ACTIVATED` means the archive upload succeeded, not that
+Hermes can use the view. On workstation, set `knowledge_dir` to the reviewed local
+view and restart the launcher. Ask Hermes to read its index and source to confirm
+access. On Spot, use reviewed chat notes for this release. Importing or uploading
+on your laptop alone does not update the running agent.
 
 ## Sources you can use today
 
@@ -135,11 +143,3 @@ to explicitly change applicability. New documents always need a scope.
 Editing generated views directly is discouraged: content hash checks will reject
 changed content. Review them freely, or ask Hermes to explain them; change the
 original and re-import when correcting it.
-
-## The next useful improvements
-
-The initial differentiator is selected context plus visible decision impact.
-Next priorities are knowledge-use history linked to assessments and a simpler
-deployment-integrated view switch. Selected-page
-Confluence refresh can follow, reusing a suitable connector with explicit access.
-These are proposed next steps, not capabilities shipped by this update.

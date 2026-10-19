@@ -35,7 +35,7 @@ flowchart TD
 CE owns stages and stopping. Hermes chooses schema discovery, scoped reads,
 projections of supplied/returned evidence, or comparison of known snapshots.
 Every request must address an evidence gap. Generated collectors, shell commands,
-scope expansion and arbitrary tool installation are prohibited. Existing Lambda/IAM
+scope expansion and arbitrary tool installation are prohibited. Collector admission and IAM
 boundaries remain. An active investigation blocks independent CE calls in its chat.
 Final rendering uses the saved answer rather than an outer-model rewrite. Native
 UI behavior, including streaming, still needs acceptance testing.

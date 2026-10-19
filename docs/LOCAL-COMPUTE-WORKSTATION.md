@@ -2,8 +2,8 @@
 
 This is the local-collection path. The same deterministic collector used on Spot
 runs in Docker on your machine; Hermes never receives AWS credentials. It is
-being acceptance-tested with the [single-compute Spot path](../deploy/aws-single/README.md),
-and a clean-deployment validation is still pending. Use a separate configuration,
+paired with the [single-compute Spot path](../deploy/aws-single/README.md).
+See the [validation record](RELEASE-VALIDATION.md) for tested behavior. Use a separate configuration,
 bucket prefix and Docker name from an old Lambda deployment. Do not reuse its
 Terraform state for this stack.
 

@@ -2,7 +2,7 @@
 
 Use a capable reasoning model with reliable tool calling. DeepSeek v4.1 Flash is the tested release baseline, not a requirement to use that provider. No subscription, API key or model credits are included.
 
-The native profile uses Hermes's custom provider with a model ID, OpenAI-compatible base URL and MODEL_API_KEY. Configure the workstation launcher or AWS Terraform inputs in the [setup guide](../START-HERE.md). Cloud keys come from your Secrets Manager secret; workstation mode supports a local environment variable or your Secrets Manager secret. Never commit keys.
+The native profile uses Hermes's custom provider with a model ID, OpenAI-compatible base URL and MODEL_API_KEY. Configure the workstation launcher or AWS Terraform inputs in the [setup guide](../START-HERE.md). On Spot, configure the model inside Hermes or supply an existing Secrets Manager secret as an optional initial seed. Workstation mode supports a local environment variable or your Secrets Manager secret. Never commit keys.
 
 Selected AWS evidence, resource identifiers, knowledge and drafts can reach the reasoning/critic model. Choose a provider, endpoint, region and retention policy your organization permits. Self-hosting does not imply local inference.
 

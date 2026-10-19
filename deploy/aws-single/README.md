@@ -4,11 +4,10 @@ This is the current AWS deployment path. It creates one Spot Auto Scaling group
 in an existing subnet, runs Hermes and the deterministic collector on that host,
 and stores evidence plus private recovery checkpoints in a private S3 bucket.
 
-**Status:** the local-compute migration is being acceptance-tested. The published
-v0.1.3 tag is unchanged and a clean-deployment validation is still pending. Do not
-apply this stack against an old Lambda deployment's Terraform state. The existing
-Lambda implementation is preserved in the separate v2 project and has not been
-removed.
+Use a new Terraform state for this stack. Do not apply it against an old
+Lambda deployment's state. Follow [migration instructions](../../docs/UPGRADING.md)
+for an existing installation. The [validation record](../../docs/RELEASE-VALIDATION.md)
+records the tested package and deployment behavior.
 
 For the equivalent local path, see [Docker workstation](../../docs/LOCAL-COMPUTE-WORKSTATION.md).
 For architecture and recovery boundaries, see [single-host migration](../../docs/SINGLE-HOST-MIGRATION.md).
@@ -65,10 +64,11 @@ Variables (see `main.tf` and `example.tfvars`):
 | `account_id` | yes | Must match the account the provider signs in as; a mismatch fails the plan. |
 | `subnet_id` | yes | Existing subnet in us-east-1 only. |
 | `source_zip` | yes | Path to the packaged ZIP, normally `../../.rgce/spot-source.zip`. |
-| `name` | no | Stack name, default `rgce-simple`. Used for AWS resource names; runtime container names are fixed within that host. |
+| `name` | no | Stack name, default `rgce`. Used for AWS resource names; runtime container names are fixed within that host. |
 | `running` | no | Default `true` starts the Spot instance on first apply. Set `false` and apply to stop it after setup. |
 | `spot_instance_types` | no | Default `["t3.large", "t3a.large"]`. |
 | `container_memory_mb` | no | Hermes limit, default `6144`; valid range 1024–131072. |
+| `public_ip` | no | Default `true`; set `false` for a private subnet with working egress. Private-subnet deployment is not part of the recorded acceptance run. |
 | `hermes_ui` | no | Default `true`; enables the optional browser UI. |
 | `model_secret_arn` | no | Existing Secrets Manager secret holding only the model API key. |
 | `model_name`, `model_base_url` | no | Initial seeds for a new profile. Configure the provider in Hermes for real use. |
@@ -96,8 +96,9 @@ EventBridge schedule, VPC or NAT gateway.
   `AWS_EC2_METADATA_DISABLED=true` and requires IMDSv2 (`http_tokens = "required"`,
   hop limit 1). The model cannot call IMDS or widen its access through a prompt.
 
-Terraform state contains generated dashboard credentials and bucket names. Keep
-it private and back it up.
+Terraform state contains infrastructure identifiers and the supplied configuration.
+The dashboard login is generated on the host and retained in its private data
+volume and S3 checkpoints. Keep state, private inputs and checkpoints protected.
 
 ## 3. Start and log in
 
@@ -109,7 +110,7 @@ From the repository root, the helper can show the login privately and open the
 tunnel:
 
 ```bash
-bash tools/open-native-hermes.sh --name rgce-simple --with-login
+bash tools/open-native-hermes.sh --name rgce --with-login
 ```
 
 Use your chosen `name`. The helper finds the InService instance from the ASG,
@@ -160,9 +161,8 @@ Two supported ways to supply the key:
    `key_env: MODEL_API_KEY`) that CE seeds; switching to a native provider can
    require other environment variables the launcher does not inject.
 
-At each boot the host runs one bounded tool-calling probe. The result codes
-(`CE-MODEL-AUTH`, `CE-MODEL-ENDPOINT`, `CE-MODEL-CONTEXT`, `CE-MODEL-TOOLS`, and
-others) are listed in [startup model probe](../../docs/TROUBLESHOOTING.md#startup-model-probe).
+Spot starts the dashboard for model onboarding. Confirm model access with a small
+request after configuration; Spot boot does not run the workstation model probe.
 A model ID alone does not prove access. Retained Hermes configuration takes
 precedence over the tfvars seed, so changing `model_name` later may not replace
 an existing profile.
@@ -233,15 +233,22 @@ you choose what to retain.
 
 ## Screenshots
 
-Fresh-deployment screenshots for this path are added after the current
-acceptance run. No image links are published here until that run is captured.
-Existing baseline screenshots: [login and profile](../../docs/WALKTHROUGH.md#2-sign-in-and-select-ce-desk).
+Actual fresh Spot deployment, 19 October 2026: the native login screen before
+credentials are entered. The gateway text says "public bind" inside its container;
+the host publishes this port only on loopback, behind the SSM tunnel.
+
+![Fresh native Hermes login over the private tunnel](../../docs/images/ce-single-host-login.png)
+
+Continue with [login and profile selection](../../docs/WALKTHROUGH.md#2-sign-in-and-select-ce-desk).
+
+Fresh `ce-desk` after login, before the first investigation:
+
+![Fresh ce-desk profile with the configured DeepSeek model](../../docs/images/ce-single-host-first-chat.png)
 
 ## Optional browser UI
 
 `hermes_ui = true` builds and starts the additional browser UI on remote port
 9122. It is a second interface to the same gateway and `ce-desk` profile; the
-native dashboard stays available. Known limitations (for example the Bots panel
-can stay loading; use Sessions; skill category search can return no results) are
-being fixed separately and are not part of the current validation claim. See
+native dashboard stays available. Use Sessions for conversations and the native dashboard for Kanban. The Bots
+panel and skill-category search do not have full parity. See
 [the optional UI guide](../../docs/HERMES-UI.md).

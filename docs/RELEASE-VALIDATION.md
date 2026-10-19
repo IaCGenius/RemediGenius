@@ -1,5 +1,33 @@
 # Validation records
 
+## Single-compute candidate — 2026-10-19
+
+Fresh deployment from commit `8a0695a`, source ZIP SHA-256
+`89cdd0aceac8afb74d64f51f93414b30974f4c16022a9acf1b07fd4e831031ae`.
+Local Pi/DeepSeek executed the tests; the maintainer reviewed its recorded results.
+
+| Check | Actual result |
+|---|---|
+| Regression and collector/profile checks | 184 + 6 passed. |
+| Docker onboarding | Keyless model omission and keyed startup probe passed; anonymous optional UI redirects to login. Test containers stopped, volumes retained. |
+| Fresh AWS setup | New Terraform state, 16 resources created, Spot instance-role collection, no Lambda. Native login showed no inherited conversations. |
+| One-read Config request | Exactly one read, zero recorders returned, truthful budget-limited conclusion; receipt/raw hashes checked against S3. |
+| Security Hub | 24 real active findings across two pages; explanation reconciled with raw/normalized S3 data. |
+| Knowledge | Real operator policy staged, explicitly published, retrieved by hash and used in labelled policy-applicability examples. |
+| Case and proposal | Real Config finding saved in native Kanban. CloudFormation lint failed once, then passed on attempt two of three. No apply. |
+| Optional UI | Visible ce-desk selection, same five native sessions, reopened conversation and grounded follow-up. |
+| Storage and schedule | Instance role verified; S3 receipts and deterministic 24-hour schedule inspected. Schedule correctly reported partial coverage. Private checkpoint contained five sessions, 111 messages, the case and policy. |
+| New-host replacement | Pending the controlled replacement check; do not infer it from the checkpoint inspection alone. |
+
+These checks exercise actual model calls and UI behavior, not just unit tests.
+They do not guarantee every possible AWS query or identical model wording.
+The fresh Spot used an existing model secret. Keyless Spot UI onboarding was not
+repeated; the corresponding seed behavior was checked offline and in Docker.
+See [actual walkthrough screenshots](WALKTHROUGH.md#fresh-single-host-examples).
+Private raw reports are excluded from the release. GitHub Actions remains paused;
+no successful hosted CI run is claimed.
+
+
 ## Main after v0.1.3 — 2026-10-16
 
 The [answer contract and writing changes](ANSWER-CONTRACT.md) passed 168 local

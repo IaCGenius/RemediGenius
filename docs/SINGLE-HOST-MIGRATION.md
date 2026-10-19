@@ -1,10 +1,9 @@
 # Single-host deployment migration
 
-Implementation is in progress. This page describes the new deployment; it is
-not a release-readiness claim. Keep an existing deployment until the replacement
-passes the acceptance checks below. Only AWS us-east-1 and DeepSeek v4.1 Flash
-are validated. The published v0.1.3 tag is unchanged, and a clean-deployment
-validation is still pending.
+This page describes the single-compute architecture. The supported setup uses
+AWS us-east-1, one operator and DeepSeek v4.1 Flash as the test model. See the
+[validation record](RELEASE-VALIDATION.md) for actual checks. Existing Lambda
+installations must use a separate stack/state when migrating.
 
 ## What changes
 
@@ -108,9 +107,9 @@ collect and compare evidence; they do not silently start model investigations.
 ## Optional browser UI
 
 The optional `hermes-ui` is a second interface to the same gateway and profile.
-It has known limitations (for example the Bots panel can stay loading and skill
-category search can return no results) that are being fixed separately. It is not
-part of the current validation claim; keep the native dashboard available.
+Chat, profile selection and reopening native conversations are tested. Use the
+native dashboard for Kanban and administrative controls. The Bots panel and
+skill-category search do not have full parity.
 
 ## Acceptance before cutover
 
@@ -123,6 +122,6 @@ part of the current validation claim; keep the native dashboard available.
 - Fix validation remains isolated and applies no changes to AWS.
 - Public setup, stop, recovery and removal instructions match the tested path.
 
-The list is not yet fully checked. The previous Lambda implementation is
-preserved as a tracked-source archive in the separate v2 repository. Existing
-deployed resources have not been removed.
+Check the validation record before cutover. The previous Lambda implementation is
+preserved in earlier immutable tags and the separate v2 source archive. Removing
+an old installation is an explicit operator action after backup.

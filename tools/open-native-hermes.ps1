@@ -1,7 +1,7 @@
 param(
     [string]$Region = 'us-east-1',
-    [string]$Name = 'rgce-simple',
-    [int]$LocalPort = 9121,
+    [string]$Name = 'rgce',
+    [int]$LocalPort = 9125,
     [switch]$ShowLogin,
     [switch]$WithLogin
 )
@@ -16,6 +16,7 @@ if ($ShowLogin -or $WithLogin) {
     if ($LASTEXITCODE -ne 0) { throw 'Could not retrieve the dashboard login through SSM.' }
     if (-not $WithLogin) { return }
 }
-Write-Host "Native Hermes: http://127.0.0.1:$LocalPort - choose ce-desk after signing in."
+Write-Host "Native Hermes: http://127.0.0.1:$LocalPort/chat?profile=ce-desk"
 Write-Host 'Keep this tunnel open. Use -WithLogin to show the login and open the tunnel together; -ShowLogin shows only the login.'
 & aws ssm start-session --region $Region --target $instanceId --document-name AWS-StartPortForwardingSession --parameters "portNumber=9120,localPortNumber=$LocalPort"
+

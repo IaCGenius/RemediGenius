@@ -8,14 +8,14 @@ knowledge; proposal guidance and fresh reassessment.
 | Extend | Current contract |
 |---|---|
 | Knowledge | Import files, select a view and mount/publish it. Scope and provenance guide interpretation; knowledge does not grant permissions. |
-| Model | Operator chooses provider/credentials. Qwen 3.8 Max is tested; Bedrock is deferred. |
+| Model | Operator chooses provider/credentials. DeepSeek v4.1 Flash is the current test baseline. |
 | AWS accounts | Explicit read targets and member roles; no automatic organization enrollment. |
 | Operations | Existing generic executor and SDK schema discovery; new admitted operations require permission/manifest review. |
 | Skills/plugins | Reuse Hermes capabilities, with deliberate admission and integrity checks for the CE package. No automatic trust in newly installed code. |
 | Other agent integrations | Readable skills and exported knowledge are reusable. A public native MCP/API/A2A service is not shipped. |
 
 The old custom console, MCP server and builder are archived outside CE. They are
-not alternative supported interfaces in v0.1.0. CE has one trusted operator;
+not alternative supported interfaces. CE has one trusted operator;
 managed multi-tenant hosting is a separate product, not a switch in this release.
 
 See [runtime controls](CE-RUNTIME.md), [knowledge onboarding](NATIVE-KNOWLEDGE-QUICKSTART.md),

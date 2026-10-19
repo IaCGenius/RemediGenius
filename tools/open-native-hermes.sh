@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 region=us-east-1
-name=rgce-simple
+name=rgce
 port=9125
 login=false
 only_login=false
@@ -12,7 +12,7 @@ while (($#)); do
     --port) port="${2:?Missing local port}"; shift 2 ;;
     --with-login) login=true; shift ;;
     --show-login) login=true; only_login=true; shift ;;
-    *) echo 'Usage: bash tools/open-native-hermes.sh [--region us-east-1] [--name rgce-simple] [--port 9125] [--with-login|--show-login]' >&2; exit 2 ;;
+    *) echo 'Usage: bash tools/open-native-hermes.sh [--region us-east-1] [--name rgce] [--port 9125] [--with-login|--show-login]' >&2; exit 2 ;;
   esac
 done
 [[ "$port" =~ ^[0-9]+$ ]] && ((port >= 1024 && port <= 65535)) || { echo 'Use a local port from 1024 to 65535' >&2; exit 2; }

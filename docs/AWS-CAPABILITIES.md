@@ -24,7 +24,7 @@ supported by every format. A model critique is not provider validation.
 
 ## Available operations versus demonstrated behavior
 
-The [operation manifest](../modules/aws-read-executor/operations.json) is the
+The [operation manifest](../deploy/collector/operations.json) is the
 authoritative source for the SDK reads the executor can admit. The deployed
 `ce_aws capabilities` response is authoritative for that installation: an older
 deployment may expose less. IAM permissions, service enrollment and populated

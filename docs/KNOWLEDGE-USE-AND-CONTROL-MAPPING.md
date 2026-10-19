@@ -65,9 +65,10 @@ not automatically recursive. Each exported view needs a new output directory.
 
 The library stores `<collection>/<document-id>/source.*`, `content.md` and
 `metadata.json`. A view contains selected content/metadata, `index.md` and
-`manifest.json`. Publish that view to the configured S3 knowledge prefix and select
-its `knowledge_view` as described in [AWS execution](AWS-READ-EXECUTION.md).
-The native agent reads the mounted view at `/opt/data/shared/knowledge`.
+`manifest.json`. On workstation, set `knowledge_dir` to that local view and restart the launcher.
+The agent reads the mounted view at `/opt/data/shared/knowledge`. The single-host
+Spot stack uses [reviewed chat notes](NATIVE-KNOWLEDGE-QUICKSTART.md#start-in-the-hermes-chat);
+it has no Terraform `knowledge_view` input or automatic file-view hydration.
 
 Importing locally does not publish it to the running agent. Publishing a view
 does not prove the agent read it. The current metadata includes source/content

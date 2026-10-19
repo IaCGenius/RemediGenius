@@ -1,5 +1,8 @@
 # CE MVP architecture diagram
 
+> Historical Lambda-based architecture. For the current release use [the single-compute architecture](../SINGLE-HOST-MIGRATION.md).
+
+
 Open [the interactive diagram](ce-mvp-architecture.html), or view the [README image](ce-mvp-architecture.png). The [editable Archify specification](ce-mvp-architecture.json) is the source.
 
 This is a component/control-flow overview, not an exhaustive network topology. The preview baseline is AWS **us-east-1** and **Qwen 3.8 Max**, using the operator's own AWS/model credentials.

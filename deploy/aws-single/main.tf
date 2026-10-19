@@ -28,7 +28,7 @@ variable "subnet_id" {
   type = string
 }
 variable "name" {
-  default = "rgce-simple"
+  default = "rgce"
 }
 variable "running" {
   description = "Start CE on first apply. Set false to stop compute after initial setup."

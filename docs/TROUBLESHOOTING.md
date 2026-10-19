@@ -15,11 +15,14 @@ is never evidence that a resource is healthy. Logs: retained profile
 
 ### CE-AUTH
 
-Renew AWS login and restart the workstation launcher, or check the Spot credential-refresh service.
+Renew AWS login and restart the workstation launcher. On Spot, check the attached
+instance profile and collector service; the SDK obtains temporary role credentials.
 
 ### CE-PROBE
 
-Check the executor Lambda, invoker role and reader configuration.
+Check the collector container/service, its Unix socket, configured target and AWS
+permissions. On Spot use `systemctl status rgce-collector`; on Docker inspect the
+collector logs. Follow [the identity boundary](IAM.md).
 
 ### CE-INTEGRITY
 
@@ -59,8 +62,9 @@ Restart CE from the reviewed package and inspect the local runtime log.
 
 ## Startup model probe
 
-Each workstation start and Spot boot makes one small tool-calling request before
-opening the dashboard. It uses the retained ce-desk model configuration, or the
+The workstation launcher makes one small tool-calling request before
+opening the dashboard when a model key is configured. Spot does not run this
+probe: configure the model in Hermes and send a small request to verify access. It uses the retained ce-desk model configuration, or the
 seed on first installation. No AWS data or knowledge is sent. No retry loop.
 
 | Code | Action |
