@@ -1,13 +1,11 @@
-# AWS v0.1.2 release: useful outcomes and actual coverage
+# AWS capabilities and evidence coverage
 
-This page records the older release baseline. The broader inventory recovery is
-an **unreleased candidate**, described in [the recovery plan](INVENTORY-RECOVERY-PLAN.md).
-Do not interpret the selected-service tests below as proof of general AWS inventory.
-
-The v0.1.2 release baseline is **AWS us-east-1 with Qwen 3.8 Max** in native
-Hermes, using the single `ce-desk` profile. Other regions and models remain
-configurable, but are outside this v0.1.2 release's acceptance baseline. Customers
-provide their own model credentials and explicitly configure their AWS targets.
+Current setup scope is AWS us-east-1 with one account and one ce-desk profile.
+DeepSeek v4.1 Flash is the current test model. Consult the
+[release validation record](RELEASE-VALIDATION.md) for which paths were actually
+exercised and the [inventory procedure](INVENTORY-RECOVERY-PLAN.md) for bounded
+fallbacks. An admitted operation is not proof of permission or complete inventory.
+The selected-service examples below do not establish universal AWS coverage.
 
 Start with three questions:
 

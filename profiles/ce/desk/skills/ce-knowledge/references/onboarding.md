@@ -61,8 +61,9 @@ new views omit explicitly replaced revisions. Without --replaces, both imports
 remain active and potentially conflicting. Active means selected for new views,
 not verified, approved or unexpired. Build/publish a new view to update Hermes.
 
-The operator can now preview and publish an exported view using the same CE
-deployment configuration (AWS tfvars JSON or workstation JSON):
+The operator can preview and archive an exported view with workstation JSON or
+a separate destination JSON containing bucket, prefix, region and optional
+aws_profile. Do not use the Spot Terraform HCL input file as this JSON:
 
 ```sh
 python -m rgce.knowledge_publish --view ./views/security-001 --config ./ce-config.json
@@ -80,11 +81,14 @@ copyable command followed by a parenthetical correction. A changed view or
 destination requires a new preview.
 Do not run this from the read-only agent or ask for credentials in chat.
 
-For AWS Spot, the operator selects the returned `knowledge_view` using the existing
-deployment workflow after publication succeeds. For workstation Docker, select
-the reviewed local directory as `knowledge_dir` and restart with the existing
-launcher; S3 publication is optional for that mount. Do not claim uploading has
-changed the agent's selected view. Verify its index/content after activation.
+For the current single-host AWS Spot stack, use reviewed chat notes: stage the
+text with ce_knowledge, show its scope and exact content, then publish only after
+the operator sends the returned confirmation phrase. Spot has no knowledge_view
+Terraform input and does not automatically mount an S3 file view. Offer a short
+reviewed text extract from the operator, not a nonexistent deployment setting.
+For workstation Docker, select the reviewed local directory as knowledge_dir and
+restart the existing launcher; S3 publication is optional for that mount. Upload
+alone does not activate a view. Verify the mounted index/content after restart.
 
 ## Make knowledge use visible
 
