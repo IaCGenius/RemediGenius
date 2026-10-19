@@ -4,14 +4,15 @@ from pathlib import Path
 import subprocess
 import sys
 
-HELPER=Path(__file__).resolve().parents[1]/'profiles/ce/desk/skills/ce-aws-read/scripts/aws_read.py'
-
-def test_nested_schema_discovery_recovers_from_wrong_root_field():
+def test_nested_schema_discovery_recovers_from_wrong_root_field(monkeypatch):
+    import importlib.util
+    root=Path(__file__).resolve().parents[1]/'deploy/collector'
+    monkeypatch.syspath_prepend(str(root))
+    spec=importlib.util.spec_from_file_location('schema_collector',root/'server.py')
+    collector=importlib.util.module_from_spec(spec);spec.loader.exec_module(collector)
     def query(field):
-        result=subprocess.run([sys.executable,str(HELPER),'schema','--service','cloudformation',
-            '--operation','list_types','--field',field],capture_output=True,text=True,timeout=20)
-        assert result.returncode==0,result.stderr
-        return json.loads(result.stdout)
+        return collector.dispatch({'action':'schema','service':'cloudformation',
+                                   'operation':'list_types','field':field})
     rejected=query('TypeNamePrefix')
     assert rejected['status']=='ERROR'
     assert rejected['errors'][0]['code']=='UNKNOWN_SCHEMA_FIELD'

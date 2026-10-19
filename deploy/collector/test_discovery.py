@@ -1,5 +1,5 @@
 import unittest
-from collector import classify, handler
+from discovery import classify, handler
 
 
 class ScopeTests(unittest.TestCase):
@@ -16,3 +16,4 @@ class ScopeTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

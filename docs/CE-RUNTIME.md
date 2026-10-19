@@ -9,7 +9,7 @@ flowchart LR
   U[Operator in native Hermes] --> H[Hermes + chosen model + readable skills]
   P[Package integrity + credentials + live capability probe] --> H
   H --> G[Native tool admission: scope and budgets]
-  G --> L[Disposable AWS read Lambda]
+  G --> L[Local isolated Python collector]
   L --> A[AWS native security APIs]
   A --> L
   L --> S[(S3 raw records, deterministic summaries, receipts)]
@@ -17,18 +17,21 @@ flowchart LR
   K[(Selected S3 knowledge view)] --> H
   H --> R[One bounded native model critique]
   R --> O[Cited AI interpretation and remediation proposal]
-  E[(Retained EBS: sessions, config, audit)] --- H
+  E[(Retained EBS or Docker volume: sessions, config, audit)] --- H
+  E --> B[Two-minute verified checkpoint]
+  B --> S
 ```
 
 CE fixes the investigation stages and budgets; Hermes chooses relevant evidence
-within them. The admission gate and Lambda decide what can execute. The critic
+within them. The admission gate and collector decide what can execute. The critic
 cannot grant execution rights or alter source records. See the
 [bounded investigation workflow](AWS-ASSESSMENT-WORKFLOW.md).
 
 ## Before an investigation
 
-The plugin checks reviewed package hashes, active core skill/SOUL hashes, temporary
-credential expiry, and a real capabilities call to the executor. The resulting
+The plugin checks reviewed package hashes, active core skill/SOUL hashes, and a
+real capabilities call to the collector. The collector checks its execution
+account through STS before it starts; AWS reads still enforce current credentials. The resulting
 environment context includes UTC time, configured account aliases/regions,
 operations and budgets. READY does not assert every AWS service is accessible.
 An integrity, credential or connectivity failure blocks CE tool admission.
@@ -36,7 +39,7 @@ An integrity, credential or connectivity failure blocks CE tool admission.
 The default investigation toolset is skills, clarification and ce_runtime. The
 plugin admits only skill viewing/listing, clarification and the six CE tools below.
 Terminal, arbitrary file access, skill editing, and unreviewed plugin tools are
-blocked. Scope is also independently checked by Lambda and IAM. The plugin and
+blocked. Scope is also independently checked by the collector and IAM. The plugin and
 helper package are mounted read-only; there is no fork of Hermes.
 
 ## Reusable tools
@@ -58,7 +61,7 @@ completed investigation; the UI keeps the saved investigation and follow-up dist
 `policy.json` contains operator settings: 24 admitted tool calls, 6 cloud reads,
 at most 2 identical requests, and a 480-second deadline for admitting new calls
 per turn. An already-running request may finish after that deadline; it has its
-own subprocess/SDK/Lambda limits. Access denied stops that operation in that scope
+own subprocess/SDK/collector limits. Access denied stops that operation in that scope
 for the turn. One review call is allowed, with a 60-second requested model timeout
 and 1,600 output-token limit. Provider-internal retries still follow native Hermes.
 This is not a dollar ceiling. Operator policy changes require repackaging and vetting.

@@ -9,9 +9,11 @@ from types import SimpleNamespace
 def test_comparison_failure_cannot_report_all_clear(monkeypatch):
     root = Path(__file__).resolve().parents[1]
     monkeypatch.syspath_prepend(str(root/'profiles/ce/desk/skills/ce-aws-read/scripts'))
-    spec = importlib.util.spec_from_file_location('scheduled_check', root/'modules/assurance-schedule/check.py')
+    spec = importlib.util.spec_from_file_location('scheduled_check', root/'deploy/collector/scheduled.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    import sys
+    monkeypatch.setitem(sys.modules,'executor',SimpleNamespace(handler=lambda *args:{'status':'OK','run_id':'current'}))
     request = {'target':'default','service':'config','operation':'describe_configuration_recorders','max_pages':1}
     signature = module.hashlib.sha256(json.dumps(request,sort_keys=True).encode()).hexdigest()
     objects = {'prefix/scheduled/latest.json':json.dumps({'checks':[{'check_id':signature,'result':{'run_id':'prior'}}]}),

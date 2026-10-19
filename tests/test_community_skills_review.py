@@ -67,7 +67,7 @@ def test_packaging_covers_every_shipped_skill_and_reference(tmp_path):
  ({'parameters':{'StartTime':'bad','EndTime':'bad'}},'ISO-8601'),
 ])
 def test_invalid_read_never_reaches_aws(monkeypatch,change,match):
-    module=load('modules/aws-read-executor/executor.py')
+    module=load('deploy/collector/executor.py')
     monkeypatch.setenv('TARGETS',json.dumps({'default':{'regions':['us-east-1'],'account_id':'unit'}}))
     monkeypatch.setattr(module.boto3,'Session',lambda:pytest.fail('Invalid request reached AWS'))
     request={'action':'read','target':'default','region':'us-east-1','service':'cloudtrail','operation':'lookup_events','parameters':{}}

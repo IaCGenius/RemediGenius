@@ -1,0 +1,14 @@
+{
+  "name": "rgce-workstation",
+  "port": 9125,
+  "aws_profile": "your-operator-profile",
+  "account_id": "123456789012",
+  "region": "us-east-1",
+  "bucket": "COPY_FROM_TERRAFORM_OUTPUT",
+  "prefix": "ce",
+  "model_name": "YOUR_MODEL_ID",
+  "model_base_url": "https://YOUR_PROVIDER/v1",
+  "model_key_env": "MODEL_API_KEY",
+  "hermes_ui": true,
+  "ui_port": 9126
+}

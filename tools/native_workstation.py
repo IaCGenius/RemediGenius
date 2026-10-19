@@ -1,4 +1,4 @@
-"""Run the native CE profile locally; operator AWS credentials never enter Docker."""
+"""Run the native CE profile locally; AWS credentials enter only the isolated collector, never Hermes."""
 import argparse
 import json
 import os
@@ -14,6 +14,7 @@ from package_native_hermes import package
 from native_session_limits import prepare as prepare_session_limits
 import native_validator
 import native_ui
+import native_collector
 
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE = 'nousresearch/hermes-agent:stable@sha256:444b42594e7f467425872fc35e077a227d377f0fe0726bc818706d62175fad8b'
@@ -50,15 +51,12 @@ class Workstation:
 
     def refresh(self):
         private_directory(self.root)
-        reader = self.root/'reader'; reader.mkdir(exist_ok=True)
-        c = self.session().client('sts').assume_role(RoleArn=self.cfg['reader_role_arn'],
-            RoleSessionName='ce-workstation', DurationSeconds=3600)['Credentials']
-        body = '[default]\naws_access_key_id='+c['AccessKeyId']+'\naws_secret_access_key='+c['SecretAccessKey']+'\naws_session_token='+c['SessionToken']+'\n'
-        pending=reader/'credentials.pending'; pending.write_text(body,encoding='utf-8'); pending.replace(reader/'credentials')
-        value={k:self.cfg[k] for k in ('region','bucket','prefix')}
-        value.update(function=self.cfg['reader_function'],expires=c['Expiration'].isoformat())
-        pending=reader/'config.pending'; pending.write_text(json.dumps(value)); pending.replace(reader/'config.json')
-        return c['Expiration'].isoformat()
+        if self.cfg.get('reader_function'):
+            raise ValueError('Legacy Lambda configuration: use a new local-collector config; keep old Terraform state for its separate teardown')
+        session=self.session()
+        account=session.client('sts').get_caller_identity()['Account']
+        if account != self.cfg['account_id']:raise ValueError('AWS profile account does not match configuration')
+        return native_collector.refresh(session,self.root/'operator')
 
     def owned(self):
         result=subprocess.run(['docker','inspect',self.name],capture_output=True,text=True,encoding='utf-8')
@@ -75,13 +73,15 @@ class Workstation:
         native_ui.stop(self.name)
         if self.owned(): command('docker','stop','-t','30',self.name)
         native_validator.stop(self.name)
+        native_collector.stop(self.name)
         (self.root/'runtime.env').unlink(missing_ok=True)
-        print('Stopped local compute. Named volume and AWS evidence retained; daily AWS schedule unchanged.')
+        print('Stopped local compute. Named volume and S3 evidence retained. Local scheduled checks stop with compute.')
 
     def start(self, upgrade=False):
         if self.owned():
             raise ValueError('Container already exists. Use stop then restart; do not start a second writer.')
         expires=self.refresh()
+        print(native_collector.prepare_state(self.name,self.cfg,self.root/'operator',self.volume))
         archive=self.root/'source.zip'; packaged=package(archive)
         pin=self.root/'source-pin.json'
         if pin.exists() and json.loads(pin.read_text())['sha256'] != packaged['sha256'] and not upgrade:
@@ -97,8 +97,7 @@ class Workstation:
         if knowledge and not (Path(knowledge)/'index.md').is_file():
             raise ValueError('Select an exported knowledge view containing index.md')
         if knowledge:
-            # Docker cannot create a nested mountpoint beneath a read-only bind.
-            (shared/'knowledge').mkdir(exist_ok=True)
+            native_collector.import_view(self.name,self.volume,knowledge)
         login_path=self.root/'login.json'
         if not login_path.exists():
             login_path.write_text(json.dumps({'username':'ce','password':secrets.token_urlsafe(24),'secret':secrets.token_urlsafe(32)}))
@@ -110,30 +109,33 @@ class Workstation:
                 'HERMES_DASHBOARD_BASIC_AUTH_PASSWORD':login['password'],
                 'HERMES_DASHBOARD_BASIC_AUTH_SECRET':login['secret'],
                 'AWS_EC2_METADATA_DISABLED':'true','HERMES_TUI_TOOLSETS':'skills,clarify,ce_runtime'}
+        if not key:values.pop('MODEL_API_KEY')
         if any(not v or any(ord(c)<33 or ord(c)>126 for c in v) for v in values.values()):
             raise ValueError('Missing/invalid model credential or login value; no values logged')
         env=self.root/'runtime.env'; env.write_text(''.join(k+'='+v+'\n' for k,v in values.items()),encoding='utf-8')
         # Probe the retained Hermes configuration (seed only for a new profile).
         try:
+            if not key:raise LookupError('MODEL_ONBOARDING_REQUIRED')
             command('docker','run','--rm','--entrypoint','/opt/hermes/.venv/bin/python',
                 '--env-file',str(env),'--mount',f'type=volume,src={self.volume},dst=/opt/data,readonly',
                 '--mount',f'type=bind,src={profile},dst=/opt/ce-package,readonly',
                 '--mount',f'type=bind,src={ROOT / "tools/model_probe.py"},dst=/probe.py,readonly',
                 IMAGE,'/probe.py','/opt/data/profiles/ce-desk/config.yaml','/opt/ce-package/config.yaml')
+        except LookupError:
+            print('Model key not supplied. Configure the ce-desk model in Hermes before your first investigation.')
         except Exception:
             env.unlink(missing_ok=True)
             raise
         overlay=prepare_session_limits(IMAGE,self.root/'web_server_chat.py')
         validation_network=native_validator.start(self.name)
+        socket_volume=native_collector.start(self.name,self.cfg,self.root/'operator',self.volume)
+        reader_mount=f'type=volume,src={socket_volume},dst=/opt/ce-reader,readonly'
         args=['docker','run','-d','--rm','--name',self.name,'--label','com.remedigenius.ce=workstation',
               '--memory','3072m','--pids-limit','1024','--env-file',str(env),'-p',f'127.0.0.1:{self.port}:9120',
               '--mount',f'type=volume,src={self.volume},dst=/opt/data',
               '--mount',f'type=bind,src={profile},dst=/opt/ce-package,readonly',
-              '--mount',f'type=bind,src={self.root / "reader"},dst=/opt/ce-reader,readonly',
-              '--mount',f'type=bind,src={shared},dst=/opt/data/shared,readonly',
+              '--mount',reader_mount,
               '--mount',f'type=bind,src={overlay},dst=/opt/hermes/hermes_cli/web_server_chat.py,readonly']
-        if knowledge:
-            args += ['--mount',f'type=bind,src={Path(knowledge).resolve()},dst=/opt/data/shared/knowledge,readonly']
         try:
             command(*args,IMAGE,'gateway','run')
             command('docker','network','connect',validation_network,self.name)
@@ -150,6 +152,7 @@ class Workstation:
                 command('docker','exec','-i','--user','10000:10000',self.name,'/opt/hermes/.venv/bin/python','-',
                         '--home','/opt/data/profiles/ce-desk','--guard-default',
                         input=(ROOT/'tools/upgrade_native_profile.py').read_text(encoding='utf-8'))
+            native_ui.seed_model(self.name)
             command('docker','restart',self.name)
             pin.write_text(json.dumps(packaged),encoding='utf-8')
         except Exception:

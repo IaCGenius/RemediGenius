@@ -262,7 +262,7 @@ class Investigation(Assessment):
                 ('skills','packet','draft','knowledge','capability_manifest','plan','signatures','critique','results','plan_attempts')}
         result['results']=[{'request':item['request'],'question':item.get('question',''),
                           'result':{k:v for k,v in item['result'].items() if k in
-                                    ('status','run_id','observed_at','has_more','receipt_path','raw_path','errors','path','sha256','truncated','summary','source_excerpt','pages_returned','stop_reason','continuation_parameters')}}
+                                    ('files','status','run_id','observed_at','has_more','receipt_path','raw_path','errors','path','sha256','truncated','summary','source_excerpt','pages_returned','stop_reason','continuation_parameters')}}
                          for item in run['results']]
         return result
 
@@ -322,6 +322,11 @@ class Investigation(Assessment):
             result=item['result']
             for key in ('raw_path','receipt_path'):
                 if isinstance(result.get(key),str): known_paths.add(result[key])
+            # The collector also returns normalized artifacts in its file manifest.
+            # Admit only exact returned paths, never a model-invented sibling.
+            for artifact in result.get('files', []):
+                if isinstance(artifact, dict) and isinstance(artifact.get('path'), str):
+                    known_paths.add(artifact['path'])
             if isinstance(result.get('run_id'),str): run_ids.add(result['run_id'])
         seen=set(run['signatures']); reads=run['reads']; pages=run['pages']
         for step in steps:

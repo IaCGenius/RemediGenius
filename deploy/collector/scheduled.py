@@ -14,7 +14,7 @@ CONFIG = Config(retries={'total_max_attempts': 1}, connect_timeout=5, read_timeo
 
 def handler(event, context):
     s3 = boto3.client('s3', config=CONFIG)
-    lam = boto3.client('lambda', config=CONFIG)
+    from executor import handler as execute
     bucket, prefix = os.environ['BUCKET'], os.environ['PREFIX']
     checks = json.loads(os.environ['CHECKS'])
     if not 1 <= len(checks) <= 4:
@@ -57,11 +57,7 @@ def handler(event, context):
         signature = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
         row = {'check_id': signature, 'request': request}
         try:
-            response = lam.invoke(FunctionName=os.environ['READER'],
-                                  Payload=json.dumps({'action': 'read', **request}).encode())
-            value = json.loads(response['Payload'].read())
-            if response.get('FunctionError'):
-                raise RuntimeError('Read executor failed')
+            value = execute({'action':'read', **request}, None)
             row.update(result=value, comparison={'result': 'BASELINE', 'notice': 'No prior comparable run'})
             old_run = previous.get(signature, {}).get('result', {}).get('run_id')
             if old_run and value.get('run_id'):

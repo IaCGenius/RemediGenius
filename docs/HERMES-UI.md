@@ -35,7 +35,7 @@ No Node/Bun installation on the operator's machine is required.
 
 ## AWS Spot
 
-Set `hermes_ui = true` in your private `deploy/aws-native` tfvars before packaging
+Set `hermes_ui = true` in your private `deploy/aws-single` tfvars before packaging
 and deploying the normal source ZIP. Review the Terraform plan. The boot path
 builds/starts the UI after the existing gateway and profile are ready. The setting
 is included in the source/configuration used for Spot replacement. Evidence and
@@ -55,7 +55,7 @@ There are no new security-group ingress rules or IAM permissions.
 ## Login and use
 
 1. Use the **same dashboard username/password**, obtained through the normal
-   workstation `login` command or your stack's dashboard secret. Never paste a
+   workstation `login` command or the Spot host's retained `ce-login.json` through SSM. Never paste a
    model key into chat. The gateway handles authentication.
 2. Choose **Sessions**, then an existing `ce-desk` conversation or **New session
    in ce-desk**. Confirm the profile before sending sensitive context.

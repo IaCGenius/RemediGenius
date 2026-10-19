@@ -25,6 +25,20 @@ Validated configuration: AWS us-east-1 and DeepSeek v4.1 Flash. Other supported 
 
 [Explore the architecture](docs/diagrams/ce-mvp-architecture.html) · [Architecture and capability detail](docs/CURRENT-CE-OFFERING.md)
 
+## Deployment simplification in progress
+
+The working tree now replaces Lambda collection with the same deterministic local
+collector on Docker or Spot. S3 stores evidence and private state checkpoints.
+This migration is being tested; the published v0.1.3 tag is unchanged.
+
+- [New Spot setup](deploy/aws-single/README.md)
+- [New Docker setup](docs/LOCAL-COMPUTE-WORKSTATION.md)
+- [Architecture and recovery boundaries](docs/SINGLE-HOST-MIGRATION.md)
+
+The earlier deployment is archived in the separate v2 project for hosted reuse.
+Do not apply the new Terraform against an old stack's state. Older architecture
+images and release-validation records below describe the published baseline.
+
 ## Start with a useful question
 
 - **Security posture:** “Read current Security Hub findings. What needs attention first, and what coverage is missing?”
@@ -50,19 +64,19 @@ Hermes is an open-source agent runtime by Nous Research. CE adds the `ce-desk`
 profile, scoped AWS tools and readable security skills. Bring a model supported
 by Hermes; the tested configuration is DeepSeek v4.1 Flash.
 
-CE reuses Hermes's conversation, skills, model routing and manual Kanban. A small native runtime plugin admits bounded operations and shares retrieved context with a critic. Separate deterministic Lambda collectors retrieve AWS records and write receipts to S3. The model interprets evidence; it does not rewrite source observations or apply customer-cloud fixes.
+CE reuses Hermes's conversation, skills, model routing and manual Kanban. A small native runtime plugin admits bounded operations and shares retrieved context with a critic. A separate deterministic local collector retrieves AWS records and writes receipts to S3. The model interprets evidence; it does not rewrite source observations or apply customer-cloud fixes.
 
 
 
 | | Workstation | Your AWS account |
 |---|---|---|
 | Hermes compute | Official pinned Docker container | Same container on Spot EC2 |
-| Collection and evidence | AWS Lambda and private S3 | AWS Lambda and private S3 |
-| Conversations and cases | Named Docker volume | Retained encrypted EBS |
+| Collection and evidence | Local collector and private S3 | Instance-local collector and provisioned private S3 |
+| Conversations and cases | Named Docker volume + S3 checkpoints | Retained encrypted EBS + S3 checkpoints |
 | Login | Local dashboard, generated credentials | Private SSM tunnel, generated credentials |
-| Walkthrough | [Start on your workstation](docs/WORKSTATION-HERMES.md) | [Deploy in AWS](docs/NATIVE-CE-QUICKSTART.md) |
+| Walkthrough | [Start on your workstation](docs/LOCAL-COMPUTE-WORKSTATION.md) | [Deploy in AWS](deploy/aws-single/README.md) |
 
-Both paths use your AWS and model accounts and incur their charges. Local means local agent compute, not offline. Start with [Start Here](START-HERE.md) and [required inputs and credentials](docs/ONBOARDING.md). The cloud path requires an existing subnet and private bucket; the workstation Terraform creates its own evidence bucket. Source and Terraform remain inspectable and customizable.
+Both paths use your AWS and model accounts and incur their charges. Local means local agent compute, not offline. Start with [Start Here](START-HERE.md) and [required inputs and credentials](docs/ONBOARDING.md). The cloud path requires an existing subnet and creates its private bucket; workstation Terraform creates its own storage bucket. Source and Terraform remain inspectable and customizable.
 
 ## Offline rule check (no AWS or model needed)
 
@@ -115,7 +129,7 @@ See [scope and limits](docs/LIMITS.md) for what is not included and [model/data 
 | Native profile and readable skills | `profiles/ce/desk` |
 | Runtime gate and bounded critic | `profiles/ce/desk/plugins/ce-runtime` |
 | Deterministic collection | `modules/aws-read-executor` |
-| Workstation / Spot Terraform | `deploy/aws-workstation` / `deploy/aws-native` |
+| Workstation storage / Spot Terraform | `deploy/workstation-storage` / `deploy/aws-single` |
 | Launchers and verification | `tools` / `tests` |
 
 Validation is scoped to the documented release baseline. Never include credentials, Terraform state, private policies or unredacted transcripts in public issues.

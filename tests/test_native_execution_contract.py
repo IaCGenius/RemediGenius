@@ -354,3 +354,16 @@ def test_limited_review_is_visible_without_model_cooperation(rt):
     rt.turns[('session','turn')]['review']={'status':'AI_CRITIQUED','skill_context_omitted':True}
     text=rt.label('A draft.',session_id='session',turn_id='turn')
     assert 'AI_CRITIQUED_LIMITED_CONTEXT' in text
+
+def test_active_home_uses_hermes_profile_context_not_process_environment(monkeypatch,tmp_path):
+    import sys
+    from contextvars import ContextVar
+    selected=ContextVar('test_profile',default=tmp_path/'default')
+    monkeypatch.setenv('HERMES_HOME',str(tmp_path/'wrong-process-home'))
+    monkeypatch.setitem(sys.modules,'hermes_constants',SimpleNamespace(get_hermes_home=lambda:selected.get()))
+    token=selected.set(tmp_path/'ce-desk')
+    try:
+        assert runtime.active_home()==tmp_path/'ce-desk'
+    finally:
+        selected.reset(token)
+    assert runtime.active_home()==tmp_path/'default'

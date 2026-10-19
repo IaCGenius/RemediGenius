@@ -4,6 +4,33 @@ description: Help organize and onboard supplied knowledge; read selected organiz
 ---
 # Selected knowledge
 
+## Save context from chat
+
+When the operator explicitly asks to remember or save guidance, use
+`ce_knowledge(action="stage", title=..., scope=..., collection=..., content=...)`.
+Use Markdown and the operator's actual content. Do not invent dates, approvals,
+owners or resource classification. A short clarifying question is useful only
+when the missing scope changes meaning.
+Use `org/policies`, `org/exceptions`, or `org/context` as the collection unless
+the operator names another simple path. Do not put a sentence in collection.
+Keep a short rule short: copy its substance without adding an unknowns checklist,
+governance template or extra policy clauses. Do not narrate a corrected input
+format error once staging succeeds. Show the rule, scope and confirmation once.
+
+Show the exact staged text, scope and returned confirmation phrase. The operator
+then sends `publish knowledge <id>` as a new message. Call
+`ce_knowledge(action="publish", id=...)` only after that message. The runtime
+checks the exact message; a model's confirmation is not sufficient. Do not repeat
+the confirmation requirement after the tool returns PUBLISHED.
+
+Read `index.md` again and use the returned `notes/.../content.md` path on later
+investigations. Notes are operator assertions. They do not suppress a finding,
+change AWS, or alter a running assessment's frozen knowledge snapshot. The
+confirmation is a review of saved text, not an organizational approval process.
+
+The operator can use supplied context immediately in this conversation without
+publishing it. Do not make publication a prerequisite for answering a question.
+
 For adding files, Confluence exports or organizing a first knowledge library,
 read [Knowledge onboarding](references/onboarding.md). Do not imply that a chat
 attachment or a pasted URL is already imported into shared knowledge.
@@ -11,7 +38,8 @@ For “help build our knowledge”, “what should I upload?”, or “what did 
 read [Guided knowledge conversation](references/guided-knowledge.md).
 
 1. Use ce_knowledge with path `index.md` to read the selected view. Default location is
-   `/opt/data/shared/knowledge/index.md`; a different mounted view may be named
+   `/opt/data/shared/knowledge/index.md`; the tool also lists confirmed chat notes.
+   A different mounted view may be named
    explicitly by the operator. If absent, state that no view is connected and
    continue tasks that do not depend on it.
 2. Follow only relevant links with ce_knowledge's relative path. For `content.md`,

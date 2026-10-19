@@ -110,3 +110,14 @@ def test_ten_page_read_and_timeout_preserve_collected_facts(tmp_path):
     assert r['results'][0]['result']['summary']['count']==50
     assert r['results'][0]['result']['continuation_parameters']=={'NextToken':'next'}
     assert e.cancel(r['id'])['results']==r['results']
+
+def test_returned_normalized_artifact_is_admitted_but_invented_sibling_is_not(tmp_path):
+    e,r,_,_=make(tmp_path,[])
+    saved=e.load(r['id'])
+    saved['results']=[{'question':'Collected findings','request':{'action':'read'},
+                      'result':{'files':[{'path':'normalized/actual/findings.json','layer':'normalized'}]}}]
+    actual=plan({'action':'show','path':'normalized/actual/findings.json'})
+    assert e.validate_plan(saved,json.dumps(actual))==actual
+    assert e.view(saved)['results'][0]['result']['files'][0]['path']=='normalized/actual/findings.json'
+    with pytest.raises(ValueError,match='Evidence path'):
+        e.validate_plan(saved,json.dumps(plan({'action':'show','path':'normalized/invented/findings.json'})))

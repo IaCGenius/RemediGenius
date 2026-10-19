@@ -10,7 +10,7 @@ from botocore.exceptions import ClientError
 
 
 def load_executor():
-    path = Path(__file__).resolve().parents[1] / 'modules/aws-read-executor/executor.py'
+    path = Path(__file__).resolve().parents[1] / 'deploy/collector/executor.py'
     spec = importlib.util.spec_from_file_location('read_executor_test', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

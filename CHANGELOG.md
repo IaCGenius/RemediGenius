@@ -1,5 +1,15 @@
 # Changes
 
+## Unreleased: local-compute deployment migration
+
+- Move deterministic AWS collection to the Docker or Spot host; archive the Lambda baseline in v2 for hosted reuse.
+- Add private S3 checkpoints with SQLite-aware backup and verified restore.
+- Add operator-confirmed short knowledge notes through the existing CE tool.
+- Honor request-local Hermes profiles and exact returned normalized artifact paths.
+- Pin collector Python/SDK and keep validation separate.
+- Acceptance is in progress. No new release tag or readiness claim yet.
+
+
 ## Unreleased
 
 - Add opt-in Hermes browser UI for workstation and Spot deployments. Keep the native dashboard, profile data and CE runtime. Pin upstream source, preserve its MIT license, and patch selected-profile WebSocket routing.

@@ -32,6 +32,27 @@ def stop(name):
         run('docker', 'rm', '-f', container)
 
 
+def seed_model(name):
+    # Native routed profiles intentionally do not inherit process secrets.
+    # Seed only the launcher's existing MODEL_API_KEY; preserve operator overrides.
+    run('docker', 'exec', '-i', '--user', '10000:10000', name, 'python', '-', input='''
+import os
+from pathlib import Path
+p=Path('/opt/data/profiles/ce-desk/.env')
+if not p.parent.is_dir(): raise SystemExit('Install ce-desk first')
+s=p.read_text() if p.exists() else ''
+if not any(line.startswith('MODEL_API_KEY=') for line in s.splitlines()):
+ key=os.environ.get('MODEL_API_KEY','')
+ if not key: raise SystemExit(0)  # Operator may configure a provider in Hermes after login.
+ if any(c in key for c in '\\r\\n'): raise SystemExit('Invalid model key')
+ pending=p.with_name('.env.ui-pending')
+ fd=os.open(pending,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
+ with os.fdopen(fd,'w') as f: f.write(s.rstrip()+'\\nMODEL_API_KEY='+key+'\\n')
+ pending.replace(p)
+ p.chmod(0o600)
+''')
+
+
 def start(name, port=9126):
     if not re.fullmatch(r'rgce-[a-z0-9-]{1,40}', name) or not 1024 <= port <= 65535:
         raise ValueError('Use a CE rgce- container name and a nonprivileged port')
@@ -51,26 +72,15 @@ def start(name, port=9126):
         raise ValueError('UI network must be a CE-owned internal network')
     if network not in gateway['NetworkSettings']['Networks']:
         run('docker', 'network', 'connect', '--alias', 'ce-hermes-gateway', network, name)
-    # Native routed profiles intentionally do not inherit process secrets.
-    # Seed only the launcher's existing MODEL_API_KEY; preserve operator overrides.
-    run('docker', 'exec', '-i', '--user', '10000:10000', name, 'python', '-', input='''
-import os
-from pathlib import Path
-p=Path('/opt/data/profiles/ce-desk/.env')
-if not p.parent.is_dir(): raise SystemExit('Install ce-desk first')
-s=p.read_text() if p.exists() else ''
-if not any(line.startswith('MODEL_API_KEY=') for line in s.splitlines()):
- key=os.environ.get('MODEL_API_KEY','')
- if not key or any(c in key for c in '\\r\\n'): raise SystemExit('Model key missing or invalid')
- pending=p.with_name('.env.ui-pending')
- fd=os.open(pending,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
- with os.fdopen(fd,'w') as f: f.write(s.rstrip()+'\\nMODEL_API_KEY='+key+'\\n')
- pending.replace(p)
- p.chmod(0o600)
-''')
+    seed_model(name)
     stop(name)
+    # Docker 25 on AL2023 does not publish ports on an internal-only endpoint.
+    # Reuse the gateway's egress network for loopback publication; the separate
+    # internal network still supplies the stable gateway alias. No AWS or model
+    # credentials, volumes, or Docker socket are given to the UI.
+    public_network = name if name in gateway['NetworkSettings']['Networks'] else 'bridge'
     run('docker', 'run', '-d', '--name', name+'-ui', '--label', 'com.remedigenius.ce='+LABEL,
-        '--network', network, '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+        '--network', public_network, '--network', network, '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
         '--memory', '128m', '--cpus', '0.5', '--pids-limit', '128', '--restart', 'unless-stopped',
         '--tmpfs', '/tmp:rw,nosuid,nodev,uid=101,gid=101',
         '--tmpfs', '/var/cache/nginx:rw,nosuid,nodev,uid=101,gid=101',

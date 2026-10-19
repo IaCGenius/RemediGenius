@@ -15,5 +15,5 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -e ".[aws,documents,test]"
       - run: python -m pytest -q tests
-      - run: python -m pytest -q profiles/ce/tests modules/native-source-discovery
+      - run: python -m pytest -q profiles/ce/tests deploy/collector
       - run: python -m pip wheel --no-deps --wheel-dir dist .
