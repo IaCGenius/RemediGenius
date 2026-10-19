@@ -1,6 +1,6 @@
 # Validation records
 
-## Single-compute candidate — 2026-10-19
+## v0.2.0 single-compute validation — 2026-10-19
 
 Fresh deployment from commit `8a0695a`, source ZIP SHA-256
 `89cdd0aceac8afb74d64f51f93414b30974f4c16022a9acf1b07fd4e831031ae`.
@@ -17,13 +17,19 @@ Local Pi/DeepSeek executed the tests; the maintainer reviewed its recorded resul
 | Case and proposal | Real Config finding saved in native Kanban. CloudFormation lint failed once, then passed on attempt two of three. No apply. |
 | Optional UI | Visible ce-desk selection, same five native sessions, reopened conversation and grounded follow-up. |
 | Storage and schedule | Instance role verified; S3 receipts and deterministic 24-hour schedule inspected. Schedule correctly reported partial coverage. Private checkpoint contained five sessions, 111 messages, the case and policy. |
-| New-host replacement | Pending the controlled replacement check; do not infer it from the checkpoint inspection alone. |
+| New-host replacement | Passed on a new Spot host with the same retained EBS: five sessions, 111 messages, policy hash, case, dashboard credentials and model configuration preserved. Both UIs reopened the state; a real DeepSeek follow-up cited the saved policy. |
 
 These checks exercise actual model calls and UI behavior, not just unit tests.
 They do not guarantee every possible AWS query or identical model wording.
 The fresh Spot used an existing model secret. Keyless Spot UI onboarding was not
 repeated; the corresponding seed behavior was checked offline and in Docker.
 See [actual walkthrough screenshots](WALKTHROUGH.md#fresh-single-host-examples).
+Replacement used package `4cd8e320d69bc357fbcbb924750da692c30329f88e668435fa1ba68f9a2b8f13`
+from commit `c885e6c`. This tested retained-EBS recovery, not an empty-volume
+restore. A stale local SSM tunnel caused connection timeouts; replacing those
+local tunnel processes restored access without changing CE. Shell syntax,
+140 local documentation links and source-archive privacy checks passed.
+
 Private raw reports are excluded from the release. GitHub Actions remains paused;
 no successful hosted CI run is claimed.
 

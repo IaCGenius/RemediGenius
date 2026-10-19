@@ -78,6 +78,11 @@ model credentials stored in Hermes. Protect access to the whole state prefix.
 The model-facing evidence reader cannot read that prefix. Do not share state
 archives as diagnostic bundles.
 
+Checkpoint archives are not automatically expired. The bucket is versioned, so
+older object versions also use storage. Review storage usage and choose a
+retention policy deliberately. Do not delete the checkpoint named by the latest
+manifest or your required recovery copies.
+
 ## Model and knowledge
 
 An existing model secret can be supplied; the host reads only that secret and

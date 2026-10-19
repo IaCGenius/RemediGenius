@@ -9,7 +9,7 @@ knowledge; proposal guidance and fresh reassessment.
 |---|---|
 | Knowledge | Import files, select a view and mount/publish it. Scope and provenance guide interpretation; knowledge does not grant permissions. |
 | Model | Operator chooses provider/credentials. DeepSeek v4.1 Flash is the current test baseline. |
-| AWS accounts | Explicit read targets and member roles; no automatic organization enrollment. |
+| AWS accounts | Setup configures one account. Extra executor targets are not a supported launcher onboarding flow. |
 | Operations | Existing generic executor and SDK schema discovery; new admitted operations require permission/manifest review. |
 | Skills/plugins | Reuse Hermes capabilities, with deliberate admission and integrity checks for the CE package. No automatic trust in newly installed code. |
 | Other agent integrations | Readable skills and exported knowledge are reusable. A public native MCP/API/A2A service is not shipped. |
