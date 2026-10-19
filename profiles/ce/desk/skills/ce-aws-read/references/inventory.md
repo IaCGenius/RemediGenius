@@ -65,8 +65,9 @@ actual failure: no aggregator, no recorded matches, AccessDenied, unsupported ty
 throttle, missing required parameter or timeout. Do not merge these into "no access".
 Do not repeat a denied request or tell the operator to grant admin access.
 
-The Lambda uses its configured execution role or assumes the selected target role
-with its external ID. SecurityAudit/ViewOnlyAccess provide metadata permissions;
+The collector uses the Spot instance role or the workstation AWS profile. An
+explicit executor target can assume its configured role with an external ID;
+the current launchers configure one account. SecurityAudit/ViewOnlyAccess provide metadata permissions;
 the admitted operation catalog and target scope still constrain execution. Cloud
 Control also needs the resource schema's downstream list/read permissions. A
 missing dependency is a permission gap, not a reason to generate a new collector.

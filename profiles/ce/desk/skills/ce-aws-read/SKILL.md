@@ -102,7 +102,7 @@ Do not scan all S3 or the local cache. A receipt's exact S3 path avoids stale ca
 
 ## Boundaries and finish condition
 
-The runtime admits structured calls; Lambda independently validates operation,
+The runtime admits structured calls; the separate local collector validates operation,
 region, target, parameters and page/byte/time bounds, and IAM restricts reads.
 No cloud mutation is exposed. No terminal or generated Python fallback is allowed.
 Access denied stops that operation for the current turn. Budgets are supplied by
