@@ -30,6 +30,22 @@ restore. A stale local SSM tunnel caused connection timeouts; replacing those
 local tunnel processes restored access without changing CE. Shell syntax,
 140 local documentation links and source-archive privacy checks passed.
 
+The final boot package is
+`01c421580a292429a6da94def5fc9ecb8882ebb70a060747edfa8da30f0aad7b`
+from source commit `a8bd4b0`. The final change updated three skill Markdown files
+and documentation, with no Python execution-code change. Installed skills matched
+the package; the integrity manifest checked 95 files with zero missing files or
+hash mismatches. Policy, sessions and case remained intact after explicit upgrade.
+
+A targeted UI question loaded both the AWS-read and knowledge skills plus the
+knowledge onboarding reference. The answer correctly described reviewed chat
+notes on Spot, local `knowledge_dir` views on Docker, no Spot `knowledge_view`
+input, and the deterministic local collector. The first model call did not finish
+within 300 seconds; the single allowed retry completed in 241 seconds. This is a
+recovered pass, not a first-attempt latency guarantee. No AWS read or publication
+was requested in that question. Full regression tests were not repeated for those
+Markdown-only changes.
+
 Private raw reports are excluded from the release. GitHub Actions remains paused;
 no successful hosted CI run is claimed.
 
