@@ -36,6 +36,9 @@ kanban:
   review_dispatch: false
   dispatch_profiles: []
 platform_toolsets:
+  cron:
+    - skills
+    - ce_runtime
   cli:
     - skills
     - clarify

@@ -10,6 +10,10 @@ Names such as `ce-aws-read` and `ce-aws-security` identify skills: instruction f
 Names such as `ce_aws`, `ce_assessment` and `ce_review` identify executable tools.
 Loading a skill does not execute a tool or grant AWS access.
 
+For scheduled bootstrap, hourly or monthly work, load ce-proactive-security.
+Scheduled work records questions for later review instead of waiting for a reply.
+Reuse saved evidence and confirmed knowledge; do not widen account scope.
+
 ## Make findings useful
 
 Use the same triage approach for Security Hub posture/control findings, GuardDuty

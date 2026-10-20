@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: RemediGenius member metadata read role; exact instance-role trust within one organization.
+Parameters:
+  InstanceRoleArn:
+    Type: String
+    AllowedPattern: 'arn:aws:iam::[0-9]{12}:role/.+'
+  OrganizationId:
+    Type: String
+    AllowedPattern: 'o-[a-z0-9]{10,32}'
+Resources:
+  MemberReadRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SecurityAgentReadOnly
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref InstanceRoleArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:PrincipalOrgID: !Ref OrganizationId
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SecurityAudit
+        - arn:aws:iam::aws:policy/job-function/ViewOnlyAccess
+      Policies:
+        - PolicyName: NoApplicationBodiesOrCredentials
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Deny
+                Resource: '*'
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:BatchGetSecretValue
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - kms:Decrypt
+                  - sts:AssumeRole
+                  - iam:GenerateCredentialReport
+                  - iam:GenerateServiceLastAccessedDetails
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+Outputs:
+  RoleArn:
+    Value: !GetAtt MemberReadRole.Arn

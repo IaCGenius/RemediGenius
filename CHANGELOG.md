@@ -1,5 +1,16 @@
 # Changes
 
+## Proactive security trial
+
+- Add native Hermes heartbeat, hourly and monthly jobs plus a one-time bootstrap.
+  The heartbeat is script-only; investigations use existing scope and read budgets.
+- Adapt the operator's security-agent proposal into a bounded skill. Preserve
+  source severity, require confirmation for business context, and avoid declaring
+  missing observations fixed.
+- Include a member-account role template for later review; this trial remains
+  single-account. Cost Explorer, SQS and external notifications remain disabled.
+- Document Cron-page review and pause controls. No release tag change.
+
 ## Account and knowledge onboarding
 
 - Add a short account/context onboarding skill using existing Hermes chat and

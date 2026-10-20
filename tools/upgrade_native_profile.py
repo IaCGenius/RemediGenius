@@ -171,6 +171,7 @@ def upgrade(source, home):
         if link.exists(): shutil.move(str(link),str(backup/'ce-runtime'))
         link.symlink_to(source/'plugins/ce-runtime',target_is_directory=True)
     value.setdefault('platform_toolsets',{})['cli']=['skills','clarify','ce_runtime']
+    value['platform_toolsets']['cron']=['skills','ce_runtime']
     enabled=value.setdefault('plugins',{}).get('enabled',[])
     value['plugins']['enabled']=list(dict.fromkeys([*enabled,'ce-runtime']))
     value.setdefault('auxiliary',{}).setdefault('ce_review',{}).setdefault('reasoning_effort','none')

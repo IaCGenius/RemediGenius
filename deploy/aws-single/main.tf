@@ -169,10 +169,11 @@ locals {
 
   config = {
 
-    name           = var.name,
-    region         = "us-east-1",
-    account_id     = var.account_id,
-    audit_role_arn = aws_iam_role.audit.arn,
+    name              = var.name,
+    region            = "us-east-1",
+    account_id        = var.account_id,
+    audit_role_arn    = aws_iam_role.audit.arn,
+    proactive_enabled = var.proactive_enabled,
 
     bucket         = aws_s3_bucket.data.id, prefix = "ce", archive_key = aws_s3_object.source.key,
     archive_sha256 = filesha256(var.source_zip), volume_id = aws_ebs_volume.sessions.id,
@@ -272,4 +273,10 @@ output "instance_role" {
 variable "model_secret_kms_keys" {
   type    = list(string)
   default = []
+}
+
+variable "proactive_enabled" {
+  type        = bool
+  default     = false
+  description = "Install native Hermes security schedules and one bootstrap; uses model tokens."
 }

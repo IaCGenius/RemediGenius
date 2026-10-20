@@ -73,6 +73,11 @@ New to the account? Start with [account status and knowledge onboarding](docs/ON
 The Spot deployment prepares a small background baseline; Hermes can show it
 without a new scan, then help you confirm purpose and priorities through Q&A.
 
+For proactive work, enable the [scheduled security trial](docs/PROACTIVE-SECURITY.md):
+a script-only heartbeat, hourly agent investigations and a monthly posture review.
+Review outputs in **Sessions → Automation → History**; pause jobs on **Cron**.
+Scheduled investigations use your configured model and incur model usage.
+
 - **Security posture:** “Read current Security Hub findings. What needs attention first, and what coverage is missing?”
 - **Investigation:** “Show EC2 CloudTrail management events for the last five days. State actual time coverage and collection limits.”
 - **Remediation:** “Explain this finding using our policy. Prepare a CLI fix, save a case, and help me reassess after our change window.”

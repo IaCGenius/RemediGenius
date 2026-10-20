@@ -23,7 +23,7 @@ def package(output):
     selected = [root / 'tools/native_data.py', root / 'tools/native_ui.py', root / 'tools/upgrade_native_profile.py',
                 root / 'tools/native_session_limits.py', root / 'tools/native_validator.py', root / 'tools/model_probe.py']
     extensions = {'.py', '.tf', '.md', '.yaml', '.yml', '.tftpl', '.sh', '.json', '.conf', '.txt'}
-    for directory in ('deploy/validator', 'deploy/hermes-ui', 'deploy/collector', 'deploy/aws-single', 'profiles/ce'):
+    for directory in ('deploy/validator', 'deploy/hermes-ui', 'deploy/collector', 'deploy/proactive', 'deploy/aws-single', 'profiles/ce'):
         for path in (root / directory).rglob('*'):
             parts = path.relative_to(root).parts
             if (path.is_file() and not any(p.startswith('.') or p == '__pycache__' for p in parts)

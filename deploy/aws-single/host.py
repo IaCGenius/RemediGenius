@@ -191,6 +191,12 @@ WantedBy=multi-user.target
                 os.lchown(link,10000,10000)
     native_ui.seed_model('rgce-native')
     run('docker','restart','rgce-native')
+    if CFG.get('proactive_enabled',False):
+        run('docker','exec','rgce-native','mkdir','-p','/tmp/rgce-proactive')
+        for filename in ('install.py','heartbeat.py'):
+            run('docker','cp',str(SOURCE/'deploy/proactive'/filename),'rgce-native:/tmp/rgce-proactive/'+filename)
+        run('docker','exec','-e','HERMES_HOME=/opt/data/profiles/ce-desk',
+            'rgce-native','python','/tmp/rgce-proactive/install.py','--bootstrap')
     if CFG.get('hermes_ui'):native_ui.start('rgce-native',9122)
     run('systemctl','enable','rgce-native-boot.service')
     run('systemctl','enable','--now','rgce-state.timer')

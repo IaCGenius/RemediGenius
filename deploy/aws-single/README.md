@@ -12,6 +12,10 @@ records the tested package and deployment behavior.
 For the equivalent local path, see [Docker workstation](../../docs/LOCAL-COMPUTE-WORKSTATION.md).
 For architecture and recovery boundaries, see [single-host migration](../../docs/SINGLE-HOST-MIGRATION.md).
 
+To try scheduled agent investigations, set `proactive_enabled = true`.
+See [proactive security](../../docs/PROACTIVE-SECURITY.md) for schedules, model
+usage, the one-time bootstrap and Cron-page pause controls.
+
 ## Before you begin
 
 Use Bash on Linux or WSL2. Install:
