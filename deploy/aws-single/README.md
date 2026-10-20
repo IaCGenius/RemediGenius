@@ -253,6 +253,15 @@ Fresh `ce-desk` after login, before the first investigation:
 
 ![Fresh ce-desk profile with the configured DeepSeek model](../../docs/images/ce-single-host-first-chat.png)
 
+## Account baseline and knowledge onboarding
+
+The collector prepares `ACCOUNT-STATUS.md` in the Hermes workspace on the first
+run and refreshes it daily. The default baseline reads Config recorded-resource
+counts, recorder configuration, EC2 instances and active Security Hub findings.
+This is bounded discovery, not complete inventory. Partial/denied reads remain visible.
+Set `schedule_interval_hours` (1–168, default 24) to choose the refresh interval.
+See [the two onboarding conversations](../../docs/ONBOARDING-CONVERSATIONS.md).
+
 ## Optional browser UI
 
 `hermes_ui = true` builds and starts the additional browser UI on remote port

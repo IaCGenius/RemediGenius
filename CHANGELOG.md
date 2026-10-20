@@ -1,5 +1,15 @@
 # Changes
 
+## Account and knowledge onboarding
+
+- Add a short account/context onboarding skill using existing Hermes chat and
+  knowledge stage/publish tools; remove stale claims that chat cannot save context.
+- Prepare a bounded account status document from scheduled Config, EC2 and
+  Security Hub reads. Store source evidence in S3 and render a readable workspace page.
+- Default Spot refresh remains daily; expose `schedule_interval_hours` (1–168).
+- Record the goal-first improvement backlog and UI walkthrough. Background checks
+  do not call a model or automatically publish organizational knowledge.
+
 ## AWS procedures and decision briefs
 
 - Route security tasks through selected pinned AWS procedures and share those

@@ -34,6 +34,15 @@ variable "running" {
   description = "Start CE on first apply. Set false to stop compute after initial setup."
   default     = true
 }
+variable "schedule_interval_hours" {
+  description = "Background account baseline refresh while the instance is running."
+  type        = number
+  default     = 24
+  validation {
+    condition     = var.schedule_interval_hours >= 1 && var.schedule_interval_hours <= 168 && floor(var.schedule_interval_hours) == var.schedule_interval_hours
+    error_message = "Choose a whole number of hours from 1 to 168."
+  }
+}
 variable "source_zip" {
   type = string
 }
@@ -170,7 +179,8 @@ locals {
 
     model_secret = var.model_secret_arn, model_name = var.model_name, model_base_url = var.model_base_url,
 
-    hermes_ui = var.hermes_ui, container_memory_mb = var.container_memory_mb,
+    hermes_ui               = var.hermes_ui, container_memory_mb = var.container_memory_mb,
+    schedule_interval_hours = var.schedule_interval_hours,
 
     image = "nousresearch/hermes-agent:stable@sha256:444b42594e7f467425872fc35e077a227d377f0fe0726bc818706d62175fad8b"
 

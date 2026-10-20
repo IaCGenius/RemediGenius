@@ -69,6 +69,10 @@ See the [validation record](docs/RELEASE-VALIDATION.md) for exact test scope.
 
 ## Start with a useful question
 
+New to the account? Start with [account status and knowledge onboarding](docs/ONBOARDING-CONVERSATIONS.md).
+The Spot deployment prepares a small background baseline; Hermes can show it
+without a new scan, then help you confirm purpose and priorities through Q&A.
+
 - **Security posture:** “Read current Security Hub findings. What needs attention first, and what coverage is missing?”
 - **Investigation:** “Show EC2 CloudTrail management events for the last five days. State actual time coverage and collection limits.”
 - **Remediation:** “Explain this finding using our policy. Prepare a CLI fix, save a case, and help me reassess after our change window.”

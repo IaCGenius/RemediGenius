@@ -23,8 +23,9 @@ Collections select context, not permissions. Selecting `org` does not include
   authenticated Confluence sync connector. Do not fetch a pasted private URL.
 - Repository: operator selects non-secret committed documentation and records
   repository/commit/path in the source. A Git URL alone is not connected access.
-- Chat/pasted text: help draft a readable source and show the operator how to
-  import it. This read-only runtime cannot publish or edit shared knowledge.
+- Chat/pasted text: draft and stage through ce_knowledge. Show the returned
+  confirmation phrase; publish only after the operator sends it separately.
+  This writes local knowledge, never AWS resource configuration.
 
 Offer a short, optional source heading with purpose, scope, owner if supplied,
 source reference, and effective/review dates only if known. Missing dates remain

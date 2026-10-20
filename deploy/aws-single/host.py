@@ -76,9 +76,12 @@ def install(upgrade=False):
     attach();network()
     sys.path.insert(0,str(SOURCE/'tools'))
     import native_validator,native_ui,native_session_limits
+    sys.path.insert(0,str(SOURCE/'deploy/collector'))
+    from account_status import default_checks
     envdir=Path('/run/ce-collector');envdir.mkdir(exist_ok=True);os.chown(envdir,10000,10000)
     env={'AWS_DEFAULT_REGION':CFG['region'],'ACCOUNT_ID':CFG['account_id'],'BUCKET':CFG['bucket'],'PREFIX':CFG['prefix'],
-         'INTERVAL_HOURS':'24','CHECKS':json.dumps([{'target':'default','region':CFG['region'],'service':'securityhub','operation':'get_findings','parameters':{},'max_pages':2},{'target':'default','region':CFG['region'],'service':'config','operation':'describe_configuration_recorders','parameters':{},'max_pages':1}]),
+         'INTERVAL_HOURS':str(CFG.get('schedule_interval_hours',24)),
+         'CHECKS':json.dumps(default_checks(CFG['region'])),
          'TARGETS':json.dumps({'default':{'account_id':CFG['account_id'],'regions':[CFG['region']],**({'role_arn':CFG['audit_role_arn'],'audit_role_arn':CFG['audit_role_arn']} if CFG.get('audit_role_arn') else {})}})}
     envfile=ROOT/'collector.env';envfile.write_text(''.join(k+'='+v+'\n' for k,v in env.items()));envfile.chmod(0o600)
     run('docker','build','-t','remedigenius-collector:local',str(SOURCE/'deploy/collector'))

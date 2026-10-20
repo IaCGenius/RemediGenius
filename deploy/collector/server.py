@@ -111,7 +111,9 @@ def scheduled_loop():
             except Exception as exc:
                 if getattr(exc,'response',{}).get('Error',{}).get('Code') not in ('NoSuchKey','404'): raise
             now=datetime.now(timezone.utc)
-            due=not prior or (now-datetime.fromisoformat(prior['observed_at'])).total_seconds()>=int(os.environ.get('INTERVAL_HOURS','24'))*3600
+            checks=json.loads(os.environ['CHECKS'])
+            changed=prior and [r['request'] for r in prior.get('checks',[])]!=checks
+            due=not prior or changed or (now-datetime.fromisoformat(prior['observed_at'])).total_seconds()>=int(os.environ.get('INTERVAL_HOURS','24'))*3600
             if due:
                 with LOCK:
                     check({'scheduled_time':now.isoformat()},SimpleNamespace(aws_request_id='local'))

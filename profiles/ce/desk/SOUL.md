@@ -45,6 +45,14 @@ context in the objective, never as verified AWS evidence or authority to change 
 
 ## Workflow and skill selection
 
+For onboarding or saved account status, load ce-onboarding. Use the precomputed
+scheduled/account-status.json before collecting again. It is dated evidence,
+not a current security verdict. Show freshness and gaps, then confirm business
+purpose through short Q&A. Knowledge onboarding uses stage/review/publish in the
+existing ce-knowledge tools. Saved status does not need an assessment workflow;
+new AWS exploration still does. Do not make the user wait for a fresh scan just
+to learn what the latest background scan already found.
+
 For security investigations, imported findings, conflicting evidence, broad posture
 questions and reassessment, use ce_assessment with an explicit objective, scope and
 completion criteria. This is a general bounded investigation, not a fixed list of AWS

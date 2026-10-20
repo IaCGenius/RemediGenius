@@ -15,9 +15,10 @@ When material is supplied, offer a short Markdown draft organized as:
 
 Do not fabricate missing fields, copy unrelated sensitive content, or treat a
 summary as approved policy. Show the draft for correction in chat. One document
-may be enough. Suggest a collection and an operator import command, then explain
-that import and publication are separate. This runtime cannot save that draft or
-ingest attachments into shared knowledge itself. Do not say “I remembered it” when
+may be enough. Stage chat text through ce_knowledge(action="stage") and show the
+returned confirmation phrase. Publish only after the operator sends that phrase
+as a separate message. Attachments still require the supported intake process.
+Do not say “I remembered it” when
 it exists only in chat. Files can remain ordinary Markdown; no special OKF syntax
 is required. Use onboarding.md for supported sources and commands.
 

@@ -53,6 +53,8 @@ def handler(event, context):
               'notice': 'Bounded snapshots, not a security verdict or verified remediation. No automatic closure.'}
     # Publish RUNNING first so an interrupted invocation cannot look successful.
     save('scheduled/latest.json', report | {'status': 'RUNNING'})
+    from account_status import publish
+    publish(report | {'status': 'RUNNING'}, load, save)
     for request in checks:
         signature = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
         row = {'check_id': signature, 'request': request}
@@ -70,4 +72,5 @@ def handler(event, context):
     report['status'] = 'OK' if all(not r.get('error') and r.get('result', {}).get('status') == 'OK' for r in report['checks']) else 'PARTIAL'
     save('scheduled/runs/'+key+'.json', report, IfNoneMatch='*')
     save('scheduled/latest.json', report)
+    publish(report, load, save)
     return {'status': report['status'], 'path': 'scheduled/runs/'+key+'.json', 'checks': len(checks)}
