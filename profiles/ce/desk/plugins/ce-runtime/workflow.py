@@ -83,41 +83,47 @@ def render_answer(value, run):
         # only protect underscores that could open/close Markdown emphasis.
         return re.sub(r'(?<![0-9A-Za-z])_|_(?![0-9A-Za-z])', r'\\_', text)
     evidence, knowledge = references(run)
-    lines = ['**Answer — AI interpretation**', safe(value['answer']), '', '**Observed facts — AI summary with references**']
-    lines += ['- '+safe(row['text'])+' ['+', '.join(row['evidence'])+']' for row in value['observations']] or ['No source observations cited.']
-    lines += ['', '**Evidence and checks — runtime reported**']
+    lines = ['**Assessment**', safe(value['answer'])]
+    if value['proposals']:
+        lines += ['', '**Recommended order of action**']
+        lines += [str(i)+'. '+safe(x) for i,x in enumerate(value['proposals'],1)]
+    if value['observations']:
+        lines += ['', '**What supports this**']
+        lines += ['- '+safe(row['text'])+' ['+', '.join(row['evidence'])+']' for row in value['observations']]
+    if value['knowledge']:
+        lines += ['', '**Your context**']
+        for row in value['knowledge']:
+            labels=[ref+': '+knowledge[ref]['path'] for ref in row['sources']]
+            lines.append('- '+safe(row['text'])+' ['+safe('; '.join(labels))+']')
+    if value['limits']:
+        lines += ['', '**What remains uncertain**']+['- '+safe(x) for x in value['limits']]
+    # Partial evidence is always visible, even when model prose omits it.
+    incomplete=[ref for ref,item in evidence.items() if item['request'].get('action')=='read'
+                and (item['result'].get('has_more') or item['result'].get('errors')
+                     or item['result'].get('status') not in ('OK','SUCCESS'))]
+    if incomplete:
+        lines += ['', 'Collection is incomplete or failed for '+', '.join(incomplete)+'. Conclusions cover only returned evidence.']
+    if run.get('outcome')=='INCONCLUSIVE_BUDGET':
+        limits=run.get('limits',{})
+        lines += ['', '**Next decision**', 'The investigation reached its limit. It cannot resume. Ask for a new follow-up using the saved evidence to address the remaining question.',
+                  'Runtime budget: '+', '.join(f'{name}={run.get(name,0)}/{limits.get(name,"unknown")}' for name in ('reads','actions','pages'))+'. Pages are reserved request limits, not actual pages returned.']
+    elif value['next_step']:
+        lines += ['', '**Next decision**', safe(value['next_step'])]
+    lines += ['', '**Evidence trail**']
     for ref,item in evidence.items():
         req,res=item['request'],item['result']
         label=req.get('service','evidence')+'.'+req.get('operation',req['action'])
         location=res.get('receipt_path') or res.get('raw_path') or req.get('path')
-        status=res.get('status', 'RETURNED' if req['action']=='show' else 'UNKNOWN')
-        detail=f'{ref}: {label}; status={status}'
+        detail=f'{ref}: {label}; status={res.get("status", "RETURNED" if req["action"]=="show" else "UNKNOWN")}'
         if req['action']=='read':
             more={True:'yes',False:'no'}.get(res.get('has_more'),'unknown')
             detail+=f"; target={req.get('target')}; region={req.get('region')}; observed={res.get('observed_at','unknown')}; pages={res.get('pages_returned','unknown')}; more={more}"
         if req['action']=='compare': detail+='; comparison='+str(res.get('result','UNKNOWN'))
         if location: detail+='; source='+location
         lines.append('- '+safe(detail))
-    if not evidence: lines.append('No source evidence returned. Schema discovery alone is not AWS state evidence.')
-    lines += ['- Evidence references checked against returned results. This does not prove each AI claim.',
-              '- Review: '+('AI critique returned on the same packet; not approval.' if run.get('critique','').strip() else 'NOT_REVIEWED — no critique returned.'),
-              '- Fix validation: NOT_RUN in this investigation. Requested validation is reported separately.',
-              '', '**Knowledge used — AI explanation**']
-    for row in value['knowledge']:
-        labels=[ref+': '+knowledge[ref]['path'] for ref in row['sources']]
-        lines.append('- '+safe(row['text'])+' ['+safe('; '.join(labels))+']')
-    if not value['knowledge']: lines.append('No selected knowledge cited as affecting this answer.')
-    if value['proposals']:
-        lines += ['', '**Proposals — AI suggestions; not executed**']+['- '+safe(x) for x in value['proposals']]
-    lines += ['', '**Limits / next step**']
-    lines += ['- '+safe(x) for x in value['limits']]
-    lines.append('Process outcome: '+safe(run.get('outcome','UNKNOWN'))+'. This is not a security verdict.')
-    if run.get('outcome')=='INCONCLUSIVE_BUDGET':
-        limits=run.get('limits',{})
-        lines.append('Runtime budget: '+', '.join(f'{name}={run.get(name,0)}/{limits.get(name,"unknown")}'
-                     for name in ('reads','actions','pages'))+'. Pages are reserved request limits, not actual pages returned.')
-        lines.append('This investigation is complete and cannot resume. Ask for a new follow-up investigation using the saved receipts to address remaining gaps; no automatic restart occurs.')
-    elif value['next_step']: lines.append(safe(value['next_step']))
+    if not evidence: lines.append('No AWS state evidence was returned.')
+    lines += ['AI assessment; '+('same-evidence AI critique completed' if run.get('critique','').strip() else 'NOT_REVIEWED')+'. References trace sources; critique is not factual certification or fix validation. No human approval or cloud change is implied.',
+              'Investigation: '+safe(run.get('id','unknown'))+'; outcome: '+safe(run.get('outcome','UNKNOWN'))+'.']
     return '\n'.join(lines)
 
 

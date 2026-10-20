@@ -37,3 +37,5 @@ Skills compose with existing skills (`ce-aws-security`, `ce-aws-read`, `ce-knowl
 ## Contribution
 
 Add new reference mappings or snippets under the skill’s `references/` directory. Keep guidance concise and cite versioned sources. Do not introduce external calls or unbounded queries. Update this document and the skill’s `PROVENANCE.md` when extending a skill.
+
+For AWS procedure routing and decision briefs, see [Security triage](SECURITY-TRIAGE.md).

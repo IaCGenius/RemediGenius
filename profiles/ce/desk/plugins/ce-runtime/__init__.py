@@ -389,16 +389,34 @@ class Runtime:
         import importlib.util
         spec = importlib.util.spec_from_file_location('ce_assessment', HERE/'workflow.py')
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-        allowed = {'action','id','targets','region','knowledge_paths','objective','criteria','evidence_paths','baseline_ids','max_reads'}
+        allowed = {'action','id','targets','region','knowledge_paths','objective','criteria','evidence_paths','baseline_ids','max_reads','procedures'}
         if set(params)-allowed:
             raise ValueError('Unknown assessment arguments')
         action = params.get('action')
         if action not in ('start','next','show','cancel'):
             raise ValueError('Unknown assessment action')
         skills = {}
-        for name in ('ce-investigation','ce-aws-read','ce-aws-security','ce-knowledge'):
+        for name in ('ce-investigation','ce-aws-read','ce-aws-security','ce-knowledge','ce-security-brief'):
             body = (ROOT/'skills'/name/'SKILL.md').read_text(encoding='utf-8')
             skills[name] = {'text':body,'sha256':hashlib.sha256(body.encode()).hexdigest()}
+        procedures = params.get('procedures', [])
+        registry = {
+            'security-hub-findings', 'security-hub-cspm-findings',
+            'security-hub-configuration', 'security-hub-cspm-configuration',
+            'guardduty-findings', 'guardduty-configuration',
+            'inspector-findings', 'inspector-configuration',
+            'macie-findings', 'macie-configuration',
+            'detective-investigations', 'detective-configuration',
+            'security-lake-sources', 'security-lake-configuration',
+            'organization-policies', 'service-recommendations'}
+        if (not isinstance(procedures, list) or len(procedures) > 3
+                or any(not isinstance(p, str) or p not in registry for p in procedures)):
+            raise ValueError('Select at most three packaged AWS procedures by registry name')
+        if procedures and action != 'start':
+            raise ValueError('Procedure selection is frozen at start')
+        for procedure in dict.fromkeys(procedures):
+            body = (ROOT/'skills/ce-aws-security/references'/(procedure+'.md')).read_text(encoding='utf-8')
+            skills['aws-procedure:'+procedure] = {'text':body,'sha256':hashlib.sha256(body.encode()).hexdigest()}
         writing = (ROOT/'skills/ce-investigation/references/clear-writing.md').read_text(encoding='utf-8')
         skills['clear-writing'] = {'text':writing, 'sha256':hashlib.sha256(writing.encode()).hexdigest()}
         inventory = (ROOT/'skills/ce-aws-read/references/inventory.md').read_text(encoding='utf-8')
@@ -448,7 +466,7 @@ class Runtime:
                     'authenticity or cross-account concerns for an ordinary scoped API receipt. '
                     'A generic may-include notice is not an observation that this operation aggregates members. '
                     'Mention aggregation only when the operation semantics or returned records establish it. '
-                    'Omit next steps when the objective is answered; do not propose expanding an answered scope. '
+                    'For findings triage, explain the recommended order of attention, business consequence supported by evidence/context, and a concrete next decision using ce-security-brief. Pure counts or definitions need no forced action plan. Do not expand collection scope to fill a report. '
                     'Do not pad with a generic security checklist, five priorities, unrelated skill warnings, '
                     'or proposed API names/properties that the supplied schemas do not establish. '
                     'If a capability is unavailable, state what evidence is needed; do not design its integration. '
@@ -456,10 +474,10 @@ class Runtime:
                     'A definitional or conceptual question about a named AWS control or service may be answered from general model knowledge when the packet holds no account evidence: label it general guidance in answer, keep observations empty, and state it is neither live account state nor a compliance attestation. Never refuse a basic explanation solely because no pinned reference is supplied. '
                     'Do not infer chronology, exceptions, remediation success or absence from missing evidence. '
                     'Read-only evidence inspection is not a live AWS collection. Use packet counts, not mental arithmetic. '
-                    'No remediation code, cloud mutations, security score or certification in this step. '
+                    'No remediation code, cloud mutations, security score or certification in this step. Upstream factual procedures supply evidence methods; ce-security-brief explicitly adds evidence-grounded advisory priority without changing source severity. '
                     'Reference exact returned receipt/path IDs; do not invent sources. '
                     + {'interpret':'Produce the initial answer.',
-                       'review':'Critique the supplied draft against this same packet. Return only material unsupported claims or contradictions and their evidence. Do not add report sections, generic qualifications or optional follow-up advice. If none, say no material issue found; no certification.',
+                       'review':'Critique the supplied draft against this same packet. Flag unsupported claims, changed source severity, uninspected findings presented as assessed, invented business context, and prioritization without a supported reason. For a triage objective, flag a mere count/ID list that gives no useful next decision. Return only material issues; do not invent a threat or prescribe extra collection merely to improve style. If none, say no material issue found; no certification.',
                        'finish':'Produce the final answer from evidence, draft and critique. Resolve only supported corrections. Do not narrate the review process.'}[stage])
                 instructions += '\nWriting guidance:\n'+writing
                 if stage == 'finish' and 'answer_references' in json.loads(packet):
@@ -467,7 +485,7 @@ class Runtime:
                         '\nReturn ONLY a JSON object with exactly these keys: '
                         'answer (short conclusion string), observations (list of {"text":"fact", "evidence":["E1"]}), '
                         'knowledge (list of {"text":"how context affected the answer", "sources":["K1"]}), '
-                        'proposals (zero to three short suggestion strings), limits (zero to six relevant strings), '
+                        'proposals (zero to three ordered action strings, each naming the issue, why it matters and next action), limits (zero to six relevant strings), '
                         'next_step (string, empty when no action is needed). '
                         'Use ONLY IDs from answer_references.evidence and answer_references.knowledge. '
                         'Every observation needs at least one actual evidence ID. Evidence references prove source membership, not truth. '
@@ -895,7 +913,7 @@ class Runtime:
                 ('; additional pages exist' if item['result'].get('has_more') else '')
                 for item in assessment['results'])
             if assessment.get('answer_contract'):
-                assessment_prefix = '**CE investigation '+assessment['id']+' — process complete**\n\n'+assessment['answer']
+                assessment_prefix = assessment['answer']
             else:
                 assessment_prefix = ('**CE assessment '+assessment['id']+' — workflow complete**\n\n'+
                     assessment['notice']+'\n\n**Runtime source coverage**\n'+coverage+
@@ -968,6 +986,7 @@ def register(ctx):
           'id':{'type':'string'},'targets':{'type':'array','items':{'type':'string'}},
           'region':{'type':'string','enum':['us-east-1']},
           'knowledge_paths':{'type':'array','items':{'type':'string'}},
+          'procedures':{'type':'array','maxItems':3,'items':{'type':'string'},'description':'At start only: selected AWS procedure basenames from ce-aws-security registry, e.g. security-hub-cspm-findings. Shared with all internal reasoning and review steps.'},
           'max_reads':{'type':'integer','minimum':1,'maximum':6,'description':'Freeze the requested maximum live collection requests for this investigation. Use 1 for one read. Cannot increase on resume.'},
           'objective':{'type':'string'},'criteria':{'type':'array','items':{'type':'string'}},
           'evidence_paths':{'type':'array','items':{'type':'string'}},

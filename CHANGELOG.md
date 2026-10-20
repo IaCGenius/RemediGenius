@@ -1,5 +1,14 @@
 # Changes
 
+## AWS procedures and decision briefs
+
+- Route security tasks through selected pinned AWS procedures and share those
+  procedures with every investigation model step.
+- Add contextual prioritization and a separate attributed remediation-planning skill.
+- Lead reports with conclusions and proposed actions; retain evidence and partial
+  result disclosure. No new permissions or extra model steps.
+- See [Security triage](docs/SECURITY-TRIAGE.md) for usage and skill-source decisions.
+
 ## Profile instruction clarification
 
 - Align the security-desk objective with usable native findings: related issues,

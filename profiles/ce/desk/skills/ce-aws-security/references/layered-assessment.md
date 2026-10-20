@@ -7,8 +7,8 @@ lenses, not new agents, permission roles or another scoring engine.
 ## Start with a useful bounded answer
 
 Read the configured targets and selected knowledge index. Reuse answers already
-provided. If business context is missing, ask at most three short questions in
-one message while continuing the requested evidence assessment:
+provided. If business context is missing, choose the one question below that most
+changes the next decision while continuing the requested evidence assessment:
 
 1. Which application/accounts are most important, and which are production?
 2. What matters now: incident investigation, exposure reduction, or an audit/change deadline?

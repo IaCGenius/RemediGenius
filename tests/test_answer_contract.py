@@ -25,10 +25,12 @@ def answer():
 def test_layout_and_labels_are_owned_by_runtime():
     run=record(); value=w.final_contract(json.dumps(answer()),run)
     text=w.render_answer(value,run)
-    headings=['Answer — AI interpretation','Observed facts','Evidence and checks','Knowledge used','Limits / next step']
+    headings=['Assessment','What supports this','Your context','What remains uncertain','Evidence trail']
     assert [text.index(h) for h in headings]==sorted(text.index(h) for h in headings)
     assert 'status=PARTIAL' in text and 'more=yes' in text
-    assert 'receipts/example.json' in text and 'Fix validation: NOT_RUN' in text
+    assert 'receipts/example.json' in text and 'same-evidence AI critique completed' in text
+    assert 'Fix validation: NOT_RUN' not in text
+    assert 'Collection is incomplete' in text
     assert 'Proposals —' not in text
 
 

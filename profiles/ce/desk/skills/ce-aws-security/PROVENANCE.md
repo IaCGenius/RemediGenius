@@ -49,3 +49,17 @@ bounds and returns their diagnostics; it does not implement another Terraform
 or CloudFormation parser. Provider 6.x validation supersedes the earlier 5.x-only
 example baseline for new standalone proposals; existing source constraints remain
 operator-owned. No cloud apply permission was added.
+
+
+2026-10-20: Reworked the entry skill around AWS's procedure registry. Compared
+upstream at 26c84e3608abb0076edf86b4c81dc879ac999ccb; the preserved upstream SKILL,
+Security Hub/CSPM/GuardDuty findings and service-recommendations references matched
+our pinned copies after line-ending normalization. References retain original attribution.
+Controller accepts at most three named procedures and includes their exact text/hash
+in the frozen investigation packet used for planning, interpretation and critique.
+Explicit adaptations: CLI/MCP examples use the existing deterministic reader;
+ce-security-brief adds advisory priority; ce-remediation-plan separately permits
+operator-reviewed draft code and tool validation. Upstream factual summaries, no
+mutating execution and source severity semantics remain distinct from these extensions.
+
+The CSPM reference now includes a RemediGenius combined ASFF overview. An unqualified Security Hub request retains all integrated products; explicit compliance requests retain the upstream standards workflow. This corrects scope narrowing observed in the first live advisory test.

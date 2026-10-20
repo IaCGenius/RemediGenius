@@ -86,7 +86,12 @@ paths returned by ce-aws-read. Do not enumerate the cache when a fresh receipt
 already identifies the relevant records.
 
 For AWS findings triage, security interpretation, coverage conclusions or
-remediation proposals, load `ce-aws-security` before planning the investigation.
+remediation proposals, load `ce-aws-security` and `ce-security-brief` before planning.
+Read the selected AWS reference procedure and pass its basename in the workflow
+`procedures` list. For implementation planning load `ce-remediation-plan`.
+An unspecified Security Hub findings request includes all integrated products in
+the established source. Do not rewrite it as a compliance-only objective or add
+a ProductName filter. Use the combined ASFF overview when that is the known source.
 `ce-aws-read` explains execution and data shapes; it does not replace the security
 workflow. For simple inventory/count retrieval, `ce-aws-read` is the required domain skill;
 `ce-aws-security` is not required solely to retrieve counts. This is skill selection

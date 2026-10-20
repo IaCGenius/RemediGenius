@@ -381,3 +381,25 @@ def test_operator_read_limit_cannot_be_expanded_by_model(rt):
     result=rt.assessment(rt.turns[('session','turn')],{'action':'start','objective':'Check Config',
         'criteria':['Report current state'],'knowledge_paths':[], 'max_reads':6})
     assert result['limits']['reads']==1
+
+
+def test_selected_procedure_is_frozen_into_investigation(rt):
+    state=rt.turns[('session','turn')];state['session_id']='session'
+    run=rt.assessment(state,{'action':'start','objective':'Triage findings',
+        'criteria':['Explain priority'], 'targets':['default'],'region':'us-east-1',
+        'knowledge_paths':[], 'procedures':['guardduty-findings']})
+    saved=json.loads((runtime.active_home()/'ce-assessments'/(run['id']+'.json')).read_text())
+    proc=saved['skills']['aws-procedure:guardduty-findings']
+    assert 'AttackSequence:' in proc['text']
+    assert hashlib.sha256(proc['text'].encode()).hexdigest()==proc['sha256']
+    assert 'ce-security-brief' in saved['skills']
+    import pytest
+    with pytest.raises(ValueError,match='frozen'):
+        rt.assessment(state,{'action':'next','id':run['id'],'procedures':['inspector-findings']})
+
+
+def test_procedure_cannot_read_arbitrary_file(rt):
+    import pytest
+    state=rt.turns[('session','turn')]
+    with pytest.raises(ValueError,match='packaged AWS procedures'):
+        rt.assessment(state,{'action':'start','procedures':['../../config']})

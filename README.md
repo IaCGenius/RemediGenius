@@ -6,6 +6,10 @@ Ask questions about your AWS security findings in plain language. Get prioritize
 evidence-backed answers and fix proposals informed by your own policies, then
 reassess after your change window.
 
+The agent uses AWS's security procedures to examine findings, then explains the
+recommended order of action using account evidence and your organizational context.
+See [security triage and implementation planning](docs/SECURITY-TRIAGE.md).
+
 By design, the agent requests bounded reads from a separate collector with a
 configured scope, an AWS-derived read catalog and IAM permissions. Fixes are
 proposals you review and apply yourself. See [how read discovery works](docs/BROAD-AWS-READER.md).

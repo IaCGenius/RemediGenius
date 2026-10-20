@@ -27,3 +27,6 @@ The optional Hermes browser UI is third-party MIT-licensed software from
 https://github.com/przbadu/hermes-ui, based on the Nous Research desktop renderer.
 Its license is preserved in deploy/hermes-ui/UPSTREAM-LICENSE. It is built only
 when enabled; see docs/HERMES-UI.md for the upstream revision and CE patch.
+
+Remediation planning guidance: adapted from rifteo/skills (MIT), Copyright (c) 2026 Rifteo.
+License and provenance: profiles/ce/desk/skills/ce-remediation-plan/.

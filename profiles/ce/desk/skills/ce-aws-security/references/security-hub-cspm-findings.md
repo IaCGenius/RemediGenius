@@ -1,10 +1,36 @@
 # Summarizing Security Hub CSPM Findings
 
+## RemediGenius routing adaptation
+
+For an unspecified "show Security Hub findings" request in an established ASFF
+source, use Workflow D below. Workflows A and B are for explicitly requested
+compliance/standards or failed-control views. Do not turn a general findings
+request into a ProductName=Security Hub query: that excludes integrated threats.
+
+### Workflow D: Combined ASFF findings overview
+
+1. Collect get-findings with RecordState=ACTIVE and the user's explicit filters.
+   Do not add ProductName, ComplianceStatus, severity or workflow-status filters.
+2. Use deterministic counts and a compact projection over all collected records
+   for Id, ProductArn, Title, Severity.Label, Compliance.SecurityControlId,
+   Workflow.Status, UpdatedAt and Resources[].{Id:Id,Type:Type}. Use raw records
+   for fields absent from the documented normalized shape; a missing GeneratorId
+   in normalized data is not proof a finding has no originating standard.
+3. Group supported related issues, distinguishing posture controls from threat
+   alerts and vulnerabilities. Apply ce-security-brief to the selected population.
+   Report partial inspection honestly. No enabled-standards query is needed just
+   to show existing findings; use Workflow A if a standards assessment is requested.
+4. Present the recommended next decision with evidence. Preserve source severity
+   and IDs; do not create a compliance percentage or claim unique risk counts.
+
+This is an explicit RemediGenius extension. The AWS procedures below are retained
+for their named requests; their examples do not override the user's filter scope.
+
 ## Overview
 
 Summarizes Security Hub CSPM compliance findings — standards-based posture results in ASFF format. Groups by standard (FSBP, CIS, PCI-DSS, NIST), control status (PASSED/FAILED/NOT_AVAILABLE), severity, and account.
 
-**A complete CSPM findings summary MUST cover all of these (V1 APIs — no `-v2` suffix); do not stop early:**
+**For an explicitly requested standards compliance summary (Workflow A), cover these (V1 APIs — no `-v2` suffix):**
 
 1. Active compliance findings — `get-findings` filtered to ProductName=Security Hub, RecordState=ACTIVE
 2. Enabled standard set — `get-enabled-standards` (FSBP, CIS, PCI-DSS, NIST)
