@@ -1,5 +1,12 @@
 # Changes
 
+## Profile instruction clarification
+
+- Clarify identity, skill/tool naming and inventory routing in SOUL.md.
+- Consolidate review-label, writing and retry rules; remove stale Lambda wording.
+- Keep live inventory inside the existing assessment workflow. This instruction
+  cleanup does not introduce the proposed faster retrieval path.
+
 ## Unreleased — read discovery and first-use corrections
 
 - Replace the fixed service ceiling with a pinned AWS-derived read catalog,
