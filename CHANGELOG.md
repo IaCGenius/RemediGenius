@@ -2,6 +2,8 @@
 
 ## Profile instruction clarification
 
+- Align the security-desk objective with usable native findings: related issues,
+  account context, relevant operator knowledge and an actionable next decision.
 - Clarify identity, skill/tool naming and inventory routing in SOUL.md.
 - Consolidate review-label, writing and retry rules; remove stale Lambda wording.
 - Keep live inventory inside the existing assessment workflow. This instruction
