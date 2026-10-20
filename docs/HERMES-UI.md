@@ -104,6 +104,9 @@ view of the same agent. They do not have identical navigation or rendering.
   session can appear farther down. This remains an upstream UI limitation.
 - **Gateway running** describes the server process, not the browser's terminal
   connection. A disconnected banner needs attention even if the gateway is up.
+- A native **Response** heading can precede additional tool activity. Use the
+  completed investigation result and terminal **ready** state to distinguish
+  final delivery from intermediate output; the heading alone is not completion.
 - If the localhost page cannot connect, check that its SSM port-forward process
   is still running. Restart the tunnel with the same remote/local ports from the
   setup guide, then refresh. Do not delete sessions or restart the server merely

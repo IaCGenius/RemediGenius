@@ -2,8 +2,9 @@
 
 ## Main — read discovery and UI feedback, 2026-10-19
 
-Existing release tags are unchanged. Pi/DeepSeek ran five real model prompts
-through the native and optional browser UIs. AWS results were independently
+Existing release tags are unchanged. Pi/DeepSeek ran five functional model prompts
+through the native and optional browser UIs, plus one short session-reset check.
+AWS results were independently
 checked against read-only APIs; no customer-cloud remediation was applied.
 
 | Check | Recorded result |
@@ -16,7 +17,8 @@ checked against read-only APIs; no customer-cloud remediation was applied.
 | Profile and privacy defaults | Unrelated bundled skills disabled, organizational knowledge and case retained, upstream telemetry declined, active profile set to ce-desk. |
 | Critic context | Eight audited review events contained evidence excerpts and loaded-skill hashes. A ninth was the general S3.8 explanation and correctly contained no AWS evidence. No size omission occurred in those live events; oversized-history handling is covered by regression tests. |
 | Local checks | 252 pinned-environment regression tests passed. Collector Docker build succeeded; imports returned the same pinned catalog ID and 407 services with admitted reads. |
-| Native navigation and input | Unscoped tabs selected ce-desk. Three scroll-then-Enter trials executed the native help command on the first Enter. `/new` displayed its explicit new-session confirmation. |
+| Native navigation and input | Unscoped tabs selected ce-desk. Three scroll-then-Enter trials executed help on the first Enter. `/new` followed by Yes created a new database session with a user/assistant exchange; the previous conversation remained intact. |
+| Native transcript replay | Populated Security Hub answers were visually reviewed at 1500- and 1100-pixel widths with the right panel open. Text was readable and the terminal showed ready. The reported overlap was not reproduced in these checks. |
 
 Saved investigation durations were 94 seconds for Security Hub, 187 seconds for
 IAM and 71 seconds for Bedrock. These measure controller creation to completion,
@@ -24,6 +26,12 @@ not end-to-end UI latency. The initial browser helper waited on historical
 “Thinking” text; its 450/410-second capture waits are not valid model-latency
 measurements. Five UI prompts do not establish a response-time guarantee or
 coverage of every admitted AWS operation.
+
+The replay helper also matched historical “resuming” text and incorrectly marked
+a ready transcript as pending. Visual inspection of both final screenshots
+resolved that false negative. Earlier screenshots captured during startup were
+not accepted as proof of completed replay. Native session creation was verified
+from database messages, not merely from a changed screen or a confirmation dialog.
 
 The model/UI-tested candidate was
 `6fdd57f359e48d470c7a6a279f0e0705e714548b4fab1593071d2ee9b67ad778`.
