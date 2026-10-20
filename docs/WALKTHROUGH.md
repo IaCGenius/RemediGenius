@@ -1,7 +1,7 @@
-# Your first CE investigation
+# Your first RemediGenius CE investigation
 
 The tested model and region are **AWS us-east-1 and DeepSeek v4.1 Flash**. You supply your
-own AWS access and model credentials. CE uses native Hermes as its agent and UI;
+own AWS access and model credentials. RemediGenius CE uses native Hermes as its agent and UI;
 the scoped reader collects AWS facts, and S3 retains their receipts. Start with
 [the architecture](SINGLE-HOST-MIGRATION.md).
 
@@ -36,9 +36,9 @@ exclude credentials, session identifiers and account details.
 
 ![The ce-desk profile selected in native Hermes](images/hermes-profile-selector.jpg)
 
-The upstream default route is guarded with the same CE boundary and provider.
+The upstream default route is guarded with the same RemediGenius CE boundary and provider.
 Use ce-desk for your work; a default label on another native page is not a second
-unrestricted CE agent.
+unrestricted RemediGenius CE agent.
 
 ## 3. Discover coverage before interpreting findings
 
@@ -57,11 +57,11 @@ Then choose a concrete investigation, for example:
 An unavailable service, access denial or empty result is useful coverage information,
 not a clean security assessment. See [the capability matrix](AWS-CAPABILITIES.md)
 for supported reads versus demonstrated live results. A configured service may
-have no findings in this account. CE does not enable services for you.
+have no findings in this account. RemediGenius CE does not enable services for you.
 
 ## 4. Bring one piece of organizational context
 
-Ask CE to stage a short policy with its scope. Review the draft and send the exact publication phrase it returns. For file-based intake, save the source as
+Ask RemediGenius CE to stage a short policy with its scope. Review the draft and send the exact publication phrase it returns. For file-based intake, save the source as
 Markdown, and follow [the knowledge walkthrough](NATIVE-KNOWLEDGE-QUICKSTART.md)
 to import it, select a view, and mount it in the workstation launcher. The current
 Spot stack uses chat-published notes; it does not activate uploaded file views. Supported
@@ -113,7 +113,7 @@ collection, not continuous monitoring of every AWS resource or automatic remedia
 These are actual captures from the 19 October 2026 fresh AWS installation using
 DeepSeek v4.1 Flash. Identifiers are masked in the browser before capture; the
 policy, actions and validator results are unchanged. The policy was supplied by
-the operator for this test. It is not a default rule for all CE installations.
+the operator for this test. It is not a default rule for all RemediGenius CE installations.
 
 ### Review and publish knowledge
 

@@ -29,6 +29,8 @@ if cfg.get('transport') == 'unix':
             self.sock.settimeout(105)
             self.sock.connect(cfg['socket'])
     request={'action':a.action}
+    if a.action=='capabilities' and a.service:
+        request['service']=a.service
     if a.action=='read':
         request.update(target=a.target,region=a.region or cfg['region'],service=a.service,operation=a.operation,
                        parameters=json.loads(a.parameters),max_pages=a.max_pages)

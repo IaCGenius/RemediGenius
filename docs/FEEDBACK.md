@@ -19,4 +19,4 @@ and redact screenshots.
 A helpful first review asks: Can I trace a proposal to its evidence? Can I see which guidance applies and why? Can I tell a model opinion from a fixed rule? Can I export this to my existing agent without granting it AWS access?
 
 For suspected vulnerabilities, use [private reporting](https://github.com/IaCGenius/RemediGenius/security/advisories/new).
-See [SECURITY.md](../SECURITY.md). CE has no adoption telemetry; sharing feedback is optional.
+See [SECURITY.md](../SECURITY.md). RemediGenius CE has no adoption telemetry; sharing feedback is optional.

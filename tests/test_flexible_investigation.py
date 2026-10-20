@@ -64,11 +64,12 @@ def test_repeated_queries_do_not_execute_twice(tmp_path):
 
 
 def test_round_cap_ends_inconclusive(tmp_path):
+    terminal={'decision':'inconclusive','rationale':'Collection budget reached','steps':[]}
     e,r,c,m=make(tmp_path,[plan({'action':'schema','service':'ec2','operation':'describe_instances','field':field})
-                          for field in ('','Filters','InstanceIds')])
-    for _ in range(11):r=e.advance(r['id'])
+                          for field in ('','Filters','InstanceIds')]+[terminal])
+    for _ in range(12):r=e.advance(r['id'])
     assert r['status']=='COMPLETE' and r['outcome']=='INCONCLUSIVE_BUDGET'
-    assert len(c)==3 and len([x for x in m if x[0]=='plan'])==3
+    assert len(c)==3 and len([x for x in m if x[0]=='plan'])==4
 
 
 def test_resume_does_not_reset_consumption(tmp_path):
@@ -125,12 +126,13 @@ def test_returned_normalized_artifact_is_admitted_but_invented_sibling_is_not(tm
 def test_lower_read_cap_is_frozen_and_prevents_followup_read(tmp_path):
     req={'action':'read','target':'default','region':'us-east-1','service':'ec2',
          'operation':'describe_instances','parameters':{},'max_pages':1}
-    e,_,calls,models=make(tmp_path,[plan(req)])
+    terminal={'decision':'inconclusive','rationale':'Read budget reached','steps':[]}
+    e,_,calls,models=make(tmp_path,[plan(req),terminal])
     run=e.start(['default'],'us-east-1',[],'One read only',['Report result'],max_reads=1)
-    for _ in range(8):run=e.advance(run['id'])
+    for _ in range(9):run=e.advance(run['id'])
     assert len(calls)==1 and run['limits']['reads']==1
     assert run['status']=='COMPLETE' and run['outcome']=='INCONCLUSIVE_BUDGET'
-    assert len([s for s,p in models if s=='plan'])==1
+    assert len([s for s,p in models if s=='plan'])==2
 
 
 def test_dispatch_rechecks_saved_plan_read_budget(tmp_path):
@@ -142,3 +144,23 @@ def test_dispatch_rechecks_saved_plan_read_budget(tmp_path):
     e.save(run)
     result=e.advance(r['id'])
     assert result['status']=='BLOCKED' and not c
+
+
+def test_exhausted_budget_can_still_conclude_sufficient(tmp_path):
+    req={'action':'read','target':'default','region':'us-east-1','service':'ec2',
+         'operation':'describe_instances','parameters':{},'max_pages':1}
+    e,_,calls,models=make(tmp_path,[plan(req),done()])
+    run=e.start(['default'],'us-east-1',[],'One read only',['Report result'],max_reads=1)
+    for _ in range(9):run=e.advance(run['id'])
+    assert len(calls)==1 and run['status']=='COMPLETE' and run['outcome']=='AI_SUFFICIENT'
+    assert len([s for s,p in models if s=='plan'])==2
+
+
+def test_exhausted_budget_rejects_extra_read_without_repair_hop(tmp_path):
+    req={'action':'read','target':'default','region':'us-east-1','service':'ec2',
+         'operation':'describe_instances','parameters':{},'max_pages':1}
+    e,_,calls,models=make(tmp_path,[plan(req),plan(req)])
+    run=e.start(['default'],'us-east-1',[],'One read only',['Report result'],max_reads=1)
+    for _ in range(9):run=e.advance(run['id'])
+    assert len(calls)==1 and run['status']=='COMPLETE'
+    assert run['outcome']=='INCONCLUSIVE_BUDGET' and run['plan_repairs']==0

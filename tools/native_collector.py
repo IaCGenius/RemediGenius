@@ -73,7 +73,7 @@ def start(name, config, directory, state_volume):
     session_account=config['account_id'];region=config['region']
     env={'AWS_DEFAULT_REGION':region,'AWS_CONFIG_FILE':'/run/operator/config','AWS_EC2_METADATA_DISABLED':'true',
          'ACCOUNT_ID':session_account,'BUCKET':config['bucket'],'PREFIX':config['prefix'],'STATE_CHECKPOINT_SECONDS':'120',
-         'TARGETS':json.dumps({'default':{'account_id':session_account,'regions':[region]}})}
+         'TARGETS':json.dumps({'default':{'account_id':session_account,'regions':[region],**({'role_arn':config['audit_role_arn'],'audit_role_arn':config['audit_role_arn']} if config.get('audit_role_arn') else {})}})}
     # No default collection of findings until the operator chooses a schedule.
     if config.get('checks'):
         env.update(CHECKS=json.dumps(config['checks']),INTERVAL_HOURS=str(config.get('interval_hours',24)))

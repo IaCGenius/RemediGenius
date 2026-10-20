@@ -1,4 +1,4 @@
-# Upgrade or migrate CE
+# Upgrade or migrate RemediGenius CE
 
 Record your source commit and package SHA-256 before changing a deployment.
 Back up Terraform state, private inputs, the retained volume and the latest S3
@@ -36,7 +36,7 @@ python tools/native_workstation.py run --config .rgce/workstation.json --upgrade
 ```
 
 Use the same workspace name and configuration to retain sessions and knowledge.
-The explicit upgrade updates CE profile files and preserves model/session settings.
+The explicit upgrade updates RemediGenius CE profile files and preserves model/session settings.
 A new workspace name creates different local storage. Do not run two agents
 against the same retained home or S3 checkpoint prefix.
 

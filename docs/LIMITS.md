@@ -10,7 +10,7 @@ your cloud, and for the AWS and model charges you incur.
 
 ## Supported scope
 
-CE is a public, single-operator release. The validated baseline is AWS us-east-1
+RemediGenius CE is a public, single-operator release. The validated baseline is AWS us-east-1
 with DeepSeek v4.1 Flash. Other models/regions are configurable, not yet qualified.
 
 - Collection is bounded by configured accounts, regions, operations and IAM.
@@ -22,18 +22,26 @@ with DeepSeek v4.1 Flash. Other models/regions are configurable, not yet qualifi
   automatically investigate every change or resolve cases.
 - Selected knowledge requires operator intake/publication/activation. No live
   Confluence sync or automatic organization-wide ingestion is shipped.
-- Native Kanban is manual. Conversations/cases need the retained Docker/EBS
-  volume; S3 receipts alone cannot restore them.
+- Native Kanban is manual. Conversations and cases use the retained Docker/EBS
+  volume. Private S3 state checkpoints can restore them to an empty runtime;
+  evidence receipts alone cannot. Changes since the last successful checkpoint
+  can be lost. See [recovery](../deploy/aws-single/README.md).
 - Model critique is bounded and can miss errors. Source evidence remains
   independently inspectable. A model label is not certification.
 - No Security Lake analytics, public production MCP/API/A2A service, multi-user or multi-tenant operation or autonomous board workers is shipped.
 - Model requests send selected evidence and knowledge to your configured provider.
   Self-hosting compute does not make inference local. See [models](MODELS.md).
-- No CE adoption telemetry is collected. Feedback is voluntary. Upstream runtimes
+- No RemediGenius CE adoption telemetry is collected. Feedback is voluntary. Upstream runtimes
   and providers have their own settings and data policies.
+  Hermes may show **Help improve Hermes? Send to Nous**. This is an upstream
+  opt-in prompt, not RemediGenius CE telemetry. Choose **No** or **Skip** if you do not want
+  to send it. Do not include AWS evidence, organization knowledge or credentials
+  in an optional feedback submission.
+  New RemediGenius CE profile setup declines this upstream offer by default. An explicit
+  existing operator opt-in is preserved during an upgrade.
 
 See [AWS coverage](AWS-CAPABILITIES.md), [acceptance](RELEASE-VALIDATION.md)
-and [security](../SECURITY.md). Legacy console and prototype deployments are archived outside CE.
+and [security](../SECURITY.md). Legacy console and prototype deployments are archived outside RemediGenius CE.
 
 
 ### Collection limits

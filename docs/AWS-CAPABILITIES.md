@@ -16,18 +16,20 @@ Start with three questions:
 3. “Use our selected policy to explain this finding, prepare a CLI proposal,
    and help me save it for reassessment after our change process.”
 
-The third journey prepares a draft. CE does not apply a customer-cloud fix.
+The third journey prepares a draft. RemediGenius CE does not apply a customer-cloud fix.
 Terraform or CloudFormation can be requested instead; not every AWS setting is
 supported by every format. A model critique is not provider validation.
 
 ## Available operations versus demonstrated behavior
 
-The [operation manifest](../deploy/collector/operations.json) is the
-authoritative source for the SDK reads the executor can admit. The deployed
+The [pinned AWS read catalog](../deploy/collector/read-catalog.json) determines
+classified SDK reads. The [original operation manifest](../deploy/collector/operations.json)
+provides recommended starting points and reviewed compatibility entries. See
+[broad reader discovery](BROAD-AWS-READER.md) for IAM setup and classification gaps. The deployed
 `ce_aws capabilities` response is authoritative for that installation: an older
 deployment may expose less. IAM permissions, service enrollment and populated
 records are separate checks. “Available” does not mean every operation was tested
-against a populated account, or that CE discovers all organization accounts.
+against a populated account, or that RemediGenius CE discovers all organization accounts.
 
 | Source | Available reads | Useful outcome | Recorded live acceptance and limits |
 |---|---|---|---|
@@ -39,23 +41,23 @@ against a populated account, or that CE discovers all organization accounts.
 | GuardDuty | Detectors; detector settings; finding IDs/details; members | Enrich selected threat findings and identify readable coverage | Source-call/receipt checks recorded; no claim of a complete populated GuardDuty investigation suite. Prefer existing Security Hub findings first. |
 | Inspector | Findings; coverage; account status | Enrich vulnerability findings and inspect reported coverage | Source-call/receipt checks recorded; all coverage types and populated findings are not certified. |
 | IAM Access Analyzer | Analyzers; finding list/detail | Inspect source-reported access findings | Source-call/receipt checks recorded; not arbitrary IAM policy analysis or automatic permissions repair. |
-| Macie | Session; finding list/detail | Report accessibility and enrich selected findings when permitted | Tested session call returned AccessDenied; CE retained an error receipt and did not retry indefinitely. No successful populated Macie acceptance claimed. |
+| Macie | Session; finding list/detail | Report accessibility and enrich selected findings when permitted | Tested session call returned AccessDenied; RemediGenius CE retained an error receipt and did not retry indefinitely. No successful populated Macie acceptance claimed. |
 | Security Lake | Lakes; log sources; subscribers | Discover existing lake metadata and identify an available source | Tested local lake list was empty. This is **discovery, not lake analytics**; no Athena/Lake Formation query integration is shipped. |
 
 An empty response, a denied request, a missing capability and a healthy control
-are different outcomes. CE records query scope, time, errors and pagination.
+are different outcomes. RemediGenius CE records query scope, time, errors and pagination.
 Neither an empty account nor an enabled service establishes that the account is
 secure. No paid AWS security service is enabled automatically.
 
 ## From evidence to a useful decision
 
-| Step | What the operator receives | What CE preserves |
+| Step | What the operator receives | What RemediGenius CE preserves |
 |---|---|---|
 | Collect | Scoped native source reads, deterministic counts/projections and limitations | Raw responses and hashed receipts in the configured S3 prefix |
 | Understand | Hermes interpretation of the actual observations and relevant selected knowledge | AWS facts stay separate from organizational assertions and AI judgment |
 | Prioritize | Up to three next decisions, with reason and uncertainty | Native finding IDs/severity and source framework mappings remain unchanged |
 | Prepare | CLI-first draft or requested IaC/source edit, prerequisites, impact, verification and rollback limits | Explicit distinction between a draft, validation actually performed and an executed change |
-| Follow up | Optional native Kanban case, notes and delayed reassessment | Conversations/cases on the runtime volume; S3 is not a backup of that volume |
+| Follow up | Optional native Kanban case, notes and delayed reassessment | Conversations/cases on retained EBS or Docker storage, with private S3 checkpoints; changes since the last checkpoint can be lost |
 | Reassess | A fresh scoped read and comparison, with a reasoned conclusion | Historical receipts and case history; no silent finding suppression or automatic closure |
 
 Daily checks collect configured evidence without requiring the reasoning agent to
@@ -83,7 +85,7 @@ observed AWS setting or suppressing an AWS finding. Unknown resource purpose
 stays unknown; names alone do not establish exception applicability. Conflicting
 documents are surfaced when they affect the decision. Import time is not policy
 precedence or an effective date. The operator remains responsible for supplied
-context; CE adds provenance and review assistance, not another approval committee.
+context; RemediGenius CE adds provenance and review assistance, not another approval committee.
 
 ## Validation
 

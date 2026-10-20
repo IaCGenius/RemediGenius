@@ -2,6 +2,7 @@
   "name": "rgce-workstation",
   "port": 9125,
   "aws_profile": "your-operator-profile",
+  "audit_role_arn": "",
   "account_id": "123456789012",
   "region": "us-east-1",
   "bucket": "COPY_FROM_TERRAFORM_OUTPUT",

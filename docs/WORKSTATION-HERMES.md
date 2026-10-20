@@ -1,4 +1,4 @@
-# Run CE on a workstation
+# Run RemediGenius CE on a workstation
 
 The local-compute migration replaces the Lambda backend. Follow the [current guide](LOCAL-COMPUTE-WORKSTATION.md).
 

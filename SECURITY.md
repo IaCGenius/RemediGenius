@@ -5,7 +5,7 @@ Provided as-is; review [your configuration and data-handling responsibilities](d
 ## Current native Hermes boundary — 2026-10-14
 
 The former console policy is retained in Git history; it does not describe native Hermes.
-Native CE is a single trusted-operator deployment. Local access uses loopback;
+Native RemediGenius CE is a single trusted-operator deployment. Local access uses loopback;
 AWS uses an SSM tunnel. Do not expose it as a public multi-user service.
 
 Hermes receives the configured model key and temporary collector-invocation/
@@ -16,9 +16,9 @@ host network restrictions; it is not a hostile multi-tenant sandbox.
 
 The scoped collector reads assessed resources and writes its own S3 evidence.
 The runtime also writes logs and Kanban cases. Read-only AWS assessment does not
-mean no writes anywhere. Provisioning the CE backend is an explicit infrastructure
+mean no writes anywhere. Provisioning the RemediGenius CE backend is an explicit infrastructure
 change. Skills guide behavior; integrity checks, tool admission and budgets are
-enforced separately by the CE plugin. Extra plugins require deliberate admission.
+enforced separately by the RemediGenius CE plugin. Extra plugins require deliberate admission.
 
 Daily deterministic checks make no model calls and continue when Hermes is stopped.
 Disable schedules separately. AI_CRITIQUED is a bounded model critique, not IaC

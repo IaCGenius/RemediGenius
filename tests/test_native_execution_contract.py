@@ -225,7 +225,9 @@ def test_large_displays_do_not_drop_review_draft_or_collection_facts(rt):
     assert rt.review(state,{'draft':'The complete draft must survive.'})['status']=='AI_CRITIQUED'
     assert seen[0]['draft']=='The complete draft must survive.'
     assert seen[0]['collection_facts']==[{'status':'OK','has_more':False}]
-    assert seen[0]['configured_capabilities']==state['capabilities']
+    caps=seen[0]['configured_capabilities']
+    assert caps['targets']==state['capabilities']['targets']
+    assert caps['operation_counts']=={'macie2':1} and 'operations' not in caps
     assert seen[0]['runtime_limits']['max_cloud_reads']==6
     assert 'skill_view' in seen[0]['admitted_tools']
     assert 'skill_manage' not in seen[0]['admitted_tools']
@@ -332,14 +334,20 @@ def test_history_recovers_only_actual_skill_tool_results(rt,monkeypatch):
     assert records[0]['origin']=='history' and not omitted
 
 
-def test_oversized_review_does_not_call_model(rt):
-    async def must_not_call(*args,**kwargs):
-        pytest.fail('Oversized packet must not invoke the provider')
-    rt.ctx=SimpleNamespace(llm=SimpleNamespace(acomplete=must_not_call))
+def test_oversized_review_is_bounded_and_still_reviews(rt):
+    seen=[]
+    async def bounded(messages,**kwargs):
+        seen.append((json.loads(messages[-1]['content']),len(messages[-1]['content'])))
+        return SimpleNamespace(text='No issues identified, not certified.',model='unit')
+    rt.ctx=SimpleNamespace(llm=SimpleNamespace(acomplete=bounded))
     state=rt.turns[('session','turn')]
     state.update(reviewed=False,evidence=[],request='x'*100000)
     result=rt.review(state,{'draft':'Small draft'})
-    assert result['status']=='NOT_REVIEWED' and 'no model call' in result['notice']
+    assert result['status']=='NOT_GROUNDED' and seen
+    payload,size=seen[0]
+    assert size<=rt.policy['review_context_max_chars']
+    assert payload['draft']=='Small draft' and len(payload['request'])<100000
+    assert payload['context_omitted'].get('request_truncated') is True
 
 
 def test_three_loaded_guides_fit_without_silent_reference_loss(rt):

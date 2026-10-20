@@ -1,5 +1,47 @@
 # Validation records
 
+## Main — read discovery and UI feedback, 2026-10-19
+
+Existing release tags are unchanged. Pi/DeepSeek ran five real model prompts
+through the native and optional browser UIs. AWS results were independently
+checked against read-only APIs; no customer-cloud remediation was applied.
+
+| Check | Recorded result |
+|---|---|
+| Security Hub starter question | PASS: 24 ACTIVE findings across two pages, all CRITICAL/HIGH identifiers available, top three presented, completed critique and sufficient conclusion. One AWS collection plus a saved-evidence projection. |
+| IAM attachments and key age | PASS: direct/group AdministratorAccess attachment and active-key age results matched independent metadata reads. Four reads; no credential-report generation. Attachment facts were distinguished from effective permissions. |
+| General S3.8 explanation | PASS: useful general explanation and critique without a live AWS read or an unpinned-reference refusal. |
+| Bedrock guardrail discovery | RECOVERED: the first candidate dropped the service name during capability discovery and stopped. The corrected client completed discovery and a real metadata read; independent values matched. |
+| Optional UI | PASS: selected ce-desk, answered with existing knowledge and case context, reopened a saved conversation and preserved its messages after refresh. |
+| Profile and privacy defaults | Unrelated bundled skills disabled, organizational knowledge and case retained, upstream telemetry declined, active profile set to ce-desk. |
+| Critic context | Eight audited review events contained evidence excerpts and loaded-skill hashes. A ninth was the general S3.8 explanation and correctly contained no AWS evidence. No size omission occurred in those live events; oversized-history handling is covered by regression tests. |
+| Local checks | 252 pinned-environment regression tests passed. Collector Docker build succeeded; imports returned the same pinned catalog ID and 407 services with admitted reads. |
+| Native navigation and input | Unscoped tabs selected ce-desk. Three scroll-then-Enter trials executed the native help command on the first Enter. `/new` displayed its explicit new-session confirmation. |
+
+Saved investigation durations were 94 seconds for Security Hub, 187 seconds for
+IAM and 71 seconds for Bedrock. These measure controller creation to completion,
+not end-to-end UI latency. The initial browser helper waited on historical
+“Thinking” text; its 450/410-second capture waits are not valid model-latency
+measurements. Five UI prompts do not establish a response-time guarantee or
+coverage of every admitted AWS operation.
+
+The model/UI-tested candidate was
+`6fdd57f359e48d470c7a6a279f0e0705e714548b4fab1593071d2ee9b67ad778`.
+The final source package is
+`d071bdd7ff55d08c19d01cd466789abd0e9d35a8c9ee9a39629f131db4e10fb9`.
+An archive comparison found only two changed files: the Spot guide and the
+profile-upgrade helper that sets the supported active-profile preference.
+Investigation, collector, skill, critic and validator bytes are unchanged.
+The helper passed focused tests, the live setting was applied with backup, and
+Spot's next-boot source was aligned without replacing the running instance.
+
+Private raw evidence and screenshots remain outside the repository. The earlier
+failed run is retained in the private test record, not relabelled a first-pass
+success. Native terminal interaction checks and their remaining upstream limits
+are recorded separately in [UI guidance](HERMES-UI.md). A closed local SSM tunnel
+blocked one check; remote containers remained healthy. Restoring the port-forward
+does not require restarting Hermes or deleting a conversation.
+
 ## v0.2.0 single-compute validation — 2026-10-19
 
 Fresh deployment from commit `8a0695a`, source ZIP SHA-256
@@ -27,7 +69,7 @@ See [actual walkthrough screenshots](WALKTHROUGH.md#fresh-single-host-examples).
 Replacement used package `4cd8e320d69bc357fbcbb924750da692c30329f88e668435fa1ba68f9a2b8f13`
 from commit `c885e6c`. This tested retained-EBS recovery, not an empty-volume
 restore. A stale local SSM tunnel caused connection timeouts; replacing those
-local tunnel processes restored access without changing CE. Shell syntax,
+local tunnel processes restored access without changing RemediGenius CE. Shell syntax,
 140 local documentation links and source-archive privacy checks passed.
 
 The final boot package is
@@ -71,7 +113,7 @@ Source setup and packaging checks are described in the [change log](../CHANGELOG
 ## v0.1.3 qualification
 
 Scope: AWS us-east-1, DeepSeek v4.1 Flash, one native ce-desk profile. Both deployment
-paths use official Hermes 0.21.7 pinned by digest; CE supplies skills and the runtime
+paths use official Hermes 0.21.7 pinned by digest; RemediGenius CE supplies skills and the runtime
 boundary, not a different model runtime. Earlier releases remain immutable.
 
 | Check | Observed result |
@@ -122,14 +164,14 @@ canonicalized; payload comparisons excluded no executable or prompt content.
 - Packaged nginx runtime served HTTP 200, passed `nginx -t`, ran as 101:101 with
   read-only root and no volume mounts. Disposable smoke-test container removed.
 - Three focused tests passed: sidecar isolation, refusal to remove an unrelated
-  container, and inclusion of required UI files/license in the CE ZIP.
+  container, and inclusion of required UI files/license in the RemediGenius CE ZIP.
 - `terraform fmt -check` and `terraform validate` passed for aws-native.
 - Earlier live DeepSeek tests of this pinned frontend plus the same profile patch
-  verified CE skills, knowledge, review, sessions and refresh; see HERMES-UI.md.
+  verified RemediGenius CE skills, knowledge, review, sessions and refresh; see HERMES-UI.md.
 - New automatic Spot bootstrap and workstation opt-in wiring have not had a full
   fresh deployment/replacement acceptance run. Existing Spot was not replaced.
 - A broader existing execution-contract suite was not completed in this packaging
   pass (default temporary-directory setup errors, then a stalled rerun); it is
-  not counted as passing. No CE execution-plugin code changed in this addition.
+  not counted as passing. No RemediGenius CE execution-plugin code changed in this addition.
 - Upstream CSS/font/optional SkillsView build warnings remain. Bots panel remains
   a known issue. Release tag unchanged.

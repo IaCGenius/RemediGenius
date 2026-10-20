@@ -1,6 +1,6 @@
-# Explain, review, and improve CE
+# Explain, review, and improve RemediGenius CE
 
-CE keeps the native Hermes conversation/tool history. The `ce-explain-review`
+RemediGenius CE keeps the native Hermes conversation/tool history. The `ce-explain-review`
 skill supplies one answer structure: outcome, sources, actual work, limits and
 next decision. An operation that failed then succeeded is **RECOVERED**, not PASS.
 This is an agent instruction; it is not a deterministic grader of model answers.
@@ -18,8 +18,10 @@ Ask to save a dated Markdown report in the private workspace `reviews/` folder.
 The report is an AI draft, with references and unknowns, not cloud evidence.
 
 The retained Hermes EBS volume holds sessions and private reports across Spot
-replacement. It is not an S3 backup. Shared cloud evidence remains in S3. Losing
-the retained volume without a snapshot would lose these private review records.
+replacement. Private S3 checkpoints also preserve runtime state for recovery to
+an empty home. Shared cloud evidence is stored separately in S3. Changes since
+the last successful checkpoint can be lost; inspect backup status before relying
+on recovery. See [the storage boundary](../deploy/aws-single/README.md).
 
 ## Bounded defaults
 
@@ -30,7 +32,7 @@ the retained volume without a snapshot would lose these private review records.
 | Model iterations per user message | 24 | Native `agent.max_turns`; final grace responses and bounded workflow auxiliary calls may add calls |
 | Provider attempts | 2 total in pinned 0.21.7 | Native `api_max_retries: 2`; installed source counts attempts, unlike current web-doc wording |
 | Outage recovery cycles | 0 | Native `auto_recovery_cycles: 0` |
-| Wall-clock budget | 480 seconds | Native wrap-up guidance and timeout adjustment; not a hard kill; CE separately stops admitting tools at this elapsed limit |
+| Wall-clock budget | 480 seconds | Native wrap-up guidance and timeout adjustment; not a hard kill; RemediGenius CE separately stops admitting tools at this elapsed limit |
 | Terminal command | 30 seconds | Native terminal timeout |
 | Review scope | 3 days, 10 sessions by default | Metadata helper bounds; operator selects detailed content |
 
@@ -42,10 +44,10 @@ goals, delegation, cron reviews and optimizer runs are not enabled by this chang
 
 [Microsoft SkillOpt](https://github.com/microsoft/SkillOpt) optimizes skill text
 from recorded trajectories and evaluates candidate edits against held-out tasks.
-It is optional offline tooling, not installed or running in CE. Its published
+It is optional offline tooling, not installed or running in RemediGenius CE. Its published
 integration list does not establish a native Hermes integration.
 
-For CE: select/redact examples -> classify environment versus skill failures ->
+For RemediGenius CE: select/redact examples -> classify environment versus skill failures ->
 propose an exact skill diff -> test on representative and held-out examples ->
 show results and rollback version -> operator approves -> install -> recheck.
 Never optimize on customer logs automatically or allow the candidate to grade

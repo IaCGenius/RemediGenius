@@ -1,4 +1,4 @@
-# CE: useful capabilities and small knowledge views
+# RemediGenius CE: useful capabilities and small knowledge views
 
 **Historical implementation note.** The gaps described below are dated to this
 change, not current release status. See [current offering](CURRENT-CE-OFFERING.md)
@@ -10,7 +10,7 @@ and [release validation](RELEASE-VALIDATION.md).
 
 One Hermes profile. Connect existing sources, select organizational context, ask a
 question, obtain supported findings and a proposed next action. The operator owns
-their knowledge and config; CE does not create a separate approval committee.
+their knowledge and config; RemediGenius CE does not create a separate approval committee.
 The first useful outcomes are AWS activity investigations, prioritization of
 existing findings using business context, and repository-aware remediation plans.
 
@@ -21,7 +21,7 @@ using the same executable capability, with real receipts and limits.
 
 ## Knowledge collections implemented in this change
 
-Use the existing CE Python environment; install its `documents` extra for PDF and
+Use the existing RemediGenius CE Python environment; install its `documents` extra for PDF and
 Office conversion. No model is used for extraction. Original files are copied,
 not moved. Existing MarkItDown worker and format validation are reused.
 
@@ -44,7 +44,7 @@ index over the same files, not a replacement truth store.
 
 The operator can inspect everything with an editor. Direct edits to generated
 content are discouraged: edit the source and re-import/rebuild. Metadata is human
-readable and editable; CE does not certify its truth. There is no cryptographic
+readable and editable; RemediGenius CE does not certify its truth. There is no cryptographic
 attestation or formal organizational approval claim. Supersession, expiry and
 contradictory policies require explicit source guidance; automatic conflict
 resolution and automatic revision retirement are not implemented in this slice.
@@ -92,9 +92,9 @@ authentication is sufficient for ordinary reads. Do not invent a Python wrapper
 to proxy `git clone`. OAuth setup, PRs, issues and reviews remain provider-specific
 plugin capabilities. Do not run downloaded build hooks or repository code merely
 to inspect Terraform. Snapshotting and provider OAuth onboarding are not yet
-automated in the native CE sketch.
+automated in the native RemediGenius CE sketch.
 
-Hermes discovers installed skills and enabled plugin tools; CE's SOUL now directs
+Hermes discovers installed skills and enabled plugin tools; RemediGenius CE's SOUL now directs
 it to use that native inventory instead of treating packaged skills as exhaustive.
 Installed, enabled, exposed, authenticated and permission-tested are distinct.
 Refresh/restart the applicable native session after extension changes.

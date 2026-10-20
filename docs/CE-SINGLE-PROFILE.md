@@ -1,7 +1,7 @@
-# One CE profile
+# One RemediGenius CE profile
 
 Use `ce-desk` for investigation, selected knowledge, fix proposals and follow-up.
-The native default dashboard route uses the same provider and CE boundary; it is
+The native default dashboard route uses the same provider and RemediGenius CE boundary; it is
 not a second independent analyst. Source: `profiles/ce/desk`.
 
 Install and upgrade through the workstation or AWS guide. Preserve the profile

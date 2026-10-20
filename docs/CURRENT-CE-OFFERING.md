@@ -1,4 +1,4 @@
-# Current native CE offering
+# Current native RemediGenius CE offering
 
 [Architecture and data flow](SINGLE-HOST-MIGRATION.md).
 
@@ -52,7 +52,7 @@ attachment ingestion are not shipped. Use [native staging](KNOWLEDGE-USE-AND-CON
 with explicit publication and mounting of views for Hermes to read.
 
 The knowledge design uses small context/task selections, readable sources
-and explicit unknowns. CE does not claim full OKF schema conformance. Hashes identify bytes; they do not establish truth.
+and explicit unknowns. RemediGenius CE does not claim full OKF schema conformance. Hashes identify bytes; they do not establish truth.
 
 The updated tool returns metadata with content and checks its hash. The skill
 explains which source changed a recommendation. Conflicts remain explicit until

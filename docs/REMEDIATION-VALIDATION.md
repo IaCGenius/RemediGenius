@@ -31,7 +31,7 @@ Terraform, provider and CLI are two releases behind the newest entries observed.
 The runtime exposes its configured versions through `ce_validate capabilities`;
 the skill reads those instead of assuming a version from model memory. These
 pins qualify generated artifacts; they do not upgrade the provider used by your
-existing Terraform repository or the CE deployment stack.
+existing Terraform repository or the RemediGenius CE deployment stack.
 
 ## What runs
 
@@ -46,7 +46,7 @@ AWS CLI receives argument arrays and submitted JSON files; it never runs a shell
 Terraform returns its formatted files. A later edit invalidates the earlier
 artifact check. Missing inputs remain placeholders, even if their types validate.
 An incompatible provider constraint or missing external module is an environment
-gap; CE does not replace your dependency choices automatically.
+gap; RemediGenius CE does not replace your dependency choices automatically.
 
 ## Deployment and boundaries
 

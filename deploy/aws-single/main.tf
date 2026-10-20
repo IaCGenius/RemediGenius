@@ -32,7 +32,7 @@ variable "name" {
 }
 variable "running" {
   description = "Start CE on first apply. Set false to stop compute after initial setup."
-  default = true
+  default     = true
 }
 variable "source_zip" {
   type = string
@@ -160,9 +160,10 @@ locals {
 
   config = {
 
-    name       = var.name,
-    region     = "us-east-1",
-    account_id = var.account_id,
+    name           = var.name,
+    region         = "us-east-1",
+    account_id     = var.account_id,
+    audit_role_arn = aws_iam_role.audit.arn,
 
     bucket         = aws_s3_bucket.data.id, prefix = "ce", archive_key = aws_s3_object.source.key,
     archive_sha256 = filesha256(var.source_zip), volume_id = aws_ebs_volume.sessions.id,

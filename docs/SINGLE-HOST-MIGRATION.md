@@ -7,7 +7,7 @@ installations must use a separate stack/state when migrating.
 
 ## What changes
 
-Both deployments use Hermes, the CE skills and execution rules, a local Python
+Both deployments use Hermes, the RemediGenius CE skills and execution rules, a local Python
 collector (`deploy/collector`) and the Linux remediation validator. The collector
 calls AWS through the SDK and writes raw responses, normalized summaries and
 receipts to S3. It does not ask the model to write collection code. There is no
@@ -31,7 +31,7 @@ or a NAT gateway. Network access to AWS, image registries and the chosen model
 endpoint must exist. The dashboard listens on loopback and is reached with SSM.
 
 The instance role combines AWS metadata/security reads with narrow access to
-CE's own bucket and retained volume. Those operational writes are necessary;
+RemediGenius CE's own bucket and retained volume. Those operational writes are necessary;
 the role as a whole is not read-only. Hermes receives no AWS credentials and runs
 with `AWS_EC2_METADATA_DISABLED=true`. The instance requires IMDSv2
 (`http_tokens = "required"`) with a response hop limit of 1, so a process inside
@@ -40,9 +40,9 @@ runs separately and uses temporary instance-role credentials. The operator's own
 provisioning credentials are used only for Terraform and SSM, not by the host.
 
 Amazon Linux 2023 is the host. Amazon Linux 2 is no longer a suitable new
-baseline. The upstream Hermes image stays pinned. CE's collector uses one pinned
+baseline. The upstream Hermes image stays pinned. RemediGenius CE's collector uses one pinned
 Python 3.12 image and an exact boto3/botocore dependency set. The OS bootstrap
-and upstream Hermes have their own vendor-managed interpreters; CE does not
+and upstream Hermes have their own vendor-managed interpreters; RemediGenius CE does not
 replace them or install a Python environment per skill.
 
 See [AWS's Amazon Linux 2 lifecycle FAQ](https://aws.amazon.com/amazon-linux-2/faqs/)

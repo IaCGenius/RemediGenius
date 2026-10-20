@@ -1,7 +1,7 @@
 # Skills and execution responsibilities
 
 Hermes chooses and explains; readable skills guide repeatable investigations;
-the CE runtime and scoped AWS executor enforce supported operations and bounds.
+the RemediGenius CE runtime and scoped AWS executor enforce supported operations and bounds.
 Prompts are not a security boundary. See [runtime controls](CE-RUNTIME.md) for the
 implemented preflight, budgets, tool gate and review-context behavior.
 
@@ -20,7 +20,7 @@ findings were collected. Unknown scope, coverage or applicability stays explicit
 | ce-source-tools | Discover genuinely usable integrations | One configured route or a precise missing integration; no improvised adapter |
 | ce-explain-review | Explain actions, failures, limits and review evidence | Traceable outcome and bounded improvement proposal |
 
-One single CE profile uses these skills. No additional agent personas or approval
+One single RemediGenius CE profile uses these skills. No additional agent personas or approval
 committee are required. Business knowledge answers “what matters here”; skills
 answer “how to investigate”; tools answer “what happened when this request ran.”
 

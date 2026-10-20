@@ -13,9 +13,9 @@ The skills guide the model; runtime controls enforce tool boundaries. They use:
    - **Organizational knowledge** — Selected imported context with source paths, or explicitly identified operator-provided context; never treat it as an AWS fact.
    - **AI proposal** — Clearly labeled, limited to at most three items, and marked “AI-generated — operator review required”.
 3. **Critic gate** — Call `ce_review` before the final response (or state `NOT_REVIEWED` if unavailable). Pass the draft through the normal review tool; the runtime includes captured evidence and references, with omission counts when context is bounded.
-4. **No new integrations** — Skills interpret evidence already collected or local files the operator supplies. They use only existing bounded CE tools and do not install scanners or add arbitrary network access.
+4. **No new integrations** — Skills interpret evidence already collected or local files the operator supplies. They use only existing bounded RemediGenius CE tools and do not install scanners or add arbitrary network access.
 5. **Limits** — Explicitly state coverage windows, pagination, “empty ≠ healthy”, and “change ≠ verified fix”.
-6. **Provenance** — Each skill includes a short `PROVENANCE.md` noting original CE community content under Apache-2.0.
+6. **Provenance** — Each skill includes a short `PROVENANCE.md` noting original RemediGenius CE community content under Apache-2.0.
 
 Skills compose with existing skills (`ce-aws-security`, `ce-aws-read`, `ce-knowledge`) and the `ce_case` tool. They do not add new collectors or write permissions.
 

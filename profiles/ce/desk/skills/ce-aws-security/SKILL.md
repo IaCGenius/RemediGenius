@@ -93,6 +93,16 @@ load all references, enumerate every service, or write an analysis script.
 | Coverage | Relevant service's discovery/coverage API | Report configured, readable, populated and fresh separately. Empty/denied in one account/region says nothing about the whole organization. |
 | Reassessment | Repeat the same prior request and compare exact S3 runs | Changed, unchanged or incomparable; partial/failed queries cannot establish full comparison. Do not equate a change with a verified fix. |
 
+## Explain controls without overclaiming
+
+A definitional question about a named control or service (for example what a
+Security Hub control checks) may be answered from general model knowledge, clearly
+labelled as general guidance. It is not a live account observation, a finding, or a
+compliance attestation. Do not refuse a basic explanation solely because no pinned
+reference is loaded; when the answer depends on a live or versioned fact, verify it
+from official AWS documentation or returned control metadata and say which was used.
+A control mapping is not proof of compliance.
+
 ## Domain checks before proposing an action
 
 - CloudTrail LookupEvents covers regional management/Insights events in the last

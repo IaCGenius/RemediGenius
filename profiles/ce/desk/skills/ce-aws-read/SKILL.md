@@ -75,6 +75,13 @@ Its root is an object containing `findings`, not a bare list. Start normalized
 queries with `findings[...]` or `findings[]`; raw queries use `pages[].Findings[]`.
 An unexpected null projection is not an empty collection. Inspect `keys(@)` once
 only if the actual source shape differs from this documented shape.
+For Security Hub `get_findings`, the deterministic summary already reports
+`finding_count`, `severity_counts`, a severity-ranked `findings_preview` (up to 50
+collected findings, `preview_order`) and `preview_truncated`. Use that summary, or
+one bounded `show` JMESPath projection over `normalized/RUN/findings.json`, to rank
+CRITICAL/HIGH findings; do not spend another cloud read re-paging the same data.
+`preview_truncated` is a display window, not proof of incomplete collection; report
+completeness from `pages_returned`, `has_more` and `errors`, and label partial data.
 
 For totals, grouping and filtering, use the returned deterministic summary or a
 `show` JMESPath aggregation over the exact stored records. Do not count a rendered
@@ -124,3 +131,21 @@ Values=[remedigenius-ce], and a bounded page budget. Retain service-returned ARN
 and scope. Tag inventory omits untaggable/untagged resources: it is not exhaustive
 and cannot calculate costs. Point the operator to Cost Explorer filtered by the
 Project tag; do not call billing APIs or infer a bill from resource counts.
+
+
+## Broad service discovery
+
+When capabilities reports `dynamic_reads: true`, the initial operations are
+recommended starting points, not the limit of AWS services. For an unfamiliar
+service, call `ce_aws` with `action: capabilities` and the SDK `service` name.
+Use the returned operations and input schemas. The collector uses a pinned AWS
+classification catalog and an audit-role session; a missing catalog mapping is
+not proof that the AWS resource is unsupported or absent.
+
+Use Config aggregation when available and relevant; fall back to account Config
+or direct service reads when recording is absent, stale or incomplete. For a
+specific resource, prefer a relevant direct read over checking every inventory
+source. Do not enable services, expand IAM or invent scripts. Report catalog,
+permission, source coverage and pagination failures separately. Preserve partial
+evidence and offer a bounded continuation. Model interpretation cannot change the
+collector's evidence or its execution permissions.

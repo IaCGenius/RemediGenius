@@ -1,5 +1,30 @@
 # Changes
 
+## Unreleased — read discovery and first-use corrections
+
+- Replace the fixed service ceiling with a pinned AWS-derived read catalog,
+  service discovery, SDK schemas and an operation-scoped audit session.
+- Keep account/region, workflow, page, byte and action limits. Preserve
+  service-specific SDK continuation tokens and distinguish denial from absence.
+- Add IAM credential-lifecycle report normalization without generating reports.
+- Rank collected Security Hub findings before displaying compact details, so
+  the first preview does not hide higher-severity findings later in the pages.
+- Separate investigation IAM from RemediGenius CE storage/recovery permissions. Add optional
+  workstation audit-role provisioning and document upstream telemetry prompts.
+- Bound critic context around the current request, draft and collected evidence.
+  Report omitted context instead of silently claiming a complete review.
+- Let an investigation conclude from sufficient collected evidence when its
+  read allowance is used. Do not repeat reads just to inspect their results.
+- Allow clearly labelled general control explanations without requiring a live
+  AWS observation or a pinned compliance mapping.
+- Disable unrelated bundled skills in the RemediGenius CE profile without deleting files or
+  disabling operator-added skills. Preserve sessions, knowledge and model setup.
+
+Pi/DeepSeek UI checks, 252 local regressions and a collector Docker build are
+recorded in [validation](docs/RELEASE-VALIDATION.md). Public documentation uses
+RemediGenius Community Edition / RemediGenius CE consistently. Existing release
+tags are unchanged.
+
 ## Documentation updates after v0.2.0
 
 - Separate current setup and recovery diagrams; embed static images for GitHub.

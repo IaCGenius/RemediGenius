@@ -18,7 +18,10 @@ NEW = b'ttl=10 * 60, max_sessions=2, buffer_cap=1 * 1024 * 1024'
 def overlay(body):
     if hashlib.sha256(body).hexdigest() != SOURCE_SHA256 or body.count(OLD) != 1:
         raise ValueError('Unreviewed Hermes dashboard source; revalidate session overlay before upgrading')
-    return body.replace(OLD, NEW, 1)
+    patched = body.replace(OLD, NEW, 1)
+    if OLD in patched or patched.count(NEW) != 1:
+        raise ValueError('Session overlay produced an unreviewed result; revalidate before upgrading')
+    return patched
 
 
 def prepare(image, output):

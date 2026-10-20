@@ -1,4 +1,4 @@
-# Show what knowledge CE has, what it used, and what it can assess
+# Show what knowledge RemediGenius CE has, what it used, and what it can assess
 
 Status checked against source on 2026-10-14. This is a usability and implementation
 plan alongside instructions for existing tooling; proposed behavior is labelled.

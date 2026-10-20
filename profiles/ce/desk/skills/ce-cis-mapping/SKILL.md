@@ -21,6 +21,9 @@ Use when the operator asks for framework alignment. Start from Security Hub find
 
 - Mapping tables are static and local. They do not query external compliance services.
 - Absence of a mapping does not mean the control is satisfied.
+- Explaining what a named control checks from general knowledge is guidance, not a
+  mapping; only returned or operator-supplied versioned metadata establishes a mapping.
+  A mapping, and an explanation, are not a compliance attestation.
 
 Read `references/cis-fsbp-map.md` for mapping provenance rules.
 

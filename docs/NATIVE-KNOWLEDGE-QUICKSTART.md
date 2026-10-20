@@ -1,6 +1,6 @@
 # Your context, with receipts
 
-CE should help answer “what matters in our environment?” Start with one useful
+RemediGenius CE should help answer “what matters in our environment?” Start with one useful
 document, not an entire wiki. Hermes helps draft and explain it; ordinary files
 remain the durable source. This is OKF-inspired knowledge, not a separate agent
 framework or a claim of full OKF schema compatibility.
@@ -27,7 +27,7 @@ is not automatically imported into the shared library.
 
 ## Prepare the operator tools
 
-From your cloned CE repository, activate its Python environment and run
+From your cloned RemediGenius CE repository, activate its Python environment and run
 `python -m pip install -e ".[aws,documents]"`. These commands run on your
 workstation, not inside the read-only agent chat. Complete either deployment
 quickstart first; keep its private JSON configuration for publication.
@@ -76,7 +76,7 @@ the command with `--publish TOKEN`, using the complete token from that preview.
 Use `--json` if you need structured output. A changed view, destination or profile
 requires a fresh token. Do not paste credentials into Hermes.
 
-Publishing uses your normal operator AWS credentials and needs the CE `aws` extra.
+Publishing uses your normal operator AWS credentials and needs the RemediGenius CE `aws` extra.
 It creates a new hash-named view under your workspace's `knowledge/` prefix,
 never overwrites a different object, and verifies remote bytes. Unlisted files
 (including accidentally copied originals) are rejected. Existing matching objects
@@ -115,7 +115,7 @@ For the operator-supplied S3 policy, a confirmed logs-only bucket may use AES256
 business-data buckets require customer-managed KMS. If purpose is unknown, the
 exception is unresolved. The observed encryption and AWS finding remain unchanged.
 This policy is an example supplied by this project's operator, not a default policy
-installed for every CE user.
+installed for every RemediGenius CE user.
 
 Hermes should cite the selected document and its scope/version, explain the effect
 on its recommendation, and distinguish that interpretation from the AWS receipt.
@@ -136,7 +136,7 @@ Replace `ACTIVE_DOCUMENT_ID` with the ID from the listing. Old originals and old
 views remain intact. New views omit explicitly replaced revisions. Publish/select
 the new view to update Hermes. Without `--replaces`, both versions remain active:
 import time alone never decides which policy wins. The operator determines scope
-and replacement; CE does not infer approval, effective dates or expiry.
+and replacement; RemediGenius CE does not infer approval, effective dates or expiry.
 When replacing, omit `--scope` to keep the previous document's scope, or supply it
 to explicitly change applicability. New documents always need a scope.
 

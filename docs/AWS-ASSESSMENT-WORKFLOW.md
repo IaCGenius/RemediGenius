@@ -32,11 +32,11 @@ flowchart TD
   H --> I[Saved answer and runtime results]
 ```
 
-CE owns stages and stopping. Hermes chooses schema discovery, scoped reads,
+RemediGenius CE owns stages and stopping. Hermes chooses schema discovery, scoped reads,
 projections of supplied/returned evidence, or comparison of known snapshots.
 Every request must address an evidence gap. Generated collectors, shell commands,
 scope expansion and arbitrary tool installation are prohibited. Collector admission and IAM
-boundaries remain. An active investigation blocks independent CE calls in its chat.
+boundaries remain. An active investigation blocks independent RemediGenius CE calls in its chat.
 Final rendering uses the saved answer rather than an outer-model rewrite. Native
 UI behavior, including streaming, still needs acceptance testing.
 
@@ -87,8 +87,10 @@ unresolved. Organizational exceptions do not rewrite AWS facts or source severit
 
 Private records live at `$HERMES_HOME/ce-assessments/<id>.json` on the retained profile
 volume; AWS collection evidence remains in S3. Records contain private knowledge/evidence.
-Automatic S3 backup of investigation records is not implemented. Losing the retained
-volume is different from Spot replacement.
+Private S3 checkpoints include investigation records and retained session state.
+Startup restores a verified checkpoint only when the runtime home is empty.
+Changes since the last successful checkpoint can be lost; S3 evidence receipts
+alone do not restore conversations. See [recovery](../deploy/aws-single/README.md).
 
 Fix preparation and artifact validation use the existing capabilities after
 investigation, including when requested in the same chat turn. The frozen investigation

@@ -1,8 +1,8 @@
-# Native CE execution contract
+# Native RemediGenius CE execution contract
 
 Implementation candidate; live acceptance is required before publication claims.
 Hermes remains the agent and owns its UI, sessions and model-provider configuration.
-CE contributes one native plugin, readable skills, and a separate AWS read executor.
+RemediGenius CE contributes one native plugin, readable skills, and a separate AWS read executor.
 
 ```mermaid
 flowchart LR
@@ -22,7 +22,7 @@ flowchart LR
   B --> S
 ```
 
-CE fixes the investigation stages and budgets; Hermes chooses relevant evidence
+RemediGenius CE fixes the investigation stages and budgets; Hermes chooses relevant evidence
 within them. The admission gate and collector decide what can execute. The critic
 cannot grant execution rights or alter source records. See the
 [bounded investigation workflow](AWS-ASSESSMENT-WORKFLOW.md).
@@ -34,10 +34,10 @@ real capabilities call to the collector. The collector checks its execution
 account through STS before it starts; AWS reads still enforce current credentials. The resulting
 environment context includes UTC time, configured account aliases/regions,
 operations and budgets. READY does not assert every AWS service is accessible.
-An integrity, credential or connectivity failure blocks CE tool admission.
+An integrity, credential or connectivity failure blocks RemediGenius CE tool admission.
 
 The default investigation toolset is skills, clarification and ce_runtime. The
-plugin admits only skill viewing/listing, clarification and the six CE tools below.
+plugin admits only skill viewing/listing, clarification and the six RemediGenius CE tools below.
 Terminal, arbitrary file access, skill editing, and unreviewed plugin tools are
 blocked. Scope is also independently checked by the collector and IAM. The plugin and
 helper package are mounted read-only; there is no fork of Hermes.
@@ -106,9 +106,9 @@ owner with `--home /opt/data/profiles/ce-desk`, then restart the gateway. The sc
 backs up files and preserves model settings; use a maintenance window.
 
 Additional plugins are executable trusted operator code. Merely installing one
-does not admit its tools to CE. Review its runtime, identity and permissions,
+does not admit its tools to RemediGenius CE. Review its runtime, identity and permissions,
 test it, then explicitly update the admitted capability package. The operator can
-use unrestricted Hermes separately, but that is outside this CE execution contract.
+use unrestricted Hermes separately, but that is outside this RemediGenius CE execution contract.
 
 ## Boundaries of the claims
 
@@ -117,14 +117,14 @@ Choosing the right investigation, interpreting events and judging a proposal
 remain model-dependent. A reviewer is assistance, not a second authority over
 permissions. Missing capability results must be surfaced rather than replaced by
 agent-written execution code. Builder/remediation execution remains separate and
-is not enabled by this read-only CE profile.
+is not enabled by this read-only RemediGenius CE profile.
 
 ## Utility-model configuration
 
 The plugin registers `ce_review` as a native Hermes auxiliary task. It inherits
 main-provider routing by default. Operators can select a separate utility model
-through Hermes's auxiliary configuration without editing CE provider code.
-CE calls `ctx.llm.acomplete` under an async total deadline; a timeout or empty
+through Hermes's auxiliary configuration without editing RemediGenius CE provider code.
+RemediGenius CE calls `ctx.llm.acomplete` under an async total deadline; a timeout or empty
 critique is NOT_REVIEWED, never a silent success. Cancelling the local request
 cannot guarantee a provider immediately stops its remote billing/work.
 
@@ -168,7 +168,7 @@ The final answer includes a runtime-generated collection summary from actual
 collector results: target/region, operation, observation time, returned pages,
 page budget and whether more results exist. This is separate from the model's
 interpretation and is not a compliance verdict. It is rendered in native Hermes
-chat; CE does not introduce a separate dashboard. Explicit scheduled page budgets
+chat; RemediGenius CE does not introduce a separate dashboard. Explicit scheduled page budgets
 and explicit multi-page requests are preserved.
 
 Review retains a bounded 64,000-character skill context within the existing

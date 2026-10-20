@@ -57,7 +57,7 @@ def test_config_status_preserves_source_and_durable_receipt(monkeypatch, outcome
     assert raw['scope']['operation'] == request['operation']
     assert raw['scope']['region'] == 'us-east-1'
     assert raw['observed_at']
-    assert raw['errors'] == ([{'code': 'AccessDeniedException'}] if outcome == 'denied' else [])
+    assert [e['code'] for e in raw['errors']] == (['AccessDeniedException'] if outcome == 'denied' else [])
     receipt = json.loads(objects['evidence/' + result['receipt_path']])
     assert receipt['files'][0]['sha256'] == hashlib.sha256(raw_bytes).hexdigest()
     assert result['summary']['collection_counts'] == (
@@ -70,9 +70,11 @@ def test_config_status_does_not_admit_recording_mutations(monkeypatch):
     monkeypatch.setenv('TARGETS', json.dumps({'default': {'regions': ['us-east-1'], 'account_id': 'unit-test'}}))
     monkeypatch.setattr(module.boto3, 'Session', lambda: pytest.fail('Rejected request reached AWS'))
     for operation in ('start_configuration_recorder', 'stop_configuration_recorder', 'delete_configuration_recorder'):
-        with pytest.raises(ValueError, match='outside configured scope'):
-            module.handler({'action': 'read', 'target': 'default', 'region': 'us-east-1',
-                            'service': 'config', 'operation': operation}, None)
+        result = module.handler({'action': 'read', 'target': 'default', 'region': 'us-east-1',
+                                 'service': 'config', 'operation': operation}, None)
+        assert result['status'] == 'ERROR' and result['pages_returned'] == 0
+        assert result['errors'][0]['code'] == 'WRITE_OPERATION'
+        assert result['stop_reason'] == 'WRITE_OPERATION'
 
 
 @pytest.mark.parametrize('budget,expected', [(None, 1), (2, 2)])

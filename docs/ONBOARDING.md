@@ -1,8 +1,8 @@
 # Inputs, identities and first use
 
-CE is a single-operator, self-hosted AWS investigation tool. You supply AWS access
+RemediGenius CE is a single-operator, self-hosted AWS investigation tool. You supply AWS access
 and a model account. The tested scope is **us-east-1 with DeepSeek v4.1 Flash**.
-CE does not include a shared key, model credits or preconfigured business policy.
+RemediGenius CE does not include a shared key, model credits or preconfigured business policy.
 
 ## Choose where to run
 
@@ -26,7 +26,7 @@ APIs still require network access; workstation mode is not offline operation.
 1. **Provisioning identity:** Terraform uses it to create the stack. Verify the
    account with `aws sts get-caller-identity` before applying a plan.
 2. **Runtime AWS identity:** the collector uses it for admitted reads and writes
-   to CE's own S3 storage. Hermes receives no AWS credentials. See [IAM](IAM.md).
+   to RemediGenius CE's own S3 storage. Hermes receives no AWS credentials. See [IAM](IAM.md).
 3. **Model credential:** belongs to your provider account. Set it through the
    supported launcher/secret option or Hermes configuration, never through chat.
 4. **Dashboard login:** generated for this workspace. Retrieve it privately;
@@ -35,14 +35,14 @@ APIs still require network access; workstation mode is not offline operation.
 For workstation access, prefer `aws configure sso`, then `aws sso login --profile
 YOUR_PROFILE`. An existing AWS CLI profile also works. Temporary access keys need
 all three values: access key ID, secret access key and session token. Do not put
-these values in source files. CE cannot renew an expired upstream AWS login.
+these values in source files. RemediGenius CE cannot renew an expired upstream AWS login.
 
 ## Model and host requirements
 
 Use a reasoning model with reliable tool calling and enough context for the skills,
 evidence and review packet. A configured model name does not prove authentication
 or successful inference. An unconfigured model must be onboarded before a live
-investigation. Hermes owns model routing; CE supplies no separate provider SDK.
+investigation. Hermes owns model routing; RemediGenius CE supplies no separate provider SDK.
 
 The Spot host is Amazon Linux 2023, x86_64. Its default pool is `t3.large` /
 `t3a.large`, with a 6144 MiB Hermes limit. Hermes uses the pinned upstream Docker
@@ -57,7 +57,7 @@ instance to the chosen subnet's Availability Zone.
 3. Ask what target and sources are configured. Then request an actual bounded
    inventory or findings read. Source availability is not collected evidence.
 4. Inspect account/region scope, observation time, receipt and collection limits.
-5. Add one real policy: ask CE to stage it with scope, review the draft, then send
+5. Add one real policy: ask RemediGenius CE to stage it with scope, review the draft, then send
    its exact publication phrase. Ask how that knowledge changes the conclusion.
 6. Request a fix proposal and actual tool validation. Save a Kanban case if work
    must wait. Apply changes yourself, then ask for fresh-evidence reassessment.

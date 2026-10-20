@@ -44,6 +44,18 @@ exact meaning and content. Style does not change permissions or execution result
 
 ## Evaluation
 
+The critic receives a bounded packet that prioritizes the current request,
+draft and collected evidence. Earlier conversation and supporting material may
+be omitted to fit the packet. The review records those omissions; limited-context
+critique is not a claim that the entire conversation was reviewed. A failed or
+missing critic response remains unreviewed.
+
+Collected Security Hub summaries rank findings by severity before showing up to
+50 compact records. This display window does not define collection completeness:
+use the receipt's page count, continuation and error fields. A read-budget limit
+does not erase collected evidence. The controller permits a final sufficiency
+decision from that evidence without authorizing another AWS read.
+
 Run `python -m pytest -q tests/test_answer_contract.py tests/test_flexible_investigation.py tests/test_native_execution_contract.py`.
 These are constructed boundary tests, not live AWS evidence. They check reference
 membership, consistent layout, invented-status rejection, denied tools, persistent

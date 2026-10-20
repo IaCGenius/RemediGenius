@@ -1,7 +1,15 @@
 """Reusable SDK read execution with independently configured IAM and durable receipts.
 No shell, generated code, credentials in responses, or arbitrary endpoint selection.
+
+Read admission uses the pinned offline catalog (`read_catalog`), not the legacy
+allowlist membership. The legacy `operations.json` entries remain as reviewed
+compatibility fixtures: they are folded into the catalog with explicit provenance
+and keep their prior execution/credential behavior.
 """
 import hashlib
+import csv
+import io
+import importlib.util
 import json
 import os
 import time
@@ -15,8 +23,39 @@ from botocore.exceptions import ClientError, ParamValidationError
 OPERATIONS = json.loads((Path(__file__).parent / 'operations.json').read_text())
 CONFIG = Config(retries={'total_max_attempts': 1}, connect_timeout=3, read_timeout=10)
 
+
+def _load_read_catalog():
+    path = Path(__file__).parent / 'read_catalog.py'
+    spec = importlib.util.spec_from_file_location('rgce_read_catalog', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+read_catalog = _load_read_catalog()
+
+
 def encoded(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), default=str).encode()
+
+
+def _legacy(service, operation):
+    return operation in OPERATIONS.get(service, {})
+
+
+def _target_scope(event, target, region, service, operation, parameters):
+    return {'target': event['target'], 'execution_account': os.environ.get('ACCOUNT_ID'),
+            'account_id': target['account_id'], 'region': region, 'service': service,
+            'operation': operation, 'parameters': parameters}
+
+
+def _rejected(event, target, region, service, operation, code, notice):
+    return {'schema_version': 'rgce-aws-read/1', 'status': 'ERROR',
+            'scope': _target_scope(event, target, region, service, operation, event.get('parameters', {})),
+            'pages_returned': 0, 'has_more': False, 'pages': [],
+            'errors': [{'code': code, 'notice': notice}], 'stop_reason': code,
+            'notice': 'Request rejected before any AWS call; this is not an empty-resource result.'}
+
 
 def handler(event, context):
     allowed = {'action','target','region','service','operation','parameters','max_pages'}
@@ -24,9 +63,27 @@ def handler(event, context):
         raise ValueError('Use the documented AWS read request')
     targets = json.loads(os.environ['TARGETS'])
     if event.get('action') == 'capabilities':
-        return {'targets':{k:{'regions':v['regions'],'account_id':v['account_id']} for k,v in targets.items()},
-                'operations':{k:list(v) for k,v in OPERATIONS.items()},
-                'max_pages':10,'max_bytes':4000000,'notice':'Configured scope; each call still must pass actual IAM permissions.'}
+        if set(event) - {'action', 'service'}:
+            raise ValueError('Unknown capabilities parameter')
+        base = {'targets': {k: {'regions': v['regions'], 'account_id': v['account_id']} for k, v in targets.items()},
+                'max_pages': 10, 'max_bytes': 4000000, 'dynamic_reads': True,
+                'notice': 'Configured scope; each call still must pass actual IAM permissions.'}
+        service = event.get('service')
+        if service is not None:
+            try:
+                operations = read_catalog.operations_for(service)
+            except read_catalog.CatalogError as exc:
+                return {'status': 'ERROR', 'errors': [exc.as_dict()],
+                        'notice': 'Service is not admitted by the pinned read catalog.'}
+            return base | {'service': service,
+                           'operations': {name: list(entry['actions']) for name, entry in operations.items()},
+                           'catalog_id': read_catalog.CATALOG_ID,
+                           'notice': base['notice'] + ' Catalog-admitted operations for this service.'}
+        legacy = {k: list(v) for k, v in OPERATIONS.items()}
+        return base | {'operations': legacy, 'recommended_operations': legacy,
+                       'catalog': read_catalog.catalog_summary(),
+                       'notice': base['notice'] + ' operations are reviewed legacy starting points; '
+                                                 'pass service to list catalog-admitted operations.'}
     if event.get('action') != 'read':
         raise ValueError('Supported actions: capabilities, read')
     required = ('target','region','service','operation')
@@ -36,8 +93,27 @@ def handler(event, context):
         raise ValueError('Unknown target; use a configured target from capabilities')
     target = targets[event['target']]
     region, service, operation = event['region'], event['service'], event['operation']
-    if region not in target['regions'] or operation not in OPERATIONS.get(service, {}):
+    if region not in target['regions']:
         raise ValueError('Operation or region outside configured scope')
+    legacy = _legacy(service, operation)
+    try:
+        authorization = read_catalog.authorize(service, operation)
+    except read_catalog.CatalogError as exc:
+        return _rejected(event, target, region, service, operation, exc.code, exc.notice)
+    # A dynamically admitted operation must run under the configured audit role.
+    # Without it, legacy compatibility operations keep prior behavior but new
+    # operations fail explicitly instead of silently using generic credentials.
+    audit_arn = None
+    if not legacy:
+        audit_arn = os.environ.get('AUDIT_ROLE_ARN') or target.get('audit_role_arn')
+        if not audit_arn:
+            return _rejected(event, target, region, service, operation, 'READ_ROLE_REQUIRED',
+                             'Dynamically admitted operations require a configured audit role '
+                             '(AUDIT_ROLE_ARN); no AWS call was made.')
+        parts = audit_arn.split(':')
+        if len(parts) != 6 or parts[2] != 'iam' or parts[4] != target['account_id'] or not parts[5].startswith('role/'):
+            return _rejected(event, target, region, service, operation, 'READ_ROLE_SCOPE_MISMATCH',
+                             'Configure an audit role in the selected target account; no AWS call was made.')
     parameters = event.get('parameters', {})
     pages_limit = event.get('max_pages', 1)
     if not isinstance(parameters, dict) or type(pages_limit) is not int or not 1 <= pages_limit <= 10 or len(encoded(parameters)) > 16000:
@@ -62,6 +138,8 @@ def handler(event, context):
         raise ValueError('A different account requires an explicit configured role')
     if target.get('role_arn') and target['role_arn'].split(':')[4] != target['account_id']:
         raise ValueError('Configured role/account mismatch')
+    session_policy = json.dumps({'Version':'2012-10-17','Statement':[{'Effect':'Allow',
+                            'Action':authorization['actions'],'Resource':'*'}]})
     run = uuid.uuid4().hex
     observed = datetime.now(timezone.utc).isoformat()
     pages, errors, total, partial = [], [], 0, False
@@ -69,13 +147,25 @@ def handler(event, context):
     began = time.monotonic()
     try:
         session = boto3.Session()
-        if target.get('role_arn'):
-            args = {'RoleArn':target['role_arn'],'RoleSessionName':'rgce-read','DurationSeconds':900,
-                    'Policy':json.dumps({'Version':'2012-10-17','Statement':[{'Effect':'Allow','Action':OPERATIONS[service][operation],'Resource':'*'}]})}
+        if legacy:
+            if target.get('role_arn'):
+                args = {'RoleArn':target['role_arn'],'RoleSessionName':'rgce-read','DurationSeconds':900,
+                        'Policy':json.dumps({'Version':'2012-10-17','Statement':[{'Effect':'Allow','Action':OPERATIONS[service][operation],'Resource':'*'}]})}
+                if target.get('external_id'): args['ExternalId'] = target['external_id']
+                if service == 'cloudcontrol':
+                    partition = target['role_arn'].split(':')[1]
+                    # Allow downstream metadata reads, intersected with the target role.
+                    args['PolicyArns'] = [{'arn':f'arn:{partition}:iam::aws:policy/{p}'} for p in
+                                         ('SecurityAudit','job-function/ViewOnlyAccess')]
+                creds = session.client('sts', config=CONFIG).assume_role(**args)['Credentials']
+                session = boto3.Session(aws_access_key_id=creds['AccessKeyId'],aws_secret_access_key=creds['SecretAccessKey'],aws_session_token=creds['SessionToken'])
+        else:
+            partition = audit_arn.split(':')[1]
+            args = {'RoleArn':audit_arn,'RoleSessionName':'rgce-dynamic-read','DurationSeconds':900,
+                    'Policy':session_policy}
             if target.get('external_id'): args['ExternalId'] = target['external_id']
             if service == 'cloudcontrol':
-                partition = target['role_arn'].split(':')[1]
-                # Allow downstream metadata reads, intersected with the target role.
+                # Retain existing downstream read policies, intersected with the target audit role.
                 args['PolicyArns'] = [{'arn':f'arn:{partition}:iam::aws:policy/{p}'} for p in
                                      ('SecurityAudit','job-function/ViewOnlyAccess')]
             creds = session.client('sts', config=CONFIG).assume_role(**args)['Credentials']
@@ -103,14 +193,18 @@ def handler(event, context):
             pages.append(page)
             # Preserve service tokens and label a bounded pagination stop honestly.
             partial = any(page.get(k) for k in ('NextToken','nextToken','Marker','NextMarker','ContinuationToken','NextContinuationToken')) or bool(page.get('IsTruncated'))
-            if partial and client.can_paginate(operation):
+            if client.can_paginate(operation):
                 import jmespath
                 cfg = getattr(paginator, '_pagination_cfg', {})
                 inputs, outputs = cfg.get('input_token', []), cfg.get('output_token', [])
                 inputs = [inputs] if isinstance(inputs,str) else inputs
                 outputs = [outputs] if isinstance(outputs,str) else outputs
                 tokens = {key:jmespath.search(expr,page) for key,expr in zip(inputs,outputs)}
-                if tokens and all(value is not None for value in tokens.values()):
+                if outputs:
+                    partial = any(value not in (None, '', [], {}) for value in tokens.values())
+                    if cfg.get('more_results'):
+                        partial = partial and bool(jmespath.search(cfg['more_results'],page))
+                if partial and tokens:
                     continuation = {**parameters, **tokens}
             if not partial: continuation = None
             if not partial: break
@@ -118,12 +212,15 @@ def handler(event, context):
         errors.append({'code':'ParamValidationError','message':str(exc)[:3000],
                        'notice':'Inspect the SDK input schema; one corrected attempt is permitted.'})
     except ClientError as exc:
-        errors.append({'code':exc.response.get('Error',{}).get('Code','AWS_ERROR')})
+        errors.append({'code':exc.response.get('Error',{}).get('Code','AWS_ERROR'),
+                       'notice':'AWS denied or failed this bounded call; a denial is not evidence that no resources exist.'})
     except Exception as exc:
         errors.append({'code':type(exc).__name__})
     if partial and not stop_reason: stop_reason = 'PAGE_LIMIT'
     scope = {'target':event['target'],'execution_account':os.environ['ACCOUNT_ID'],'account_id':target['account_id'], 'region':region,
              'service':service,'operation':operation,'parameters':parameters,'max_pages':pages_limit,
+             'catalog_id':read_catalog.CATALOG_ID,'admitted_actions':authorization['actions'],
+             'admission':authorization.get('provenance'),
              'notice':'Administrator APIs may include member-account records. Preserve source IDs and check actual membership/coverage.'}
     result = {'schema_version':'rgce-aws-read/1','run_id':run,'observed_at':observed,'scope':scope,
               'status':'ERROR' if errors and not pages else 'PARTIAL' if errors or partial else 'OK',
@@ -140,6 +237,21 @@ def handler(event, context):
     save(raw_path,result,'raw')
     # Deterministic activity extraction; same CloudTrail capability for any EventSource/identity/resource filter.
     summary = {}
+    if service == 'iam' and operation == 'get_credential_report':
+        # This is credential lifecycle metadata, not passwords or secret keys.
+        # Read an existing report only; never generate one as a hidden write.
+        reports=[]
+        for page in pages:
+            content=page.get('Content',b'')
+            if isinstance(content,bytes): content=content.decode('utf-8-sig')
+            rows=list(csv.DictReader(io.StringIO(content)))
+            reports.append({'generated_at':page.get('GeneratedTime'), 'rows':rows})
+        report_path=f'normalized/{run}/credential-report.json'
+        save(report_path,{'scope':scope,'observed_at':observed,'reports':reports},'normalized')
+        summary={'report_path':report_path,'reports':[{'generated_at':r['generated_at'],
+                 'user_count':len(r['rows']),'rows_preview':r['rows'][:10],
+                 'preview_truncated':len(r['rows'])>10} for r in reports],
+                 'notice':'Existing credential lifecycle metadata; use generated_at for freshness. Generation was not requested.'}
     if service in ('config','cloudcontrol','cloudformation','resource-explorer-2'):
         collections = {}
         for page in pages:
@@ -189,7 +301,14 @@ def handler(event, context):
             severity=f.get('Severity',{}).get('Label','UNKNOWN')
             counts[severity]=counts.get(severity,0)+1
             items.append({k:f.get(k) for k in ('Id','ProductArn','AwsAccountId','Region','Title','Severity','Workflow','RecordState','UpdatedAt','Resources','Compliance','Remediation')})
-        summary={'finding_count':len(items),'severity_counts':counts,'findings_preview':items[:5],'preview_truncated':len(items)>5}
+        # Rank the collected set before previewing it. Counts cover all collected
+        # findings, while details stay compact and never imply account completeness.
+        ranks={'CRITICAL':0,'HIGH':1,'MEDIUM':2,'LOW':3,'INFORMATIONAL':4}
+        ranked=sorted(items,key=lambda f:(ranks.get((f.get('Severity') or {}).get('Label'),5),str(f.get('Id',''))))
+        compact=[{k:f.get(k) for k in ('Id','Title','Severity','AwsAccountId','Region','Workflow','RecordState','UpdatedAt')} for f in ranked[:50]]
+        summary={'finding_count':len(items),'severity_counts':counts,'findings_preview':compact,
+                 'preview_truncated':len(items)>50,'preview_order':'severity then finding ID',
+                 'priority_scope':'Collected pages only; has_more and errors determine collection coverage'}
         save(f'normalized/{run}/findings.json',{'scope':scope,'observed_at':observed,'count':len(items),'severity_counts':counts,'has_more':partial,'errors':errors,'findings':items},'normalized')
     receipt=f'receipts/{run}.json'
     save(receipt,{'run_id':run,'observed_at':observed,'producer':'deterministic-boto3','boto3_version':boto3.__version__,

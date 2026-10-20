@@ -12,5 +12,6 @@
     "skills/ce-aws-security/references/follow-up.md"
   ],
   "skill_context_max_chars": 64000,
-  "max_validation_attempts_per_format": 3
+  "max_validation_attempts_per_format": 3,
+  "review_context_max_chars": 90000
 }

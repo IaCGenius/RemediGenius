@@ -1,13 +1,13 @@
 # Reused tools and optional AWS companions
 
-CE is an integration, not a new AWS scanner or infrastructure language. Hermes
+RemediGenius CE is an integration, not a new AWS scanner or infrastructure language. Hermes
 provides the agent, model selection, sessions and dashboard. The optional UI is
-przbadu/hermes-ui, pinned and attributed in deploy/hermes-ui. CE adds the selected
+przbadu/hermes-ui, pinned and attributed in deploy/hermes-ui. RemediGenius CE adds the selected
 skills, bounded execution, evidence receipts, knowledge handling and validation.
 
 | Tool | Role in this build | Execution boundary |
 | --- | --- | --- |
-| Hermes Agent | Agent runtime and official dashboard | No AWS credentials; admitted CE tools |
+| Hermes Agent | Agent runtime and official dashboard | No AWS credentials; admitted RemediGenius CE tools |
 | hermes-ui | Optional browser interface to the same Hermes profile | No model key or AWS credentials in UI container |
 | boto3 / botocore | Deterministic AWS reads and input schemas | Local collector; exact dependency pins |
 | Terraform, AWS CLI, cfn-lint | Check proposed fixes with real tools | Separate Linux validator; no apply permissions |
@@ -16,7 +16,7 @@ skills, bounded execution, evidence receipts, knowledge handling and validation.
 
 [Prowler](https://prowler.com/cloud-security-solutions/aws-security-audit) is useful
 when an organization needs additional deterministic security checks. Its own
-permission requirements must be reviewed; CE does not claim that every Prowler
+permission requirements must be reviewed; RemediGenius CE does not claim that every Prowler
 check is covered by its current role.
 
 [Cloud Custodian](https://cloudcustodian.io/docs/deployment.html) supplies policy

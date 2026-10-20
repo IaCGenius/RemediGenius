@@ -1,4 +1,4 @@
-# Current CE architecture
+# Current RemediGenius CE architecture
 
 Static SVGs display directly in GitHub. Editable Archify JSON and standalone HTML
 viewers are included. Download an HTML file to use the interactive viewer.
@@ -24,7 +24,7 @@ The local scheduler runs deterministic checks without a model.
 | State recovery | [Recovery boundaries](../SINGLE-HOST-MIGRATION.md#storage-and-interruption) |
 
 The instance role combines metadata/security reads with limited operational writes
-for CE storage and recovery. Hermes receives no AWS credentials. Workstation
+for RemediGenius CE storage and recovery. Hermes receives no AWS credentials. Workstation
 collection uses the operator's configured AWS credentials instead.
 
 Published notes, sessions and cases live on retained storage and are checkpointed.

@@ -78,7 +78,10 @@ def final_contract(text, run):
 def render_answer(value, run):
     """Deterministic layout. AI text stays distinct from tool-owned metadata."""
     def safe(s):
-        return str(s).replace('\\','\\\\').replace('`',"'").replace('*',r'\*').replace('_',r'\_').replace('[',r'\[').replace(']',r'\]').replace('<','&lt;').replace('>','&gt;').replace('\n',' ')
+        text = str(s).replace('\\','\\\\').replace('`',"'").replace('*',r'\*').replace('[',r'\[').replace(']',r'\]').replace('<','&lt;').replace('>','&gt;').replace('\n',' ')
+        # Underscores inside identifiers/paths (ce_aws, us_east_1) need no escape;
+        # only protect underscores that could open/close Markdown emphasis.
+        return re.sub(r'(?<![0-9A-Za-z])_|_(?![0-9A-Za-z])', r'\\_', text)
     evidence, knowledge = references(run)
     lines = ['**Answer — AI interpretation**', safe(value['answer']), '', '**Observed facts — AI summary with references**']
     lines += ['- '+safe(row['text'])+' ['+', '.join(row['evidence'])+']' for row in value['observations']] or ['No source observations cited.']
@@ -337,14 +340,25 @@ class Investigation(Assessment):
             req=step['request']
             if not isinstance(req,dict): raise ValueError('Request must be an object')
             action=req.get('action')
-            allowed={'read':{'action','target','region','service','operation','parameters','max_pages'},
+            allowed={'capabilities':{'action','service'},'read':{'action','target','region','service','operation','parameters','max_pages'},
                      'schema':{'action','service','operation','field'},
                      'show':{'action','path','query','offset','limit'},
                      'compare':{'action','before','after'}}
             if action not in allowed or set(req)-allowed[action]: raise ValueError('Unsupported request shape')
+            if action == 'capabilities':
+                if not isinstance(req.get('service'),str) or not req['service']:
+                    raise ValueError('Catalog discovery requires a service')
             if action in ('read','schema'):
-                if req.get('operation') not in run['capability_manifest']['operations'].get(req.get('service'),[]):
-                    raise ValueError('Operation not in admitted capabilities')
+                manifest=run['capability_manifest']
+                if req.get('operation') not in manifest['operations'].get(req.get('service'),[]) and manifest.get('dynamic_reads'):
+                    discovered=self.collect({'action':'capabilities','service':req.get('service')})
+                    expected=manifest.get('catalog',{}).get('catalog_id')
+                    if expected and discovered.get('catalog_id')!=expected:
+                        raise ValueError('Read catalog changed or discovery failed; inspect the service gap before starting a new investigation')
+                    listed=discovered.get('operations',{})
+                    manifest['operations'][req.get('service')]=list(listed.get(req.get('service'),listed))
+                if req.get('operation') not in manifest['operations'].get(req.get('service'),[]):
+                    raise ValueError('Operation not classified as an admitted read; inspect service capabilities')
             if action=='read':
                 if req.get('target') not in run['targets'] or req.get('region')!=run['region']:
                     raise ValueError('Request changes frozen scope')
@@ -386,23 +400,42 @@ class Investigation(Assessment):
                 run['knowledge']=[self.knowledge({'path':p,'limit':200}) for p in run['knowledge_paths']]
                 run['stage']='plan'
             elif stage=='plan':
-                if any(run[k]>=run['limits'][limit] for k,limit in (('round','rounds'),('actions','actions'),('reads','reads'))):
-                    run['outcome']='INCONCLUSIVE_BUDGET';run['stage']='interpret'
-                else:
-                    output=self.reason('plan',self.packet(run),run.get('plan_error',''))
-                    run.setdefault('plan_attempts',[]).append({'round':run['round'],'output':output})
-                    try: plan=self.validate_plan(run,output)
-                    except (ValueError,TypeError,KeyError) as exc:
+                limits=run['limits']
+                blocked=[name for name,limit in (('round','rounds'),('actions','actions'),('reads','reads'))
+                         if run[name]>=limits[limit]]
+                prior=run.get('plan_error','')
+                if blocked:
+                    # A permitted read may already answer the objective. Ask for a
+                    # terminal decision instead of concluding from the budget alone.
+                    note=('Budget reached for: '+', '.join(blocked)+'. '
+                          +('No further cloud read is permitted; use already-returned evidence. ' if 'reads' in blocked
+                            else 'No further tool steps are permitted. ')
+                          +'If the collected evidence answers the criteria choose sufficient; otherwise choose inconclusive. '
+                          'Do not repeat collection.')
+                    prior=(prior+' ' if prior else '')+note
+                output=self.reason('plan',self.packet(run),prior)
+                run.setdefault('plan_attempts',[]).append({'round':run['round'],'output':output})
+                try: plan=self.validate_plan(run,output)
+                except (ValueError,TypeError,KeyError) as exc:
+                    if blocked:
+                        # Deterministic terminal fallback: the remaining decisions are
+                        # prohibited by the frozen budget, so no repair hop is spent.
+                        run['outcome']='INCONCLUSIVE_BUDGET';run['stage']='interpret'
+                    else:
                         run['plan_repairs']+=1;run['plan_error']=str(exc)[:300]
                         if run['plan_repairs']>1: raise ValueError('Plan rejected after bounded repair: '+str(exc))
+                else:
+                    run.pop('plan_error',None)
+                    run['decisions'].append({'round':run['round'],'decision':plan['decision'],'rationale':plan['rationale']})
+                    if plan['decision']=='collect' and 'round' not in blocked and 'actions' not in blocked:
+                        run['round']+=1;run['plan']=plan['steps'];run['cursor']=0;run['stage']='collect'
+                    elif plan['decision']=='collect':
+                        run['outcome']='INCONCLUSIVE_BUDGET';run['stage']='interpret'
                     else:
-                        run.pop('plan_error',None)
-                        run['decisions'].append({'round':run['round'],'decision':plan['decision'],'rationale':plan['rationale']})
-                        if plan['decision']=='collect':
-                            run['round']+=1;run['plan']=plan['steps'];run['cursor']=0;run['stage']='collect'
-                        else:
-                            run['outcome']='AI_SUFFICIENT' if plan['decision']=='sufficient' else 'INCONCLUSIVE'
-                            run['stage']='interpret'
+                        # A blocked dimension that still yields inconclusive is a budget
+                        # outcome; a sufficient decision from the same evidence is not.
+                        run['outcome']='AI_SUFFICIENT' if plan['decision']=='sufficient' else ('INCONCLUSIVE_BUDGET' if blocked else 'INCONCLUSIVE')
+                        run['stage']='interpret'
             elif stage=='collect':
                 step=run['plan'][run['cursor']];req=step['request']
                 # Recheck persisted limits immediately before dispatch, including resumed plans.

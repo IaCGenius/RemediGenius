@@ -18,9 +18,12 @@ There is no separate EventBridge schedule or Lambda in this deployment.
 
 ## Keep a finding beyond its chat
 
-After an investigation, ask "Track this finding on the board." CE saves a native
+After an investigation, ask "Track this finding on the board." RemediGenius CE saves a native
 Kanban case with scope, evidence, proposal and remaining decisions. Use "List my
-cases" or "Resume case ID", or open Kanban with the `ce-cases` tenant filter.
+cases" or "Resume case ID". Use the dashboard's **Kanban** entry when available
+under **Plugins**, or enter `/kanban` in the native **Chat** terminal. Select the
+`ce-cases` tenant filter. Dashboard navigation is supplied by Hermes plugins and
+can differ by interface. The case prompts work without a sidebar shortcut.
 Open means triage; Waiting means blocked; Verify means review; Closed means done.
 A card does not start an autonomous worker or suppress an AWS finding.
 
@@ -42,9 +45,9 @@ impact, prerequisites, validation result and rollback/verification steps in a ca
 The Linux validator runs actual tools. Read its result: formatting/schema checks
 are not an execution plan, and an AI critique is not tool validation.
 
-The operator applies changes through their own change process. CE does not apply
+The operator applies changes through their own change process. RemediGenius CE does not apply
 Terraform, execute remediation CLI commands or create a CloudFormation change set.
-Once the operator reports execution, CE rereads the affected state and recommends
+Once the operator reports execution, RemediGenius CE rereads the affected state and recommends
 closure only when the evidence establishes the intended condition.
 
 ## Review means a bounded check

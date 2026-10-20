@@ -1,7 +1,7 @@
 # Simple remediation follow-up and resource ownership context
 
 Research and installed-runtime inspection: 2026-10-14. Recommendation, not a claim
-that CE already exposes task management or these additional AWS reads. No board,
+that RemediGenius CE already exposes task management or these additional AWS reads. No board,
 dispatcher, cloud permission or customer resource was changed during this review.
 
 ## Recommended experience
@@ -17,7 +17,7 @@ conditions do not inherit a prior disposition just because descriptions resemble
 one another. Several source controls may support one issue; retain their IDs.
 
 Keep only a few user-facing stages: **Open → Waiting → Verify → Closed**. These are
-CE meanings, not new Hermes database states: initially use native triage, blocked,
+RemediGenius CE meanings, not new Hermes database states: initially use native triage, blocked,
 review and done, with the reason in the card. Archive concluded cards out of the
 active view without deleting their history. Test exact transitions before enabling
 agent writes; native worker completion rules may differ from manual board actions.
@@ -57,13 +57,13 @@ Reassessment after a relevant change or expired decision can reopen or create a
 linked successor; automatic reopening is not implemented today. Archiving removes
 clutter, not the underlying risk or evidence. Use operator-defined retention.
 
-This is ordinary finding/change lifecycle management adapted to a small CE. NIST's
+This is ordinary finding/change lifecycle management adapted to a small RemediGenius CE. NIST's
 patch-management guidance includes prioritization and verification; it is relevant
 practice, not a certification of this design. AWS Security Hub similarly separates
 workflow disposition from findings and warns that resolved/suppressed status does
 not prevent later findings. Sources: [NIST SP 800-40r4](https://csrc.nist.gov/pubs/sp/800/40/r4/final),
 [AWS finding workflow](https://docs.aws.amazon.com/securityhub/latest/userguide/findings-workflow-status.html).
-CE-local card updates should not silently change Security Hub workflow status.
+RemediGenius CE-local card updates should not silently change Security Hub workflow status.
 
 ## Reuse Hermes Kanban, without an autonomous work queue
 
@@ -81,7 +81,7 @@ Installed Hermes 0.21.7 was inspected read-only:
   comments, events, runs and attachments. The container sees `/opt/data/kanban.db`.
 - Launch config has `kanban.review_dispatch: true`. Tracking-only behavior has
   not been configured or tested. The installed create tool requires an assignee.
-- `ce-desk` exposes skills, clarification and CE tools only. CE's execution gate
+- `ce-desk` exposes skills, clarification and RemediGenius CE tools only. RemediGenius CE's execution gate
   also rejects other tools, so enabling the toolset alone is insufficient.
 
 Reuse the existing tools after narrowly admitting board read/create/comment and
@@ -119,7 +119,7 @@ uniquely to one event. Sources: [DescribeStackResources](https://docs.aws.amazon
 [AWS Config FAQ](https://aws.amazon.com/config/faqs/),
 [Config/CloudTrail correlation](https://aws.amazon.com/blogs/mt/how-to-use-aws-config-and-cloudtrail-to-find-who-made-changes-to-a-resource/).
 
-Current CE supports some Config inventory/aggregator operations, but not resource
+Current RemediGenius CE supports some Config inventory/aggregator operations, but not resource
 history, CloudFormation inspection or arbitrary Terraform-state object retrieval.
 These are capabilities to admit and verify using existing SDK/tools, not invented
 read access and not a new adapter for each question.

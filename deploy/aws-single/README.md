@@ -1,4 +1,4 @@
-# Deploy CE on a single Spot host (AWS)
+# Deploy RemediGenius CE on a single Spot host (AWS)
 
 This is the current AWS deployment path. It creates one Spot Auto Scaling group
 in an existing subnet, runs Hermes and the deterministic collector on that host,
@@ -80,18 +80,26 @@ secret ARN or the Hermes-side configuration belongs there.
 
 What the stack creates: a private, versioned, TLS-only S3 bucket; a Spot Auto
 Scaling group and launch template; a security group with no inbound rules; an
-encrypted 20 GiB retained EBS volume; an instance role and profile; and starts
+encrypted 20 GiB retained EBS volume; an instance role/profile and an audit role; and starts
 the optional UI at boot when `hermes_ui = true`. It creates no Lambda function,
 EventBridge schedule, VPC or NAT gateway.
 
 ### Identity split
 
+If the dashboard shows **Help improve Hermes? Send to Nous**, choose **No** or
+**Skip** to decline upstream feedback. RemediGenius CE collects no adoption telemetry; this
+does not change the data sent to your configured model provider.
+
 - **Operator/provisioning identity:** your own credentials, used only for
   `terraform apply` and the SSM session. It never enters the host.
 - **Runtime instance role:** the collector uses it through IMDSv2. It attaches
   `SecurityAudit` and `ViewOnlyAccess`, plus narrow `s3:ListBucket`/`s3:GetObject`/
-  `s3:PutObject` on CE's own bucket, `ec2:AttachVolume` for the retained volume,
+  `s3:PutObject` on RemediGenius CE's own bucket, `ec2:AttachVolume` for the retained volume,
   and `secretsmanager:GetSecretValue` for the exact secret you supplied.
+- **Investigation audit role:** assumed by the collector for AWS reads, with
+  SecurityAudit/ViewOnlyAccess and explicit credential/body exclusions. A scoped
+  session policy limits the requested operation. Host credentials remain separate
+  for RemediGenius CE evidence writes and recovery. See [read discovery](../../docs/BROAD-AWS-READER.md).
 - **Hermes:** receives no AWS credentials. The Hermes container runs with
   `AWS_EC2_METADATA_DISABLED=true` and requires IMDSv2 (`http_tokens = "required"`,
   hop limit 1). The model cannot call IMDS or widen its access through a prompt.
@@ -146,7 +154,7 @@ aws ssm start-session --region us-east-1 --target i-YOUR_INSTANCE \
 ## 4. Configure the model
 
 The tested configuration is a reasoning model with reliable tool calling and
-64k+ context, reached through a custom OpenAI-compatible endpoint. CE has been
+64k+ context, reached through a custom OpenAI-compatible endpoint. RemediGenius CE has been
 exercised with DeepSeek v4.1 Flash. Use your own provider account.
 
 Two supported ways to supply the key:
@@ -158,7 +166,7 @@ Two supported ways to supply the key:
 2. **Hermes native configuration.** Leave `model_secret_arn` empty and configure
    the provider and key in Hermes after login, using the Hermes Models
    page/config. Keep the custom OpenAI-compatible route (`provider: custom`,
-   `key_env: MODEL_API_KEY`) that CE seeds; switching to a native provider can
+   `key_env: MODEL_API_KEY`) that RemediGenius CE seeds; switching to a native provider can
    require other environment variables the launcher does not inject.
 
 Spot starts the dashboard for model onboarding. Confirm model access with a small
@@ -167,7 +175,7 @@ A model ID alone does not prove access. Retained Hermes configuration takes
 precedence over the tfvars seed, so changing `model_name` later may not replace
 an existing profile.
 
-**Without a working model key, CE is not ready to investigate.** The collector
+**Without a working model key, RemediGenius CE is not ready to investigate.** The collector
 and dashboard still run, but model-backed investigation fails. Never put a key in
 a chat message or in tfvars.
 
@@ -183,10 +191,10 @@ deterministic evidence; it does not collect records itself.
 
 - **Receipts.** Collection writes raw responses, normalized summaries and a
   receipt to the private bucket under `<prefix>/raw`, `<prefix>/normalized`,
-  `<prefix>/receipts` and `<prefix>/catalog.json`. Ask CE to cite the exact
+  `<prefix>/receipts` and `<prefix>/catalog.json`. Ask RemediGenius CE to cite the exact
   receipt path and inspect it before trusting a claim. A receipt describes a
   bounded request, not organization-wide coverage.
-- **Knowledge.** Ask CE to stage a short organization note with its scope.
+- **Knowledge.** Ask RemediGenius CE to stage a short organization note with its scope.
   Review the exact Markdown and scope, then send the returned confirmation phrase
   `publish knowledge <id>` in a separate message. Published notes are ordinary
   hashed files under the retained profile and are never treated as AWS facts.
@@ -227,7 +235,7 @@ terraform destroy -var-file=local.tfvars
 
 By default a non-empty bucket prevents complete removal. The retained session
 volume creates a final snapshot when destroyed. Existing model secrets are not
-owned or deleted by CE. Setting `delete_data_on_destroy = true` permits deletion
+owned or deleted by RemediGenius CE. Setting `delete_data_on_destroy = true` permits deletion
 of the bucket and its contents; this is irreversible and only appropriate after
 you choose what to retain.
 

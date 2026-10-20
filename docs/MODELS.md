@@ -7,18 +7,18 @@ The native profile uses Hermes's custom provider with a model ID, OpenAI-compati
 Selected AWS evidence, resource identifiers, knowledge and drafts can reach the reasoning/critic model. Choose a provider, endpoint, region and retention policy your organization permits. Self-hosting does not imply local inference.
 
 What your model provider receives and retains depends on your provider, endpoint
-and settings; review its terms before connecting AWS data. CE works with models
+and settings; review its terms before connecting AWS data. RemediGenius CE works with models
 Hermes supports; DeepSeek v4.1 Flash is the tested configuration. A compatible endpoint
 alone does not establish authentication or reliable tool calling. Keep model
 selection in Hermes; no automatic provider fallback is implied.
 
-CE's daily collection does not call a model. Use a provider plan that permits your
+RemediGenius CE's daily collection does not call a model. Use a provider plan that permits your
 workload. Review [your responsibility](LIMITS.md#your-responsibility).
 
 
-## CE startup configuration
+## RemediGenius CE startup configuration
 
-Model, endpoint and key routing are owned by Hermes. CE seeds only the first
+Model, endpoint and key routing are owned by Hermes. RemediGenius CE seeds only the first
 profile; retained settings survive restart. This release tests DeepSeek v4.1 Flash using
 `provider: custom`, an OpenAI-compatible HTTPS endpoint and `key_env: MODEL_API_KEY`.
 Use a strong reasoning model with reliable tool calling and 64k+ context. See
@@ -26,7 +26,7 @@ Use a strong reasoning model with reliable tool calling and 64k+ context. See
 and [Hermes FAQ](https://hermes-agent.nousresearch.com/docs/reference/faq).
 
 The workstation `model_key_env` selects which **host** environment variable to read;
-CE delivers it inside Hermes as MODEL_API_KEY. Spot retrieves a raw key from the
+RemediGenius CE delivers it inside Hermes as MODEL_API_KEY. Spot retrieves a raw key from the
 configured Secrets Manager ARN and delivers the same variable. Stay on this custom
 configuration for the release; changing Hermes to a native provider can require
 other environment variables that this launcher does not inject. Do not assume a

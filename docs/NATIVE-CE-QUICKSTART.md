@@ -1,4 +1,4 @@
-# Deploy CE on Spot
+# Deploy RemediGenius CE on Spot
 
 The local-compute migration replaces the Lambda backend. Follow the [current guide](../deploy/aws-single/README.md).
 
