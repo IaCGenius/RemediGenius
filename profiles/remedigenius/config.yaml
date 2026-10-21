@@ -1,0 +1,27 @@
+# RemediGenius Community Edition (RemediGenius-CE) Hermes profile `remedigenius`.
+# Spot and the Docker workstation install it with `hermes profile install`;
+# tools/install_local_hermes.py merges only the keys below into an existing Hermes.
+model:
+  default: __MODEL_NAME__
+  provider: custom
+  base_url: __MODEL_BASE_URL__
+  key_env: MODEL_API_KEY
+agent:
+  max_turns: 30
+plugins:
+  enabled:
+    - rg-triage
+# No terminal: AWS access goes only through the read-only rg_triage tool.
+# file: read IaC repositories; writes are limited to the proposals folder by the plugin.
+platform_toolsets:
+  cli: [skills, clarify, file, rg_triage]
+  cron: [skills, file, rg_triage]
+  telegram: [skills, clarify, file, rg_triage]
+  discord: [skills, clarify, file, rg_triage]
+  slack: [skills, clarify, file, rg_triage]
+  api_server: [skills, clarify, file, rg_triage]
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+skills:
+  external_dirs: []

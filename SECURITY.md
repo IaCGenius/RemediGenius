@@ -1,41 +1,28 @@
-# Security
+# Security — RemediGenius Community Edition (RemediGenius-CE)
 
-Provided as-is; review [your configuration and data-handling responsibilities](docs/LIMITS.md#your-responsibility).
+## Reporting a vulnerability
 
-## Current native Hermes boundary — 2026-10-14
+Report suspected vulnerabilities or credential exposure privately through GitHub's private vulnerability reporting
+for this repository. Do not open a public issue or paste secrets anywhere.
 
-The former console policy is retained in Git history; it does not describe native Hermes.
-Native RemediGenius CE is a single trusted-operator deployment. Local access uses loopback;
-AWS uses an SSM tunnel. Do not expose it as a public multi-user service.
+## Security model
 
-Hermes receives the configured model key and temporary collector-invocation/
-evidence-read credentials. Selected AWS data and knowledge are sent to that model.
-The operator AWS profile and Docker socket are not mounted in workstation mode.
-Host/Docker administrators are trusted. Local Docker networking differs from cloud
-host network restrictions; it is not a hostile multi-tenant sandbox.
+RemediGenius-CE is a **single-operator** tool. It is not a multi-user or multi-tenant service; do not expose the
+dashboard publicly. The workstation binds it to `127.0.0.1`; Spot exposes it only through SSM port forwarding.
 
-The scoped collector reads assessed resources and writes its own S3 evidence.
-The runtime also writes logs and Kanban cases. Read-only AWS assessment does not
-mean no writes anywhere. Provisioning the RemediGenius CE backend is an explicit infrastructure
-change. Skills guide behavior; integrity checks, tool admission and budgets are
-enforced separately by the RemediGenius CE plugin. Extra plugins require deliberate admission.
+- **AWS access is read-only and isolated.** Only the desk service holds AWS credentials. Every call passes a botocore
+  guard that refuses non-read operations and reads that return secrets or data. Deployments use a read-only role with
+  explicit denies. See [docs/IAM.md](docs/IAM.md).
+- **The agent has no AWS credentials and no shell.** It reaches the desk through a Unix socket that accepts a fixed
+  list of triage commands. It cannot write outside its proposals folder or read credential stores, keys, `.env`
+  files or Terraform state. Triage decisions require approval in Hermes.
+- **On Spot**, the Hermes container's egress is limited to HTTPS: no instance metadata and no private address ranges.
+  IMDSv2 uses hop limit 1 and the security group has no inbound rules.
+- **Data leaves to your model provider:** finding details, resource identifiers, account ids, CloudTrail excerpts, IaC
+  excerpts and your messages. Choose a provider your organization permits.
+- **Checkpoints are sensitive.** The S3 bucket or local folder holds conversations, decisions, settings and possibly the
+  model key. Restrict access to it like any secret store.
+- Host administrators (Spot instance root, Docker host) are trusted.
 
-Daily deterministic checks make no model calls and continue when Hermes is stopped.
-Disable schedules separately. AI_CRITIQUED is a bounded model critique, not IaC
-validation or organizational approval. Real AWS/Qwen acceptance covers selected
-workflows, not every customer environment. Missing evidence remains inconclusive.
-
-S3 evidence and local/EBS conversations/cases have separate lifecycles. Back up
-both; S3 evidence alone cannot restore chat or case history. Use one active writer.
-Prompt injection and incorrect model proposals remain possible. See current
-[runtime controls](docs/CE-RUNTIME.md) and [workstation setup](docs/WORKSTATION-HERMES.md).
-
-## Reporting a problem
-
-Use [GitHub private vulnerability reporting](https://github.com/IaCGenius/RemediGenius/security/advisories/new).
-It is enabled for this repository. Include the version, affected workflow,
-expected/actual behavior and a minimal redacted reproduction. Do not send keys,
-Terraform state, account exports or customer documents. Do not report suspected
-vulnerabilities in public issues or Discussions. No security email address or
-response-time guarantee is advertised. Ordinary bugs belong in
-[Issues](https://github.com/IaCGenius/RemediGenius/issues).
+Tool output, finding text, tags and documents are treated as data, never as instructions to the agent. Model output
+can still be wrong; review every proposed change before applying it.

@@ -1,6 +1,6 @@
 ---
 name: Improvement idea
-about: Describe a useful outcome and an existing Hermes capability we could reuse
+about: Describe a useful RemediGenius Community Edition (RemediGenius-CE) outcome and what we could reuse
 labels: enhancement
 ---
 
@@ -13,5 +13,4 @@ What would this help an AWS security operator accomplish?
 Hermes skill, native feature, plugin, CLI or maintained library, if known.
 
 ## Smallest useful change
-Does it belong in the current us-east-1/Qwen preview, or a later release?
 Do not include private environment details or credentials.

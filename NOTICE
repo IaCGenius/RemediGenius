@@ -1,32 +1,18 @@
-RemediGenius Community Edition
+RemediGenius Community Edition (RemediGenius-CE)
 Copyright 2026 RemediGenius
 
-Hermes Agent: separate official pinned runtime; upstream code is not vendored.
+Hermes Agent: separate official runtime, pinned by image digest; upstream code is not vendored.
 https://github.com/NousResearch/hermes-agent
 Copyright (c) 2025 Nous Research. MIT License.
 Upstream licences and dependency notices remain in its image.
 
-AWS security reference content: aws/agent-toolkit-for-aws, Apache-2.0.
-Pins: profiles/ce/aws-security.lock.json.
-Licence and provenance: profiles/ce/desk/skills/ce-aws-security/.
-
-Adapted deterministic rules: jhkchan/aws-agent-skills, Apache-2.0.
-See rgce/RULES-PROVENANCE.md, rgce/rules/*-PROVENANCE.md and
-rgce/rules/UPSTREAM-LICENSE for attribution and historical source pins.
-
 Python dependencies are installed separately, not vendored:
-PyYAML (MIT); boto3/botocore (Apache-2.0) for AWS access.
-Optional document conversion: Microsoft MarkItDown (MIT) and its selected-format
-transitive dependencies retain their own licences.
-https://github.com/microsoft/markitdown
+PyYAML (MIT); boto3/botocore (Apache-2.0).
+Terraform (HashiCorp, Business Source License 1.1) is downloaded at deployment time, pinned by
+version and SHA-256, and used only to validate proposed configuration; it is not redistributed.
 
-No model-provider client or personal memory content is copied into CE.
-Historical console/builder distribution notices remain with the archived source.
+Remediation playbooks (rgtriage/playbooks) reference public AWS documentation and CIS AWS Foundations
+Benchmark control descriptions; filter patterns and settings are restated, not copied text.
 
-The optional Hermes browser UI is third-party MIT-licensed software from
-https://github.com/przbadu/hermes-ui, based on the Nous Research desktop renderer.
-Its license is preserved in deploy/hermes-ui/UPSTREAM-LICENSE. It is built only
-when enabled; see docs/HERMES-UI.md for the upstream revision and CE patch.
-
-Remediation planning guidance: adapted from rifteo/skills (MIT), Copyright (c) 2026 Rifteo.
-License and provenance: profiles/ce/desk/skills/ce-remediation-plan/.
+Earlier releases (v0.1.x–v0.2.0) included third-party adapted content with its own notices; that
+content is not part of this release and its attribution remains in the git history at those tags.

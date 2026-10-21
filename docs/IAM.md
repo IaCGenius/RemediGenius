@@ -1,50 +1,43 @@
-# IAM and credential boundaries
+# Permissions and credential boundaries — RemediGenius Community Edition
 
-## Spot
+The rule in every deployment: **only the desk service holds AWS credentials, and every AWS call it makes is a read.**
+The Hermes agent never holds AWS credentials.
 
-The single-compute stack creates an instance role/profile and an audit role. Review
-[its policy source](../deploy/aws-single/iam.tf) before provisioning.
+## Read-only enforcement (all deployments)
 
-| Identity | Granted access | Boundary |
+1. **Code:** every boto3 session the desk creates carries a `before-call` hook that refuses any operation that is not
+   Describe/Get/List/BatchGet/Lookup/Search, and also refuses reads that return secrets or data (`GetSecretValue`,
+   `GetParameter*`, `GetObject`, `Decrypt`, DynamoDB item reads, log event reads, `GetFunction`, …). This applies even
+   when the underlying credentials could write.
+2. **IAM:** the deployments read through a role with `SecurityAudit` + `ViewOnlyAccess` and an explicit deny on
+   credential and data reads.
+3. **Agent surface:** the agent can only send the desk a fixed list of triage commands over a Unix socket. It has no
+   shell, cannot read credential files, and can write only to its proposals folder.
+
+## Spot ([iam.tf](../deploy/aws-single/iam.tf))
+
+| Identity | Permissions | Used by |
 | --- | --- | --- |
-| EC2 host role | SecurityAudit, ViewOnlyAccess, SSM; own RemediGenius CE bucket read/write; attach own retained volume | Operational writes exist; not a globally read-only role |
-| Audit role | SecurityAudit and ViewOnlyAccess; explicit credential/body exclusions | Host assumes it with an operation-scoped session policy; no RemediGenius CE storage/recovery writes |
-| Local collector | Host credentials for RemediGenius CE storage; assumed audit credentials for AWS investigation | SDK calls admitted by the pinned AWS classification catalog, scope and budgets |
-| Hermes and optional UI | No AWS credentials; no metadata route from isolated Hermes network | Hermes requests bounded collection through a Unix socket |
-| Validator | No customer AWS credentials | Validate proposal syntax/schema; no apply |
-| Optional model secret | Exact configured secret, plus exact KMS grant when supplied | Host boot reads it; model key belongs to Hermes, not AWS evidence |
+| Instance role `<name>` | SSM core; its bucket (`state/` read/write, `source/` read); the model secret, plus `kms:Decrypt` on that secret's customer-managed key via Secrets Manager only; `sts:AssumeRole` on the audit role, plus `RemediGeniusReadOnly` in any account of your organization (`organization_id`, conditioned on `aws:ResourceOrgID`) or explicit `member_role_arns` | the host bootstrap and desk service (state, secret, role assumption) |
+| Audit role `<name>-audit` | `SecurityAudit`, `ViewOnlyAccess`, explicit deny on credential/data reads | every AWS read in this account |
+| Member read role `RemediGeniusReadOnly` ([template](../deploy/aws-single/member-read-role.yaml), deploy as a StackSet) | same as the audit role; trusts only the instance role within your organization | AWS reads in member accounts; see [MULTI-ACCOUNT.md](MULTI-ACCOUNT.md) |
+| Hermes container | none. IMDSv2 hop limit 1 and the egress firewall block instance metadata | — |
 
-The host uses AmazonSSMManagedInstanceCore for the private tunnel. No inbound SSH
-or dashboard port is opened. The user who opens a tunnel must have the appropriate
-SSM permissions. A host administrator remains trusted and can access the state.
+The instance role itself has no AWS security read permissions. No inbound port is open; operators reach the dashboard
+through SSM port forwarding, which needs `ssm:StartSession` on the instance.
 
-S3 contains private evidence, chat, knowledge and possibly model keys in backups.
-Its evidence reader admits only evidence prefixes; a model cannot request the
-state backup prefix through that reader. Protect IAM access to the whole bucket.
+The S3 bucket holds checkpoints of conversations, decisions and settings, which may include the model key.
+Restrict access to the whole bucket.
 
-## Workstation
+## Docker workstation
 
-An administrator provisions the private bucket with
-[workstation storage Terraform](../deploy/workstation-storage/main.tf). The module
-prints a scoped storage policy for the existing operator role; it does not attach
-it or create a new user. The operator's AWS profile must have the intended metadata
-reads plus that storage access. Prefer short-lived SSO credentials.
+| Identity | Permissions | Used by |
+| --- | --- | --- |
+| `--read-role-arn` role (recommended) | `SecurityAudit` + `ViewOnlyAccess`, ideally with the same denies as the audit role | assumed by `tools/workstation.py`; temporary credentials go only to the desk container |
+| your AWS profile (no role given) | whatever the profile has | copied into the desk container's credential volume; the botocore guard still blocks writes |
+| Hermes container | none | — |
 
-Only the collector mounts the private exported credential volume. Hermes does not.
-Use the launcher's `run` mode to refresh credentials. When the upstream AWS login
-expires, renew it; RemediGenius CE cannot grant itself access. The role/SCP/resource policy and
-KMS policy remain authoritative. A configured operation is not proof a read succeeds.
+## Existing Hermes ([LOCAL-HERMES.md](LOCAL-HERMES.md))
 
-For broad service discovery, create the optional audit role with
-`audit_principal_arn` in the storage stack and set its `audit_role_arn` output in
-the launcher JSON. The caller also needs `sts:AssumeRole` for that ARN. See
-[broad reader setup and boundaries](BROAD-AWS-READER.md). Existing configurations
-without that role retain the legacy reads and receive `READ_ROLE_REQUIRED` for
-new catalog operations.
-
-## Existing deployments
-
-The earlier executor, Lambda collector, schedule and invoker roles belong to the
-archived deployment. They are not created by the new stacks. Keep their Terraform
-state and remove them separately when you have confirmed migration. Do not destroy
-an old stack merely because its source was moved out of this RemediGenius CE working tree.
+The desk runs as a subprocess of Hermes using your AWS profile. The botocore guard and the agent's guards apply, but
+there is no process separation. Use a read-only profile.

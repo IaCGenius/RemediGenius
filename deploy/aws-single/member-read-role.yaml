@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: RemediGenius member metadata read role; exact instance-role trust within one organization.
+Description: RemediGenius Community Edition (RemediGenius-CE) member-account read-only role, trusted only by the RemediGenius-CE instance role in the same organization.
 Parameters:
   InstanceRoleArn:
     Type: String
@@ -11,7 +11,7 @@ Resources:
   MemberReadRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: SecurityAgentReadOnly
+      RoleName: RemediGeniusReadOnly
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

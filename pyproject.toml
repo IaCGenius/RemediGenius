@@ -4,23 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "remedigenius-community"
-version = "0.2.0"
-description = "Evidence-first security investigations with deterministic checks and portable AI workflows"
+version = "0.3.0"
+description = "RemediGenius Community Edition (RemediGenius-CE): AWS security triage desk on the Hermes agent"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
-dependencies = ["PyYAML>=6,<7"]
+dependencies = ["PyYAML>=6,<7", "boto3>=1.34,<2"]
 
 [project.optional-dependencies]
-aws = ["boto3>=1.34,<2"]
-documents = ["markitdown[pdf,docx,pptx,xlsx]>=0.1.4,<0.2"]
 test = ["pytest>=8,<10"]
 
+[project.scripts]
+rgtriage = "rgtriage.cli:main"
+
 [tool.setuptools.packages.find]
-include = ["rgce*"]
+include = ["rgtriage*"]
 
 [tool.setuptools.package-data]
-rgce = ["RULES-PROVENANCE.md", "rules/*.md", "rules/UPSTREAM-LICENSE"]
+rgtriage = ["playbooks/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

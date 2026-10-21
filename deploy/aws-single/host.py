@@ -1,206 +1,410 @@
-"""Single-host CE bootstrap; cloud collection stays on this host."""
-import json,os,re,shutil,sys,subprocess,time,urllib.request,secrets
+"""RemediGenius Community Edition (RemediGenius-CE) — Spot host bootstrap.
+
+The instance is disposable: S3 holds the durable state. At boot this script restores the
+Hermes home and the desk state from S3 (only into empty folders), starts the desk service
+(the only component with AWS credentials, reading through the read-only audit role), and
+runs Hermes in the pinned container with the `remedigenius` profile and no AWS credentials.
+The desk service checkpoints both homes to S3 every 2 minutes, after scans and decisions,
+on shutdown, and as soon as AWS announces a Spot interruption.
+"""
+import hashlib
+import json
+import os
+import secrets
+import shutil
+import subprocess
+import sys
+import time
+import urllib.request
+import zipfile
 from pathlib import Path
-from datetime import datetime,timezone
-ROOT=Path('/opt/rgce-native')
-SOURCE=ROOT/'source'
-CFG=json.loads((ROOT/'config.json').read_text())
-def run(*args, capture=False):
-    return subprocess.run(args, check=True, text=True, stdout=subprocess.PIPE if capture else None).stdout
 
-def aws(*args):
-    return json.loads(run('aws', *args, '--region', CFG['region'], '--output', 'json', capture=True))
+ROOT = Path('/opt/remedigenius')          # root-only: config, source archive
+SOURCE = ROOT / 'source'
+UID = 10000                               # Hermes container user; also the desk service user
+HERMES_HOME = Path('/data/hermes')
+DESK = Path('/data/rgtriage')
+IAC = Path('/data/iac')
+RUNDIR = Path('/run/rgtriage')
+SOCKET = RUNDIR / 'rgtriage.sock'
+VENV = Path('/opt/rgtriage/venv')
+CODE = Path('/opt/rgtriage/src')          # readable copy of the rgtriage package for uid 10000
+PACKAGE = Path('/opt/remedigenius/package')
+LOGIN = HERMES_HOME / 'remedigenius-login.json'
+CONTAINER = 'remedigenius'
+PROFILE = 'remedigenius'
+PACKAGES = ['boto3==1.42.89', 'PyYAML==6.0.2']
+TERRAFORM = ('1.12.2', '1eaed12ca41fcfe094da3d76a7e9aa0639ad3409c43be0103ee9f5a1ff4b7437')
+# Inside the container the desk paths are identical, so no path translation is needed.
+PROPOSALS = '/opt/data/proposals'  # inside the Hermes home: Hermes only permits writes under /opt/data
+CONTAINER_MOUNTS = ['-v', f'{DESK.as_posix()}:{DESK.as_posix()}:ro',
+                    '-v', f'{RUNDIR.as_posix()}:{RUNDIR.as_posix()}', '-v', f'{IAC.as_posix()}:{IAC.as_posix()}:ro']
 
-def attach():
-    request = urllib.request.Request('http://169.254.169.254/latest/api/token', method='PUT', headers={'X-aws-ec2-metadata-token-ttl-seconds': '300'})
-    token = urllib.request.urlopen(request, timeout=5).read().decode()
-    request = urllib.request.Request('http://169.254.169.254/latest/meta-data/instance-id', headers={'X-aws-ec2-metadata-token': token})
-    instance = urllib.request.urlopen(request, timeout=5).read().decode()
-    for _ in range(90):
-        volume = aws('ec2', 'describe-volumes', '--volume-ids', CFG['volume_id'])['Volumes'][0]
-        if any(item['InstanceId'] == instance and item['State'] == 'attached' for item in volume['Attachments']):
-            break
-        if volume['State'] == 'available':
-            aws('ec2', 'attach-volume', '--volume-id', CFG['volume_id'], '--instance-id', instance, '--device', '/dev/sdf')
-        time.sleep(10)
-    else:
-        raise SystemExit('Session volume unavailable; previous host must release it. Never force detach.')
-    device = Path('/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_' + CFG['volume_id'].replace('-', ''))
-    for _ in range(30):
-        if device.exists():
-            break
-        time.sleep(2)
-    if not device.exists():
-        raise SystemExit('Session volume device not present')
-    probe = subprocess.run(['blkid', str(device)], stdout=subprocess.DEVNULL).returncode
-    if probe not in (0, 2):
-        raise SystemExit('Cannot safely identify the session volume filesystem')
-    if probe == 2:
-        # Fresh encrypted EBS blocks need not read as all-zero bytes. Authorize
-        # initialization from AWS volume identity/creation metadata, not contents.
-        created = datetime.fromisoformat(volume['CreateTime'].replace('Z', '+00:00'))
-        age = (datetime.now(timezone.utc) - created).total_seconds()
-        if volume.get('SnapshotId') or not 0 <= age < 3600 or volume['Size'] != 20:
-            raise SystemExit('Unrecognized session volume; fresh-volume initialization window closed')
-        run('mkfs.ext4', '-q', '-L', 'rgce-native', str(device))
-    Path('/data').mkdir(exist_ok=True)
-    if subprocess.run(['mountpoint', '-q', '/data']).returncode:
-        run('mount', str(device), '/data')
-    for path in (Path('/data/hermes'), Path('/data/hermes/work')):
-        path.mkdir(exist_ok=True)
-        os.chown(path, 10000, 10000)
-    Path('/data/shared').mkdir(exist_ok=True)
+
+def run(*args, **kw):
+    return subprocess.run(args, check=True, text=True, **kw)
+
+
+def durable_url(cfg):
+    return f"s3://{cfg['bucket']}/state"
+
+
+def ensure_user():
+    # systemd resolves User=/Group= through NSS, so uid and gid 10000 must exist on the host.
+    if subprocess.run(['getent', 'group', str(UID)], capture_output=True).returncode:
+        run('groupadd', '--system', '--gid', str(UID), 'remedigenius')
+    if subprocess.run(['getent', 'passwd', str(UID)], capture_output=True).returncode:
+        run('useradd', '--system', '--uid', str(UID), '--gid', str(UID), '--no-create-home', '--shell', '/sbin/nologin',
+            'remedigenius')
+
+
+def install_runtime():
+    ensure_user()
+    if not (VENV / 'bin/python').exists():
+        run('dnf', 'install', '-y', '-q', 'python3.11', 'python3.11-pip', 'unzip')
+        run('python3.11', '-m', 'venv', str(VENV))
+    run(str(VENV / 'bin/pip'), 'install', '--quiet', '--disable-pip-version-check', *PACKAGES)
+    if CODE.exists():
+        shutil.rmtree(CODE)
+    shutil.copytree(SOURCE / 'rgtriage', CODE / 'rgtriage', ignore=shutil.ignore_patterns('__pycache__'))
+    for path in [CODE, *CODE.rglob('*')]:
+        path.chmod(0o755 if path.is_dir() else 0o644)
+    version, digest = TERRAFORM
+    binary = Path('/usr/local/bin/terraform')
+    if binary.exists() and version in subprocess.run([str(binary), 'version'], capture_output=True, text=True).stdout:
+        return
+    data = urllib.request.urlopen(f'https://releases.hashicorp.com/terraform/{version}/terraform_{version}_linux_amd64.zip',
+                                  timeout=120).read()
+    if hashlib.sha256(data).hexdigest() != digest:
+        raise SystemExit('Terraform download checksum mismatch')
+    archive = Path('/tmp/terraform.zip')
+    archive.write_bytes(data)
+    with zipfile.ZipFile(archive) as z:
+        binary.write_bytes(z.read('terraform'))
+    binary.chmod(0o755)
+    archive.unlink()
+
+
+def desk(*args, user=None, **kw):
+    """Run the rgtriage CLI with the host venv (as root unless a user is given)."""
+    env = dict(os.environ, PYTHONPATH=str(CODE), RGTRIAGE_HOME=str(DESK), HOME=str(DESK / '.home'),
+               AWS_STS_REGIONAL_ENDPOINTS='regional')
+    prefix = ['setpriv', f'--reuid={UID}', f'--regid={UID}', '--clear-groups'] if user else []
+    return run(*prefix, str(VENV / 'bin/python'), '-m', 'rgtriage', *args, env=env, **kw)
+
+
+def restore_state(cfg):
+    """Durable copy first: an empty disk (new Spot instance) is filled from the latest S3 checkpoints."""
+    for path in (HERMES_HOME, DESK):
+        path.mkdir(parents=True, exist_ok=True)
+    result = desk('durable', 'restore', '--url', durable_url(cfg), '--home', f'hermes={HERMES_HOME}',
+                  '--home', f'desk={DESK}', '--owner', f'{UID}:{UID}', capture_output=True)
+    print(result.stdout.strip())
+    for path in (HERMES_HOME, DESK, HERMES_HOME / 'proposals', DESK / '.home', DESK / '.lineage', IAC, HERMES_HOME / 'work'):
+        path.mkdir(parents=True, exist_ok=True)
+        os.chown(path, UID, UID)
+    for path in (DESK / '.lineage').iterdir():
+        os.chown(path, UID, UID)
+    # Same path on the host as in the container, so the desk can validate files the agent proposes.
+    link = Path('/opt/data')
+    if not link.is_symlink():
+        link.symlink_to(HERMES_HOME)
+
+
+def member_accounts(cfg) -> list[dict]:
+    """Member accounts from Terraform: common role name per account id, plus any explicit role ARNs."""
+    members = {}
+    for account_id in cfg.get('member_account_ids') or []:
+        members[account_id] = f"arn:aws:iam::{account_id}:role/{cfg.get('member_role_name') or 'RemediGeniusReadOnly'}"
+    for arn in cfg.get('member_role_arns') or []:
+        members[arn.split(':')[4]] = arn
+    return [{'name': f'member-{a}', 'account_id': a, 'role_arn': r, 'criticality': 'business_critical'}
+            for a, r in members.items()]
+
+
+MERGE = """
+import json, sys, yaml
+path, data = sys.argv[1], json.load(sys.stdin)
+current = yaml.safe_load(open(path)) if data['exists'] else None
+if current is None:
+    current = data['initial']
+    changed = True
+else:
+    known = {str(a.get('account_id')) for a in current.get('accounts', [])}
+    added = [a for a in data['members'] if a['account_id'] not in known]
+    current.setdefault('accounts', []).extend(added)
+    changed = bool(added)
+    for account in current['accounts']:  # flags set in Terraform later (e.g. delegated_admin); never overwrite a value
+        if str(account.get('account_id')) == data['main']['account_id']:
+            for key, value in data['main'].get('flags', {}).items():
+                if key not in account:
+                    account[key] = value
+                    changed = True
+if changed:
+    with open(path, 'w') as f:
+        f.write(data['header'] + yaml.safe_dump(current, sort_keys=False))
+print(json.dumps({'changed': changed}))
+"""
+
+
+def write_desk_profile(cfg):
+    """First boot writes triage.yaml; later boots only add member accounts newly listed in Terraform.
+
+    Everything else in the file is the operator's (it is kept in the S3 checkpoints).
+    """
+    profile = DESK / 'triage.yaml'
+    main_account = {'name': cfg['name'], 'account_id': cfg['account_id'], 'role_arn': cfg['audit_role_arn'],
+                    'criticality': 'business_critical'}
+    if cfg.get('delegated_admin'):
+        main_account['delegated_admin'] = True  # org-wide Security Hub / GuardDuty / Inspector view
+    initial = {'name': cfg['name'], 'regions': cfg.get('regions') or [cfg['region']],
+               'accounts': [main_account] + member_accounts(cfg),
+               'goals': [{'text': 'Protect customer data stored in S3 and databases',
+                          'boost': {'resource_types': ['AwsS3Bucket', 'AwsRdsDbInstance', 'AwsDynamoDbTable'], 'points': 5}},
+                         {'text': 'Detect and stop misuse of privileged identities',
+                          'boost': {'resource_types': ['AwsIamUser', 'AwsIamRole', 'AwsIamAccessKey'],
+                                    'signals': ['identity_risk', 'root_usage'], 'points': 5}}],
+               'iac_paths': [str(IAC)]}
+    flags = {'delegated_admin': True} if cfg.get('delegated_admin') else {}
+    request = {'exists': profile.exists(), 'initial': initial, 'members': member_accounts(cfg),
+               'main': {'account_id': cfg['account_id'], 'flags': flags},
+               'header': '# RemediGenius-CE desk profile. Edit freely; it is saved to S3. Terraform only adds member accounts.\n'}
+    result = run(str(VENV / 'bin/python'), '-c', MERGE, str(profile), input=json.dumps(request), capture_output=True).stdout
+    os.chown(profile, UID, UID)
+    print(f'triage.yaml: {result.strip()}')
+
 
 def network():
-    if subprocess.run(['docker', 'network', 'inspect', 'rgce-native'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
-        run('docker', 'network', 'create', '--subnet', '172.29.242.0/24', '--opt', 'com.docker.network.bridge.name=br-rgce-native', 'rgce-native')
-    subprocess.run(['iptables', '-N', 'RGCE-NATIVE'], stderr=subprocess.DEVNULL)
-    run('iptables', '-F', 'RGCE-NATIVE')
+    """Hermes container egress: HTTPS to the internet only; no instance metadata, no private ranges."""
+    if subprocess.run(['docker', 'network', 'inspect', CONTAINER], capture_output=True).returncode:
+        run('docker', 'network', 'create', '--subnet', '172.29.242.0/24', '--opt',
+            'com.docker.network.bridge.name=br-remedigenius', CONTAINER)
+    subprocess.run(['iptables', '-N', 'REMEDIGENIUS'], stderr=subprocess.DEVNULL)
+    run('iptables', '-F', 'REMEDIGENIUS')
     for line in Path('/etc/resolv.conf').read_text().splitlines():
         fields = line.split()
         if len(fields) >= 2 and fields[0] == 'nameserver' and ':' not in fields[1]:
             for protocol in ('udp', 'tcp'):
-                run('iptables', '-A', 'RGCE-NATIVE', '-d', fields[1], '-p', protocol, '--dport', '53', '-j', 'ACCEPT')
-    for subnet in ('0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8','169.254.0.0/16','172.16.0.0/12','192.168.0.0/16','198.18.0.0/15','224.0.0.0/4','240.0.0.0/4'):
-        run('iptables','-A','RGCE-NATIVE','-d',subnet,'-j','DROP')
-    run('iptables','-A','RGCE-NATIVE','-p','tcp','--dport','443','-j','ACCEPT')
-    run('iptables','-A','RGCE-NATIVE','-j','DROP')
-    # Permit replies to host-initiated loopback gateway connections, not new agent→host sessions.
-    for chain, args in [('INPUT', ['-i','br-rgce-native','-j','DROP']),
-                        ('INPUT', ['-i','br-rgce-native','-m','conntrack','--ctstate','ESTABLISHED,RELATED','-j','ACCEPT']),
-                        ('DOCKER-USER',['-i','br-rgce-native','-j','RGCE-NATIVE'])]:
-        if subprocess.run(['iptables','-C',chain,*args],stderr=subprocess.DEVNULL).returncode:
-            run('iptables','-I',chain,'1',*args)
+                run('iptables', '-A', 'REMEDIGENIUS', '-d', fields[1], '-p', protocol, '--dport', '53', '-j', 'ACCEPT')
+    for subnet in ('0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
+                   '192.168.0.0/16', '198.18.0.0/15', '224.0.0.0/4', '240.0.0.0/4'):
+        run('iptables', '-A', 'REMEDIGENIUS', '-d', subnet, '-j', 'DROP')
+    run('iptables', '-A', 'REMEDIGENIUS', '-p', 'tcp', '--dport', '443', '-j', 'ACCEPT')
+    run('iptables', '-A', 'REMEDIGENIUS', '-j', 'DROP')
+    for chain, args in [('INPUT', ['-i', 'br-remedigenius', '-j', 'DROP']),
+                        ('INPUT', ['-i', 'br-remedigenius', '-m', 'conntrack', '--ctstate', 'ESTABLISHED,RELATED', '-j', 'ACCEPT']),
+                        ('DOCKER-USER', ['-i', 'br-remedigenius', '-j', 'REMEDIGENIUS'])]:
+        if subprocess.run(['iptables', '-C', chain, *args], stderr=subprocess.DEVNULL).returncode:
+            run('iptables', '-I', chain, '1', *args)
 
-def install(upgrade=False):
-    attach();network()
-    sys.path.insert(0,str(SOURCE/'tools'))
-    import native_validator,native_ui,native_session_limits
-    sys.path.insert(0,str(SOURCE/'deploy/collector'))
-    from account_status import default_checks
-    envdir=Path('/run/ce-collector');envdir.mkdir(exist_ok=True);os.chown(envdir,10000,10000)
-    env={'AWS_DEFAULT_REGION':CFG['region'],'ACCOUNT_ID':CFG['account_id'],'BUCKET':CFG['bucket'],'PREFIX':CFG['prefix'],
-         'INTERVAL_HOURS':str(CFG.get('schedule_interval_hours',24)),
-         'CHECKS':json.dumps(default_checks(CFG['region'])),
-         'TARGETS':json.dumps({'default':{'account_id':CFG['account_id'],'regions':[CFG['region']],**({'role_arn':CFG['audit_role_arn'],'audit_role_arn':CFG['audit_role_arn']} if CFG.get('audit_role_arn') else {})}})}
-    envfile=ROOT/'collector.env';envfile.write_text(''.join(k+'='+v+'\n' for k,v in env.items()));envfile.chmod(0o600)
-    run('docker','build','-t','remedigenius-collector:local',str(SOURCE/'deploy/collector'))
-    # Restore before Hermes opens any database. Existing retained EBS wins.
-    home=Path('/data/hermes')
-    if not (home/'config.yaml').exists():
-        work=home/'work'
-        if work.is_dir() and not any(work.iterdir()):work.rmdir()
-        if not any(home.iterdir()):
-            run('docker','run','--rm','--network','host','--env-file',str(envfile),'-v','/data/hermes:/state',
-                'remedigenius-collector:local','python','state_store.py','restore')
-    if (home/'.restore-in-progress').exists():raise RuntimeError('Incomplete state restore; stop before opening databases')
-    (home/'shared').mkdir(exist_ok=True);os.chown(home/'shared',10000,10000)
-    loginfile=home/'ce-login.json'
-    if not loginfile.exists():
-        loginfile.write_text(json.dumps({'username':'owner','password':secrets.token_urlsafe(24),'secret':secrets.token_hex(32)}));loginfile.chmod(0o600);os.chown(loginfile,10000,10000)
-    login=json.loads(loginfile.read_text())
-    model=aws('secretsmanager','get-secret-value','--secret-id',CFG['model_secret'])['SecretString'] if CFG.get('model_secret') else ''
-    values={'HERMES_DASHBOARD':'1','HERMES_DASHBOARD_PORT':'9120','HERMES_DASHBOARD_BASIC_AUTH_USERNAME':login['username'],
-            'HERMES_DASHBOARD_BASIC_AUTH_PASSWORD':login['password'],'HERMES_DASHBOARD_BASIC_AUTH_SECRET':login['secret'],
-            'AWS_EC2_METADATA_DISABLED':'true','HERMES_TUI_TOOLSETS':'skills,clarify,ce_runtime'}
-    if model:values['MODEL_API_KEY']=model
-    if any('\n' in v or '\r' in v for v in values.values()):raise ValueError('Invalid credential shape')
-    runtime=Path('/run/rgce-native');runtime.mkdir(exist_ok=True,mode=0o700)
-    envpath=runtime/'model.env';envpath.write_text(''.join(k+'='+v+'\n' for k,v in values.items()));envpath.chmod(0o600)
-    profiles=ROOT/'profiles';shutil.copytree(SOURCE/'profiles/ce/desk',profiles/'desk',dirs_exist_ok=True)
-    cfg=profiles/'desk/config.yaml'
-    seed=cfg.read_text()
-    if model:
-        seed=seed.replace('__MODEL_NAME__',json.dumps(CFG['model_name'])).replace('__MODEL_BASE_URL__',json.dumps(CFG['model_base_url']))
-    else:
-        # This reviewed template starts with a model mapping. Leave it unset on
-        # keyless first boot so native Hermes onboarding remains visible. The
-        # retained profile is not overwritten on subsequent boots.
-        seed,count=re.subn(r'\Amodel:\n(?:[ \t]+.*\n)*','',seed,count=1)
-        if count!=1:raise RuntimeError('Unexpected CE model template; refuse an unconfigured model seed')
-    cfg.write_text(seed)
-    native_validator.start('rgce-native')
-    native_session_limits.prepare(CFG['image'],ROOT/'web_server_chat.py')
-    units={
-     'rgce-collector.service': '''[Unit]
-After=docker.service
-Requires=docker.service
+
+def seed_model(config_text: str, model_seed) -> str:
+    """Fill model placeholders when a key is supplied; otherwise drop the model block so Hermes asks for one."""
+    if model_seed:
+        name, base_url = model_seed
+        return config_text.replace('__MODEL_NAME__', json.dumps(name)).replace('__MODEL_BASE_URL__', json.dumps(base_url))
+    out, skipping = [], False
+    for line in config_text.splitlines(keepends=True):
+        if line.startswith('model:'):
+            skipping = True
+            continue
+        if skipping and (line.startswith((' ', '\t')) or not line.strip()):
+            continue
+        skipping = False
+        out.append(line)
+    return ''.join(out)
+
+
+WATCH_SCRIPT = '''"""Hermes cron script: print only new P1/P2 security findings (empty output = silent)."""
+import json, socket
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.settimeout(1200); s.connect(%r)
+s.sendall(json.dumps({"args": ["watch", "--min-priority", "P2"]}).encode() + b"\\n")
+data = b""
+while True:
+    chunk = s.recv(65536)
+    if not chunk:
+        break
+    data += chunk
+reply = json.loads(data)
+print(reply.get("stdout", "") if reply.get("rc") == 0 else "rgtriage watch failed: " + reply.get("stderr", "")[-600:], end="")
+'''
+
+
+def sync_profile(source: Path, hermes_home: Path):
+    """Refresh code-owned profile files every boot; config.yaml, .env, sessions and memory stay as they are."""
+    package = source / 'profiles/remedigenius'
+    profile = hermes_home / 'profiles' / PROFILE
+    shutil.copy2(package / 'SOUL.md', profile / 'SOUL.md')
+    for skill in (package / 'skills').iterdir():
+        target = profile / 'skills' / skill.name
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(skill, target)
+    plugin = profile / 'plugins/rg-triage'
+    if plugin.exists():
+        shutil.rmtree(plugin)
+    shutil.copytree(package / 'plugins/rg-triage', plugin, ignore=shutil.ignore_patterns('__pycache__'))
+    (plugin / 'local.json').write_text(json.dumps({'socket': SOCKET.as_posix(), 'home': DESK.as_posix(), 'proposals': PROPOSALS}))
+    scripts = profile / 'scripts'
+    scripts.mkdir(exist_ok=True)
+    (scripts / 'rgtriage-watch.py').write_text(WATCH_SCRIPT % SOCKET.as_posix())
+    for path in [profile, *profile.rglob('*')]:
+        if hasattr(os, 'lchown'):
+            os.lchown(path, UID, UID)
+        if not path.is_symlink():
+            path.chmod(0o755 if path.is_dir() else (0o600 if path.name == '.env' else 0o644))
+
+
+def units(cfg: dict) -> dict:
+    env = (f'Environment=RGTRIAGE_HOME={DESK.as_posix()}\nEnvironment=PYTHONPATH={CODE.as_posix()}\n'
+           f'Environment=HOME={DESK.as_posix()}/.home\nEnvironment=AWS_DEFAULT_REGION={cfg["region"]}\n'
+           f'Environment=AWS_STS_REGIONAL_ENDPOINTS=regional\nEnvironment=TF_PLUGIN_CACHE_DIR={DESK.as_posix()}/.home/plugins\n')
+    harden = (f'User={UID}\nGroup={UID}\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\n'
+              f'ReadWritePaths={DESK.as_posix()}\n')
+    python = (VENV / 'bin/python').as_posix()
+    homes = f'--home hermes={HERMES_HOME.as_posix()} --home desk={DESK.as_posix()}'
+    store = durable_url(cfg)
+    memory = int(cfg.get('container_memory_mb', 6144))
+    mounts = ' '.join(CONTAINER_MOUNTS)
+    return {
+        'remedigenius-desk.service': f'''[Unit]
+Description=RemediGenius-CE desk: read-only AWS access, Unix socket API, S3 checkpoints
+After=network-online.target
 [Service]
-ExecStartPre=-/usr/bin/docker rm -f rgce-collector
-ExecStart=/usr/bin/docker run --rm --name rgce-collector --network host --env-file /opt/rgce-native/collector.env --read-only --cap-drop ALL --security-opt no-new-privileges --memory 512m --pids-limit 128 --tmpfs /tmp:uid=10000,gid=10000 -v /run/ce-collector:/run/ce-collector -v /data/hermes:/state remedigenius-collector:local
-Restart=on-failure
-RestartSec=5
-''',
-     'rgce-native.service': '''[Unit]
-After=rgce-collector.service
-Requires=rgce-collector.service
-[Service]
-ExecStartPre=-/usr/bin/docker rm -f rgce-native
-ExecStart=/usr/bin/docker run --rm --name rgce-native --network rgce-native --network rgce-native-validation --env-file /run/rgce-native/model.env -p 127.0.0.1:9120:9120 -v /data/hermes:/opt/data -v /data/hermes/shared:/opt/data/shared:ro -v /run/ce-collector:/opt/ce-reader:ro -v /opt/rgce-native/profiles/desk:/opt/ce-package:ro -v /opt/rgce-native/web_server_chat.py:/opt/hermes/hermes_cli/web_server_chat.py:ro --memory '''+str(CFG.get('container_memory_mb',6144))+'''m --pids-limit 1024 '''+CFG['image']+''' gateway run
-ExecStop=/usr/bin/docker stop -t 30 rgce-native
+{env}{harden}RuntimeDirectory=rgtriage
+RuntimeDirectoryPreserve=yes
+RuntimeDirectoryMode=0750
+ExecStart={python} -m rgtriage serve --socket {SOCKET.as_posix()} --durable {store} {homes} --every 120 --spot
+ExecStopPost={python} -m rgtriage durable checkpoint --url {store} {homes}
+TimeoutStopSec=120
 Restart=always
-RestartSec=10
-''',
-     'rgce-state.service': '''[Service]
-Type=oneshot
-TimeoutStartSec=120
-ExecStart=/usr/bin/docker exec rgce-collector python state_store.py backup
-''',
-     'rgce-state.timer': '''[Timer]
-OnBootSec=120
-OnUnitActiveSec=120
+RestartSec=5
 [Install]
-WantedBy=timers.target
+WantedBy=multi-user.target
 ''',
-     'rgce-native-boot.service': '''[Unit]
-After=docker.service network-online.target
-Requires=docker.service
+        'remedigenius-scan.service': f'''[Unit]
+Description=RemediGenius-CE scheduled scan
 [Service]
 Type=oneshot
 TimeoutStartSec=1800
-ExecStart=/usr/bin/python3 /opt/rgce-native/source/deploy/aws-single/host.py
-RemainAfterExit=yes
+{env}{harden}ExecStart={python} -m rgtriage scan --quiet
+''',
+        'remedigenius-scan.timer': f'''[Timer]
+OnBootSec=3min
+OnUnitActiveSec={int(cfg.get('scan_interval_hours', 6))}h
+[Install]
+WantedBy=timers.target
+''',
+        'remedigenius-hermes.service': f'''[Unit]
+Description=RemediGenius-CE Hermes (pinned image, no AWS credentials)
+After=docker.service remedigenius-desk.service
+Requires=docker.service
+[Service]
+ExecStartPre=-/usr/bin/docker rm -f {CONTAINER}
+ExecStart=/usr/bin/docker run --rm --name {CONTAINER} --network {CONTAINER} --env-file /run/remedigenius/hermes.env -p 127.0.0.1:9120:9120 -v {HERMES_HOME.as_posix()}:/opt/data {mounts} -v {PACKAGE.as_posix()}:/opt/remedigenius-package:ro --memory {memory}m --pids-limit 1024 {cfg['image']} gateway run
+ExecStop=/usr/bin/docker stop -t 30 {CONTAINER}
+Restart=always
+RestartSec=10
 [Install]
 WantedBy=multi-user.target
-'''}
-    for name,body in units.items():Path('/etc/systemd/system',name).write_text(body)
-    run('systemctl','daemon-reload');run('systemctl','restart','rgce-collector.service')
-    for _ in range(60):
-        if (envdir/'collector.sock').exists():break
-        time.sleep(2)
-    else:raise RuntimeError('Collector failed; check rgce-collector logs')
-    run('systemctl','restart','rgce-native.service')
-    for _ in range(90):
-        if subprocess.run(['docker','exec','rgce-native','test','-f','/opt/data/config.yaml'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0:break
-        time.sleep(2)
-    profile=home/'profiles/ce-desk'
-    fresh = not profile.exists()
-    if fresh:run('docker','exec','rgce-native','hermes','profile','install','/opt/ce-package','--name','ce-desk','--yes')
-    if fresh or upgrade:
-        subprocess.run(['docker','exec','-i','--user','10000:10000','rgce-native','/opt/hermes/.venv/bin/python','-',
-                    '--home','/opt/data/profiles/ce-desk','--guard-default'],input=(SOURCE/'tools/upgrade_native_profile.py').read_text(),text=True,check=True)
-    else:
-        # Checkpoints omit symlinks. Recreate only known CE links, preserving
-        # operator-owned configuration, skills and sessions during host recovery.
-        links = {profile/'plugins/ce-runtime':'/opt/ce-package/plugins/ce-runtime'}
-        links.update({home/n:'/opt/data/profiles/ce-desk/'+n for n in ('SOUL.md','skills','plugins')})
-        for link,target in links.items():
-            if not link.exists() and not link.is_symlink():
-                link.parent.mkdir(parents=True,exist_ok=True)
-                link.symlink_to(target)
-                os.lchown(link,10000,10000)
-    native_ui.seed_model('rgce-native')
-    run('docker','restart','rgce-native')
-    if CFG.get('proactive_enabled',False):
-        run('docker','exec','rgce-native','mkdir','-p','/tmp/rgce-proactive')
-        for filename in ('install.py','heartbeat.py'):
-            run('docker','cp',str(SOURCE/'deploy/proactive'/filename),'rgce-native:/tmp/rgce-proactive/'+filename)
-        run('docker','exec','-e','HERMES_HOME=/opt/data/profiles/ce-desk',
-            'rgce-native','python','/tmp/rgce-proactive/install.py','--bootstrap')
-    if CFG.get('hermes_ui'):native_ui.start('rgce-native',9122)
-    run('systemctl','enable','rgce-native-boot.service')
-    run('systemctl','enable','--now','rgce-state.timer')
-    run('systemctl','start','rgce-state.service')
-    print('CE ready for model onboarding. Retrieve dashboard credentials locally from /data/hermes/ce-login.json; never paste them into chat.')
+''',
+    }
 
-if __name__=='__main__':install(upgrade='--upgrade' in sys.argv)
+
+def hermes_env(cfg, model_key):
+    if not LOGIN.exists():
+        LOGIN.write_text(json.dumps({'username': 'owner', 'password': secrets.token_urlsafe(24), 'secret': secrets.token_hex(32)}))
+        LOGIN.chmod(0o600)
+        os.chown(LOGIN, UID, UID)
+    login = json.loads(LOGIN.read_text())
+    values = {'HERMES_DASHBOARD': '1', 'HERMES_DASHBOARD_PORT': '9120',
+              'HERMES_DASHBOARD_BASIC_AUTH_USERNAME': login['username'],
+              'HERMES_DASHBOARD_BASIC_AUTH_PASSWORD': login['password'],
+              'HERMES_DASHBOARD_BASIC_AUTH_SECRET': login['secret'],
+              'AWS_EC2_METADATA_DISABLED': 'true', 'HERMES_TUI_TOOLSETS': 'skills,clarify,file,rg_triage'}
+    if model_key:
+        values['MODEL_API_KEY'] = model_key
+    if any('\n' in v or '\r' in v for v in values.values()):
+        raise ValueError('Invalid credential shape')
+    runtime = Path('/run/remedigenius')
+    runtime.mkdir(exist_ok=True, mode=0o700)
+    path = runtime / 'hermes.env'
+    path.write_text(''.join(f'{k}={v}\n' for k, v in values.items()))
+    path.chmod(0o600)
+
+
+def in_container(*args, check=True, **kw):
+    return subprocess.run(['docker', 'exec', '--user', f'{UID}:{UID}', CONTAINER, *args], check=check, text=True, **kw)
+
+
+def seed_model_key():
+    """Native Hermes profiles do not inherit process secrets: copy MODEL_API_KEY into the profile .env once."""
+    in_container('python', '-c', f'''
+import os
+from pathlib import Path
+p = Path('/opt/data/profiles/{PROFILE}/.env')
+s = p.read_text() if p.exists() else ''
+key = os.environ.get('MODEL_API_KEY', '')
+if key and not any(l.startswith('MODEL_API_KEY=') for l in s.splitlines()):
+    p.write_text(s.rstrip() + ('\\n' if s.strip() else '') + 'MODEL_API_KEY=' + key + '\\n')
+    p.chmod(0o600)
+''')
+
+
+def main():
+    cfg = json.loads((ROOT / 'config.json').read_text())
+    install_runtime()
+    restore_state(cfg)
+    write_desk_profile(cfg)
+    network()
+    model_key = ''
+    if cfg.get('model_secret'):
+        model_key = run('aws', 'secretsmanager', 'get-secret-value', '--secret-id', cfg['model_secret'], '--region',
+                        cfg['region'], '--query', 'SecretString', '--output', 'text', capture_output=True).stdout.strip()
+    hermes_env(cfg, model_key)
+    if PACKAGE.exists():
+        shutil.rmtree(PACKAGE)
+    shutil.copytree(SOURCE / 'profiles/remedigenius', PACKAGE)
+    config = PACKAGE / 'config.yaml'
+    config.write_text(seed_model(config.read_text(), (cfg['model_name'], cfg['model_base_url']) if model_key else None))
+    for name, body in units(cfg).items():
+        Path('/etc/systemd/system', name).write_text(body)
+    run('systemctl', 'daemon-reload')
+    run('systemctl', 'enable', 'remedigenius-desk.service', 'remedigenius-scan.timer', 'remedigenius-hermes.service')
+    run('systemctl', 'restart', 'remedigenius-desk.service')
+    for _ in range(60):
+        if SOCKET.exists():
+            break
+        time.sleep(1)
+    else:
+        raise RuntimeError('remedigenius-desk did not start; check journalctl -u remedigenius-desk')
+    run('systemctl', 'start', 'remedigenius-scan.timer')
+    run('systemctl', 'restart', 'remedigenius-hermes.service')
+    for _ in range(120):
+        if in_container('test', '-f', '/opt/data/config.yaml', check=False, capture_output=True).returncode == 0:
+            break
+        time.sleep(2)
+    else:
+        raise RuntimeError('Hermes container did not initialize; check journalctl -u remedigenius-hermes')
+    if not (HERMES_HOME / 'profiles' / PROFILE).exists():
+        subprocess.run(['docker', 'exec', CONTAINER, 'hermes', 'profile', 'install', '/opt/remedigenius-package',
+                        '--name', PROFILE, '--yes'], check=True)
+    sync_profile(SOURCE, HERMES_HOME)
+    seed_model_key()
+    in_container('hermes', 'profile', 'use', PROFILE)
+    run('docker', 'restart', CONTAINER)
+    if cfg.get('watch_deliver'):
+        for _ in range(30):
+            jobs = in_container('hermes', '-p', PROFILE, 'cron', 'list', check=False, capture_output=True)
+            if jobs.returncode == 0:
+                break
+            time.sleep(2)
+        if 'security-watch' not in jobs.stdout:
+            in_container('hermes', '-p', PROFILE, 'cron', 'create', f"every {int(cfg.get('scan_interval_hours', 6))}h",
+                         '--name', 'security-watch', '--no-agent', '--script', 'rgtriage-watch.py',
+                         '--deliver', cfg['watch_deliver'])
+    print('RemediGenius-CE ready. Dashboard: tools/open-remedigenius (SSM tunnel); login in /data/hermes/remedigenius-login.json.')
+
+
+if __name__ == '__main__':
+    main()

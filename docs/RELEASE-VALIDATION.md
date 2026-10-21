@@ -1,185 +1,71 @@
-# Validation records
+# Release validation — RemediGenius Community Edition v0.3.0
 
-## Main — read discovery and UI feedback, 2026-10-19
+Validated 2026-10-21 by the maintainer's agent session against one real AWS account (us-east-1), with the operator's
+approval for the deployments and the account changes listed below. Raw evidence (screenshots, logs, transcripts) is kept
+privately; account identifiers are omitted here. Earlier releases' records are in the git history at their tags.
 
-Existing release tags are unchanged. Pi/DeepSeek ran five functional model prompts
-through the native and optional browser UIs, plus one short session-reset check.
-AWS results were independently
-checked against read-only APIs; no customer-cloud remediation was applied.
+**Configuration:** Hermes `nousresearch/hermes-agent:stable@sha256:444b4259…` (0.21.7), model `deepseek-v4.1-flash` on an
+OpenAI-compatible endpoint, AWS us-east-1. Sources enabled in the account: Security Hub (CIS + FSBP), GuardDuty, Inspector
+(EC2/ECR), plus IAM Access Analyzer and AWS Config, enabled for this validation.
 
-| Check | Recorded result |
-|---|---|
-| Security Hub starter question | PASS: 24 ACTIVE findings across two pages, all CRITICAL/HIGH identifiers available, top three presented, completed critique and sufficient conclusion. One AWS collection plus a saved-evidence projection. |
-| IAM attachments and key age | PASS: direct/group AdministratorAccess attachment and active-key age results matched independent metadata reads. Four reads; no credential-report generation. Attachment facts were distinguished from effective permissions. |
-| General S3.8 explanation | PASS: useful general explanation and critique without a live AWS read or an unpinned-reference refusal. |
-| Bedrock guardrail discovery | RECOVERED: the first candidate dropped the service name during capability discovery and stopped. The corrected client completed discovery and a real metadata read; independent values matched. |
-| Optional UI | PASS: selected ce-desk, answered with existing knowledge and case context, reopened a saved conversation and preserved its messages after refresh. |
-| Profile and privacy defaults | Unrelated bundled skills disabled, organizational knowledge and case retained, upstream telemetry declined, active profile set to ce-desk. |
-| Critic context | Eight audited review events contained evidence excerpts and loaded-skill hashes. A ninth was the general S3.8 explanation and correctly contained no AWS evidence. No size omission occurred in those live events; oversized-history handling is covered by regression tests. |
-| Local checks | 252 pinned-environment regression tests passed. Collector Docker build succeeded; imports returned the same pinned catalog ID and 407 services with admitted reads. |
-| Native navigation and input | Unscoped tabs selected ce-desk. Three scroll-then-Enter trials executed help on the first Enter. `/new` followed by Yes created a new database session with a user/assistant exchange; the previous conversation remained intact. |
-| Native transcript replay | Populated Security Hub answers were visually reviewed at 1500- and 1100-pixel widths with the right panel open. Text was readable and the terminal showed ready. The reported overlap was not reproduced in these checks. |
-
-Saved investigation durations were 94 seconds for Security Hub, 187 seconds for
-IAM and 71 seconds for Bedrock. These measure controller creation to completion,
-not end-to-end UI latency. The initial browser helper waited on historical
-“Thinking” text; its 450/410-second capture waits are not valid model-latency
-measurements. Five UI prompts do not establish a response-time guarantee or
-coverage of every admitted AWS operation.
-
-The replay helper also matched historical “resuming” text and incorrectly marked
-a ready transcript as pending. Visual inspection of both final screenshots
-resolved that false negative. Earlier screenshots captured during startup were
-not accepted as proof of completed replay. Native session creation was verified
-from database messages, not merely from a changed screen or a confirmation dialog.
-
-The model/UI-tested candidate was
-`6fdd57f359e48d470c7a6a279f0e0705e714548b4fab1593071d2ee9b67ad778`.
-The final source package is
-`d071bdd7ff55d08c19d01cd466789abd0e9d35a8c9ee9a39629f131db4e10fb9`.
-An archive comparison found only two changed files: the Spot guide and the
-profile-upgrade helper that sets the supported active-profile preference.
-Investigation, collector, skill, critic and validator bytes are unchanged.
-The helper passed focused tests, the live setting was applied with backup, and
-Spot's next-boot source was aligned without replacing the running instance.
-
-Private raw evidence and screenshots remain outside the repository. The earlier
-failed run is retained in the private test record, not relabelled a first-pass
-success. Native terminal interaction checks and their remaining upstream limits
-are recorded separately in [UI guidance](HERMES-UI.md). A closed local SSM tunnel
-blocked one check; remote containers remained healthy. Restoring the port-forward
-does not require restarting Hermes or deleting a conversation.
-
-## v0.2.0 single-compute validation — 2026-10-19
-
-Fresh deployment from commit `8a0695a`, source ZIP SHA-256
-`89cdd0aceac8afb74d64f51f93414b30974f4c16022a9acf1b07fd4e831031ae`.
-Local Pi/DeepSeek executed the tests; the maintainer reviewed its recorded results.
-
-| Check | Actual result |
-|---|---|
-| Regression and collector/profile checks | 184 + 6 passed. |
-| Docker onboarding | Keyless model omission and keyed startup probe passed; anonymous optional UI redirects to login. Test containers stopped, volumes retained. |
-| Fresh AWS setup | New Terraform state, 16 resources created, Spot instance-role collection, no Lambda. Native login showed no inherited conversations. |
-| One-read Config request | Exactly one read, zero recorders returned, truthful budget-limited conclusion; receipt/raw hashes checked against S3. |
-| Security Hub | 24 real active findings across two pages; explanation reconciled with raw/normalized S3 data. |
-| Knowledge | Real operator policy staged, explicitly published, retrieved by hash and used in labelled policy-applicability examples. |
-| Case and proposal | Real Config finding saved in native Kanban. CloudFormation lint failed once, then passed on attempt two of three. No apply. |
-| Optional UI | Visible ce-desk selection, same five native sessions, reopened conversation and grounded follow-up. |
-| Storage and schedule | Instance role verified; S3 receipts and deterministic 24-hour schedule inspected. Schedule correctly reported partial coverage. Private checkpoint contained five sessions, 111 messages, the case and policy. |
-| New-host replacement | Passed on a new Spot host with the same retained EBS: five sessions, 111 messages, policy hash, case, dashboard credentials and model configuration preserved. Both UIs reopened the state; a real DeepSeek follow-up cited the saved policy. |
-
-These checks exercise actual model calls and UI behavior, not just unit tests.
-They do not guarantee every possible AWS query or identical model wording.
-The fresh Spot used an existing model secret. Keyless Spot UI onboarding was not
-repeated; the corresponding seed behavior was checked offline and in Docker.
-See [actual walkthrough screenshots](WALKTHROUGH.md#fresh-single-host-examples).
-Replacement used package `4cd8e320d69bc357fbcbb924750da692c30329f88e668435fa1ba68f9a2b8f13`
-from commit `c885e6c`. This tested retained-EBS recovery, not an empty-volume
-restore. A stale local SSM tunnel caused connection timeouts; replacing those
-local tunnel processes restored access without changing RemediGenius CE. Shell syntax,
-140 local documentation links and source-archive privacy checks passed.
-
-The final boot package is
-`01c421580a292429a6da94def5fc9ecb8882ebb70a060747edfa8da30f0aad7b`
-from source commit `a8bd4b0`. The final change updated three skill Markdown files
-and documentation, with no Python execution-code change. Installed skills matched
-the package; the integrity manifest checked 95 files with zero missing files or
-hash mismatches. Policy, sessions and case remained intact after explicit upgrade.
-
-A targeted UI question loaded both the AWS-read and knowledge skills plus the
-knowledge onboarding reference. The answer correctly described reviewed chat
-notes on Spot, local `knowledge_dir` views on Docker, no Spot `knowledge_view`
-input, and the deterministic local collector. The first model call did not finish
-within 300 seconds; the single allowed retry completed in 241 seconds. This is a
-recovered pass, not a first-attempt latency guarantee. No AWS read or publication
-was requested in that question. Full regression tests were not repeated for those
-Markdown-only changes.
-
-Private raw reports are excluded from the release. GitHub Actions remains paused;
-no successful hosted CI run is claimed.
-
-
-## Main after v0.1.3 — 2026-10-16
-
-The [answer contract and writing changes](ANSWER-CONTRACT.md) passed 168 local
-regression tests. Four real DeepSeek v4.1 Flash checks ran in isolated local Hermes:
+## Offline
 
 | Check | Result |
-|---|---|
-| Repeated EC2 inventory | Two completed investigations agreed on counts; returned references were valid. |
-| Config configuration/status | Completed with separate fresh reads and scoped conclusions. |
-| Frozen review context | All three investigations used the same packet hash within interpretation, review and finish; zero planning repairs. |
-| Unavailable CloudWatch source | Capability/schema checks and direct review stopped without reading logs or substituting CloudTrail; this was not a structured-investigation run. |
-| Writing quality | Partial: some metadata repeats, and the capability-gap answer contains unsolicited setup advice. |
+| --- | --- |
+| `pytest tests` (Windows, Python 3.12) | 91 passed |
+| Scale: 40,000 Inspector + 3,000 Security Hub findings through the CLI (`test_rgtriage_scale.py`) | ~1 s; 23 Inspector detail pages; Security Hub read without Inspector copies; 5 MB state; board < 8 KB; newly enabled source = baseline, no alert storm |
+| Durable storage (`test_durable.py`) | round trip, live SQLite copy, unchanged-skip, no overwrite of live state, tamper rejection, retention, lineage protection (`DIVERGED`), read-only homes |
+| `python tools/demo.py` | synthetic board + IaC match, no AWS or model |
+| `terraform validate` of `deploy/aws-single` | valid |
 
-No new native UI end-to-end or Spot deployment pass is claimed for these updates.
-The live checks did not apply customer-cloud remediation. Private traces were kept
-outside tracked source. The existing release tag, version and downloads are unchanged.
-Source setup and packaging checks are described in the [change log](../CHANGELOG.md).
+## Docker workstation (`tools/workstation.py`, Windows + Docker Desktop)
 
-## v0.1.3 qualification
+| Check | Result |
+| --- | --- |
+| Start from nothing | desk image built, both containers up in about 1 minute |
+| Scan through the socket from inside Hermes | 24 findings, ~11 s |
+| Credential boundary | Hermes container: boto3 `NoCredentialsError`; desk state read-only; only `/opt/data/proposals` writable; write API calls refused |
+| IAM reads | worked after switching from GetSessionToken to the profile's own credentials (GetSessionToken cannot call IAM without MFA) |
+| Fix validation | an agent-style proposal validated against `deploy/aws-single` (`terraform validate` in the desk container) |
+| Model | "hi" → prioritized briefing (`deepseek-v4.1-flash`) |
+| Durability | after a decision and a chat, **all Docker volumes were deleted**; restart restored both homes from the local folder (decision and session present) |
+| Dashboard (Playwright, Chrome) | sign-in → profile `remedigenius` selected → "hi" produced the board in the browser chat |
+| Decision approval | the desk's decide call showed Hermes's "approval required" prompt with Allow once / session / always / Deny; after Allow once the decision was recorded with the user's words |
 
-Scope: AWS us-east-1, DeepSeek v4.1 Flash, one native ce-desk profile. Both deployment
-paths use official Hermes 0.21.7 pinned by digest; RemediGenius CE supplies skills and the runtime
-boundary, not a different model runtime. Earlier releases remain immutable.
+Defects found and fixed during these runs: an empty restored home was skipped because setup had created folders;
+a fresh home could replace good checkpoints (lineage protection added); the Hermes home was not checkpointed because
+it is read-only to the desk (lineage moved out of the home); Hermes only allows writes under `/opt/data` (proposals moved).
 
-| Check | Observed result |
-|---|---|
-| Existing regression suite | 145 passed, including native profile, collectors, validator boundaries, knowledge and packaging checks. |
-| Repeated real-model investigations | Two identical inventory requests and two identical Config configuration/status requests, each in a fresh session: 4/4 completed, same substantive scoped conclusions, no planning repairs. |
-| Shared review context | All four repeats recorded the same frozen packet hash for interpretation, review and final answer; actual model recorded as DeepSeek. |
-| Local native UI | WSL Bash launch, Windows-browser login, connected knowledge reading and remediation guidance exercised. |
-| Actual validator repair | Native UI Terraform and CloudFormation: original FAIL, corrected PASS on attempt 2 for each. Displayed artifact bytes matched validator results. These were labelled syntax fixtures, not invented findings. |
-| Spot replacement | t3.large replacement, 6144 MiB Hermes limit, completed startup tool-call probe and preserved sessions/knowledge/credentials. |
-| Spot security triage | Active Security Hub page prioritized with receipt and partial-page disclosure; one bounded planning repair, then completion with the same interpretation/review/final packet. This was recovered success, not a clean first attempt. |
-| Retained profile upgrade | Snapshot and profile backups first; 25 retained session/knowledge/credential files unchanged across explicit upgrade; package integrity checked afterward. |
-| Provisioning/removal | Both isolated stacks created using a scoped provisioning role. Default non-empty evidence bucket survived destroy; explicit deletion opt-in removed it. Native destroy left a completed final EBS snapshot. |
+A later Spot cycle found that chat sessions could be lost on restore. Two causes, both fixed and covered by tests:
+a database locked while Hermes started or stopped was silently left out of a checkpoint that then became the latest,
+and WAL-mode databases could not be opened read-only when their `-shm` file was missing. Now databases are retried,
+copied with their WAL through a private snapshot when needed and integrity-checked, and a checkpoint that still
+misses one is reported `INCOMPLETE` and never uploaded. After the fix, a full Docker-volume wipe kept 4 of 4 sessions.
 
-The repeated cases test factual consistency and process boundaries, not identical
-wording. Observation times and receipt IDs legitimately differ. This small sample
-is not a statistical correctness guarantee across AWS questions. Earlier development
-runs had scope-selection and unsupported-query errors; those failures were retained
-privately and informed generic guidance, not erased from the test history.
+## AWS Spot (`deploy/aws-single`, fresh stack)
 
-Offline Terraform validation does not run plan/apply. CloudFormation lint does not
-create a change set. CLI validation checks arguments, not permission or business
-impact. Model commentary can still contain irrelevant qualifications or errors;
-actual validator status and recorded cloud observations remain distinct.
+| Check | Result |
+| --- | --- |
+| `terraform apply` from nothing | 18 resources; the model secret's customer-managed KMS key detected and granted without input |
+| First boot | ready on the first attempt (~5 min) |
+| Identity | desk reads as the audit role; the instance role has no security read permissions |
+| Boundaries | Hermes container: no credentials, instance metadata blocked by the egress firewall, desk state read-only, proposals writable |
+| Sources | Security Hub, GuardDuty, Inspector, Access Analyzer, Config, CloudWatch read OK; Health `not_available` (no Business support) |
+| Live findings | Access Analyzer external-access findings (federated vs cross-account trust classified), Config rule evaluations, GuardDuty and Security Hub. Inspector produced live CVE findings on test instances; they closed when those instances were terminated, and the desk correctly shows only `ACTIVE` findings |
+| Dashboard over the SSM tunnel (`tools/open-remedigenius.ps1`) with Playwright | sign-in, profile `remedigenius`, "hi" → briefing; the agent also used a live read to check Config in another region |
+| Decision approval | approval prompt shown; decision recorded after Allow once |
+| Alerts | `security-watch` Hermes cron job (no model) delivered "1 new P1/P2 security finding(s) …" to local cron output |
+| Durability | instance terminated without any manual step (the Spot reclaim path); the replacement restored both homes from S3: chat sessions (2 of 2 after the checkpoint fix), decisions, model setting, alert job, dashboard login; no skipped or refused checkpoints |
+| Upgrade | rebuilt package → `terraform apply` → instance replaced; state restored, new code active |
+| Delegated administrator | org-wide Inspector read through the account's real Inspector delegated-admin rights (`org_wide`, status ok) |
+| Member read role | `member-read-role.yaml` deployed with CloudFormation; with `organization_id` set, the instance role assumed `RemediGeniusReadOnly` (org-scoped `sts:AssumeRole`), scanned all six sources and read CloudTrail through it; a write call through it was refused |
+| Outside the organization | assuming the same role name in an account outside the organization was denied by IAM (`aws:ResourceOrgID`); the scan reported it as a coverage gap and continued |
+| Terraform → desk profile | member accounts and `delegated_admin` set in Terraform after first boot were merged into the restored `triage.yaml` without changing operator values |
 
-Daily collection and Kanban are separate: collection does not automatically create
-cases or trigger LLM analysis; case closure does not suppress AWS findings. Source
-availability is not successful collection. Knowledge publication requires explicit
-operator activation. Sessions/cases require the retained volume, independently of S3.
+## Not covered by this release's validation
 
-No customer-cloud remediation was executed. Local/live checks substitute for the
-unavailable GitHub Actions run; a successful hosted CI run is not claimed. The
-operator-policy module is a reviewed starting point tested for sandbox provisioning,
-not a claim that CloudTrail generated a complete least-privilege policy for every
-installation. Review it for your exact options and test your daily-use identity.
-
-See [release scope](V0.1-RELEASE-PLAN.md), [limits](LIMITS.md),
-[validation tools](REMEDIATION-VALIDATION.md) and [upgrading](UPGRADING.md).
-Historical qualification is preserved with the earlier GitHub releases and tags.
-
-Vendored skill references were checked against their provenance lock. The final
-source preserves those bytes across Git checkout. Runtime text line endings were
-canonicalized; payload comparisons excluded no executable or prompt content.
-
-### Optional Hermes UI packaging validation (2026-10-18)
-
-- Pinned-source Docker build passed, including TypeScript and Vite production build.
-- Packaged nginx runtime served HTTP 200, passed `nginx -t`, ran as 101:101 with
-  read-only root and no volume mounts. Disposable smoke-test container removed.
-- Three focused tests passed: sidecar isolation, refusal to remove an unrelated
-  container, and inclusion of required UI files/license in the RemediGenius CE ZIP.
-- `terraform fmt -check` and `terraform validate` passed for aws-native.
-- Earlier live DeepSeek tests of this pinned frontend plus the same profile patch
-  verified RemediGenius CE skills, knowledge, review, sessions and refresh; see HERMES-UI.md.
-- New automatic Spot bootstrap and workstation opt-in wiring have not had a full
-  fresh deployment/replacement acceptance run. Existing Spot was not replaced.
-- A broader existing execution-contract suite was not completed in this packaging
-  pass (default temporary-directory setup errors, then a stalled rerun); it is
-  not counted as passing. No RemediGenius CE execution-plugin code changed in this addition.
-- Upstream CSS/font/optional SkillsView build warnings remain. Bots panel remains
-  a known issue. Release tag unchanged.
+- A member role in a *different* account: the member-role path was validated with the role deployed in the stack's own account
+  (same template, trust and org condition). The cross-account boundary itself is standard IAM behaviour and not separately exercised.
+- Delivery of alerts to a messaging platform (only local delivery tested).
+- Private subnets with NAT, regions other than us-east-1, models other than `deepseek-v4.1-flash`.
+- Linux/macOS workstation hosts (the workstation path was run on Windows with Docker Desktop).

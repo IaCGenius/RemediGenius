@@ -1,27 +1,28 @@
 #!/bin/bash
+# RemediGenius Community Edition (RemediGenius-CE) first boot. Each Spot instance is new; state comes from S3.
 set -euo pipefail
-dnf install -y docker python3 python3-pip iptables
+dnf install -y -q docker python3 iptables util-linux
 systemctl enable --now docker
-install -d -m 0700 /opt/rgce-native
-echo '${config_b64}' | base64 -d >/opt/rgce-native/config.json
+install -d -m 0700 /opt/remedigenius
+echo '${config_b64}' | base64 -d >/opt/remedigenius/config.json
 python3 - <<'PY'
-import hashlib,json,subprocess,zipfile
-from pathlib import Path,PurePosixPath
-root=Path('/opt/rgce-native')
-cfg=json.loads((root/'config.json').read_text())
-archive=root/'source.zip'
-subprocess.run(['aws','s3','cp','s3://'+cfg['bucket']+'/'+cfg['archive_key'],str(archive),'--region',cfg['region'],'--only-show-errors'],check=True)
-if hashlib.sha256(archive.read_bytes()).hexdigest()!=cfg['archive_sha256']:
-    raise SystemExit('Source archive SHA256 mismatch')
-destination=root/'source'
-destination.mkdir(exist_ok=True)
+import hashlib, json, subprocess, zipfile
+from pathlib import Path, PurePosixPath
+root = Path('/opt/remedigenius')
+cfg = json.loads((root / 'config.json').read_text())
+archive = root / 'source.zip'
+subprocess.run(['aws', 's3', 'cp', f"s3://{cfg['bucket']}/{cfg['archive_key']}", str(archive), '--region', cfg['region'],
+                '--only-show-errors'], check=True)
+if hashlib.sha256(archive.read_bytes()).hexdigest() != cfg['archive_sha256']:
+    raise SystemExit('Source archive SHA-256 mismatch')
 with zipfile.ZipFile(archive) as z:
-    if len(z.namelist()) != len(set(z.namelist())):
+    names = z.namelist()
+    if len(names) != len(set(names)):
         raise SystemExit('Duplicate source archive paths')
     for entry in z.infolist():
-        path=PurePosixPath(entry.filename)
-        if path.is_absolute() or '..' in path.parts or '\\' in entry.filename or ((entry.external_attr>>16)&0o170000)==0o120000:
+        path = PurePosixPath(entry.filename)
+        if path.is_absolute() or '..' in path.parts or '\\' in entry.filename or ((entry.external_attr >> 16) & 0o170000) == 0o120000:
             raise SystemExit('Invalid source archive path')
-    z.extractall(destination)
+    z.extractall(root / 'source')
 PY
-python3 /opt/rgce-native/source/deploy/aws-single/host.py
+python3 /opt/remedigenius/source/deploy/aws-single/host.py
