@@ -16,7 +16,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-ALLOWED = {"digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "playbook", "report", "watch"}
+ALLOWED = {"digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "onboarding", "playbook", "report", "watch"}
 MAX_REQUEST = 64 * 1024
 MAX_OUTPUT = 400 * 1024
 TIMEOUT = {"scan": 900, "watch": 900, "validate": 600}

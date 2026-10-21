@@ -88,18 +88,19 @@ read-only into the agent. Logs: `journalctl -u remedigenius-desk -u remedigenius
 
 ## Member accounts
 
-See [docs/MULTI-ACCOUNT.md](../../docs/MULTI-ACCOUNT.md). In short: run the stack in your security tooling (delegated
-administrator) account with `delegated_admin = true`, deploy [`member-read-role.yaml`](member-read-role.yaml) to every
-member account as a service-managed StackSet, and set `organization_id` and `member_account_ids`. The instance role can
-assume `RemediGeniusReadOnly` only inside your organization.
+Nothing to set in Terraform. Run the stack in your security tooling (delegated administrator) account if you can.
+The desk detects delegated-administrator rights and the organization's accounts by itself at every scan. The board then
+shows which accounts are read fully, findings-only or not covered. For the rest, deploy
+[`member-read-role.yaml`](member-read-role.yaml) once as a StackSet: ask the agent "help me onboard the other accounts"
+or run `rgtriage onboarding` for the filled-in command. Accounts with the role are read from the next scan on. The
+instance role may assume `RemediGeniusReadOnly` only inside its own organization. Details:
+[docs/MULTI-ACCOUNT.md](../../docs/MULTI-ACCOUNT.md).
 
-| Variable | Default | Notes |
+| Variable | Default | When you need it |
 | --- | --- | --- |
-| `delegated_admin` | `false` | this account's Security Hub/GuardDuty/Inspector view is org-wide |
-| `organization_id` | `""` | enables the org-scoped `sts:AssumeRole` on `member_role_name` |
-| `member_role_name` | `RemediGeniusReadOnly` | role name deployed in every member account |
-| `member_account_ids` | `[]` | added to `triage.yaml` at boot (append only) |
-| `member_role_arns` | `[]` | explicit role ARNs (no organization) |
+| `member_role_name` | `RemediGeniusReadOnly` | the role has another name |
+| `member_account_ids` | `[]` | the desk can neither list the organization nor see the account as delegated administrator |
+| `member_role_arns` | `[]` | accounts outside an AWS Organization |
 
 ## Stop, start, remove
 

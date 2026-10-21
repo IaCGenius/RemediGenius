@@ -624,11 +624,13 @@ def run_one(source, session, account, region, opts):
     return [], entry
 
 
-def collect(profile: dict, sources: list[str] | None = None, progress=None) -> tuple[list[dict], list[dict]]:
+def collect(profile: dict, sources: list[str] | None = None, progress=None,
+            skip: set[tuple[str, str]] = frozenset()) -> tuple[list[dict], list[dict]]:
     """Read every configured source for every account and region in parallel.
 
     Direct sources run first; Security Hub then excludes, server-side, the products that were read
     directly in that account/region, so large Inspector or GuardDuty estates are not read twice.
+    `skip` holds (source, account_id) pairs a delegated administrator's view already covers.
     """
     sources = [s for s in (sources or profile["sources"]) if s in COLLECTORS]
     opts = {"limit": int(profile.get("max_findings_per_source", 500)), "detail_limits": profile["detail_limits"],
@@ -636,14 +638,16 @@ def collect(profile: dict, sources: list[str] | None = None, progress=None) -> t
     direct_jobs, hub_jobs, coverage = [], [], []
     for account in profile["accounts"]:
         try:
-            session = aws.session_for(account)
-            identity = session.client("sts").get_caller_identity()
-            account["account_id"] = account.get("account_id") or identity["Account"]
+            session = account.pop("_session", None) or aws.session_for(account)
+            if not account.get("account_id"):
+                account["account_id"] = session.client("sts").get_caller_identity()["Account"]
         except (ClientError, BotoCoreError) as exc:
             coverage.append({"source": "credentials", "account": account["name"], "region": "-", "status": "denied",
                              "count": 0, "note": str(exc)[:240]})
             continue
         for source in sources:
+            if (source, str(account["account_id"])) in skip:
+                continue
             regions = ["us-east-1"] if source in GLOBAL_SOURCES else account["regions"]
             for region in regions:
                 (hub_jobs if source == "securityhub" else direct_jobs).append((source, session, account, region))

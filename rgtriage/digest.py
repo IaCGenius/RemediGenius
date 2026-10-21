@@ -6,6 +6,7 @@ import re
 import json
 from collections import Counter
 
+from .accounts import summary_lines
 from .prioritize import is_open
 
 PRIORITY_HEADINGS = {"P1": "P1 — act now", "P2": "P2 — fix this week", "P3": "P3 — backlog", "P4": "P4 — monitor"}
@@ -95,6 +96,7 @@ def markdown(scan: dict, limit: int = 5, include_low: bool = False) -> str:
     lines.append("\n## Coverage")
     ok = [c for c in scan["coverage"] if c["status"] == "ok"]
     lines.append(f"Read OK: {', '.join(sorted({c['source'] for c in ok})) or 'nothing'}.")
+    lines.extend(summary_lines(scan.get("onboarding") or {}))
     lines.extend(volume_lines(scan))
     if gaps:
         lines.append("Gaps (absence of findings here is NOT a clean bill of health):")

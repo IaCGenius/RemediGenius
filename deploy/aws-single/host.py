@@ -134,12 +134,6 @@ else:
     added = [a for a in data['members'] if a['account_id'] not in known]
     current.setdefault('accounts', []).extend(added)
     changed = bool(added)
-    for account in current['accounts']:  # flags set in Terraform later (e.g. delegated_admin); never overwrite a value
-        if str(account.get('account_id')) == data['main']['account_id']:
-            for key, value in data['main'].get('flags', {}).items():
-                if key not in account:
-                    account[key] = value
-                    changed = True
 if changed:
     with open(path, 'w') as f:
         f.write(data['header'] + yaml.safe_dump(current, sort_keys=False))
@@ -150,13 +144,12 @@ print(json.dumps({'changed': changed}))
 def write_desk_profile(cfg):
     """First boot writes triage.yaml; later boots only add member accounts newly listed in Terraform.
 
-    Everything else in the file is the operator's (it is kept in the S3 checkpoints).
+    Everything else in the file is the operator's (it is kept in the S3 checkpoints). Other organization
+    accounts and delegated-administrator status are found by the desk at every scan, not configured here.
     """
     profile = DESK / 'triage.yaml'
     main_account = {'name': cfg['name'], 'account_id': cfg['account_id'], 'role_arn': cfg['audit_role_arn'],
                     'criticality': 'business_critical'}
-    if cfg.get('delegated_admin'):
-        main_account['delegated_admin'] = True  # org-wide Security Hub / GuardDuty / Inspector view
     initial = {'name': cfg['name'], 'regions': cfg.get('regions') or [cfg['region']],
                'accounts': [main_account] + member_accounts(cfg),
                'goals': [{'text': 'Protect customer data stored in S3 and databases',
@@ -164,10 +157,9 @@ def write_desk_profile(cfg):
                          {'text': 'Detect and stop misuse of privileged identities',
                           'boost': {'resource_types': ['AwsIamUser', 'AwsIamRole', 'AwsIamAccessKey'],
                                     'signals': ['identity_risk', 'root_usage'], 'points': 5}}],
-               'iac_paths': [str(IAC)]}
-    flags = {'delegated_admin': True} if cfg.get('delegated_admin') else {}
+               'iac_paths': [str(IAC)],
+               'organization': {'discover': True, 'member_role_name': cfg.get('member_role_name') or 'RemediGeniusReadOnly'}}
     request = {'exists': profile.exists(), 'initial': initial, 'members': member_accounts(cfg),
-               'main': {'account_id': cfg['account_id'], 'flags': flags},
                'header': '# RemediGenius-CE desk profile. Edit freely; it is saved to S3. Terraform only adds member accounts.\n'}
     result = run(str(VENV / 'bin/python'), '-c', MERGE, str(profile), input=json.dumps(request), capture_output=True).stdout
     os.chown(profile, UID, UID)

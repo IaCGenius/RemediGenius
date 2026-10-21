@@ -12,7 +12,7 @@ OpenAI-compatible endpoint, AWS us-east-1. Sources enabled in the account: Secur
 
 | Check | Result |
 | --- | --- |
-| `pytest tests` (Windows, Python 3.12) | 91 passed |
+| `pytest tests` (Windows, Python 3.12; tests never reach AWS) | 99 passed |
 | Scale: 40,000 Inspector + 3,000 Security Hub findings through the CLI (`test_rgtriage_scale.py`) | ~1 s; 23 Inspector detail pages; Security Hub read without Inspector copies; 5 MB state; board < 8 KB; newly enabled source = baseline, no alert storm |
 | Durable storage (`test_durable.py`) | round trip, live SQLite copy, unchanged-skip, no overwrite of live state, tamper rejection, retention, lineage protection (`DIVERGED`), read-only homes |
 | `python tools/demo.py` | synthetic board + IaC match, no AWS or model |
@@ -58,12 +58,25 @@ misses one is reported `INCOMPLETE` and never uploaded. After the fix, a full Do
 | Durability | instance terminated without any manual step (the Spot reclaim path); the replacement restored both homes from S3: chat sessions (2 of 2 after the checkpoint fix), decisions, model setting, alert job, dashboard login; no skipped or refused checkpoints |
 | Upgrade | rebuilt package → `terraform apply` → instance replaced; state restored, new code active |
 | Delegated administrator | org-wide Inspector read through the account's real Inspector delegated-admin rights (`org_wide`, status ok) |
-| Member read role | `member-read-role.yaml` deployed with CloudFormation; with `organization_id` set, the instance role assumed `RemediGeniusReadOnly` (org-scoped `sts:AssumeRole`), scanned all six sources and read CloudTrail through it; a write call through it was refused |
+| Member read role | `member-read-role.yaml` deployed with CloudFormation; the instance role assumed `RemediGeniusReadOnly` (org-scoped `sts:AssumeRole`), scanned all six sources and read CloudTrail through it; a write call through it was refused |
 | Outside the organization | assuming the same role name in an account outside the organization was denied by IAM (`aws:ResourceOrgID`); the scan reported it as a coverage gap and continued |
-| Terraform → desk profile | member accounts and `delegated_admin` set in Terraform after first boot were merged into the restored `triage.yaml` without changing operator values |
+| Terraform → desk profile | member accounts set in Terraform after first boot were merged into the restored `triage.yaml` without changing operator values |
+
+## Automatic account onboarding (added after the Spot runs above)
+
+| Check | Result |
+| --- | --- |
+| `rgtriage onboarding` and scan, live, on the Docker workstation | organization detected; Inspector delegated-administrator rights detected without configuration (org-wide Inspector view switched on automatically); 4 organization accounts classified as read fully / findings only / not covered; board `Accounts:` line shown; StackSet command filled in with the desk identity and organization id |
+| Agent in the dashboard (Playwright): "Which of our AWS accounts do you cover, and what do I need to do for the others?" | called `onboarding`, explained the coverage per account, gave the filled-in StackSet command, and offered to re-scan once it is deployed |
+| Unit tests (`test_onboarding.py`) | delegated administrator without account listing; member account with listing; standalone; newly onboarded reported once; configured accounts not re-probed; reads covered by the administrator view not repeated; account listed by id uses the member role |
+| `member-read-role.yaml` | `aws cloudformation validate-template` OK (`TrustedPrincipalArn`, optional `OrganizationId`) |
 
 ## Not covered by this release's validation
 
+- The Spot instance role's org-scoped permission now uses `aws:ResourceOrgID` = `${aws:PrincipalOrgID}` instead of a
+  configured organization id; Terraform validates it, but it has not yet run on a Spot instance.
+- Discovery of a *different* account whose read role works (exercised by unit tests; this validation had no second
+  account with the role).
 - A member role in a *different* account: the member-role path was validated with the role deployed in the stack's own account
   (same template, trust and org condition). The cross-account boundary itself is standard IAM behaviour and not separately exercised.
 - Delivery of alerts to a messaging platform (only local delivery tested).

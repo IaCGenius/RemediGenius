@@ -38,7 +38,7 @@ SOCKET = "/run/rgtriage/rgtriage.sock"
 
 
 def docker(*args, check=True, capture=False, input=None):
-    return subprocess.run(["docker", *args], check=check, text=True, input=input,
+    return subprocess.run(["docker", *args], check=check, text=True, encoding="utf-8", errors="replace", input=input,
                           stdout=subprocess.PIPE if capture else None, stderr=subprocess.PIPE if capture else None)
 
 
@@ -316,6 +316,7 @@ def cmd_login(args):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # boards contain non-ASCII; Windows pipes default to cp1252
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=["start", "run", "refresh", "stop", "status", "login"])
     parser.add_argument("--aws-profile", default=os.environ.get("AWS_PROFILE"))

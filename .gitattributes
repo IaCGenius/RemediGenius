@@ -1,4 +1,1 @@
 * text=auto eol=lf
-# Preserve vendored reference bytes covered by aws-security.lock.json.
-profiles/ce/desk/skills/ce-aws-security/references/** -text whitespace=cr-at-eol
-profiles/ce/desk/skills/ce-aws-security/LICENSE -text whitespace=cr-at-eol

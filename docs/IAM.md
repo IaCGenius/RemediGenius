@@ -18,9 +18,9 @@ The Hermes agent never holds AWS credentials.
 
 | Identity | Permissions | Used by |
 | --- | --- | --- |
-| Instance role `<name>` | SSM core; its bucket (`state/` read/write, `source/` read); the model secret, plus `kms:Decrypt` on that secret's customer-managed key via Secrets Manager only; `sts:AssumeRole` on the audit role, plus `RemediGeniusReadOnly` in any account of your organization (`organization_id`, conditioned on `aws:ResourceOrgID`) or explicit `member_role_arns` | the host bootstrap and desk service (state, secret, role assumption) |
+| Instance role `<name>` | SSM core; its bucket (`state/` read/write, `source/` read); the model secret, plus `kms:Decrypt` on that secret's customer-managed key via Secrets Manager only; `sts:AssumeRole` on the audit role, plus `RemediGeniusReadOnly` in any account of its own organization (`aws:ResourceOrgID` = `${aws:PrincipalOrgID}`; nothing when not in an organization) or explicit `member_role_arns` | the host bootstrap and desk service (state, secret, role assumption) |
 | Audit role `<name>-audit` | `SecurityAudit`, `ViewOnlyAccess`, explicit deny on credential/data reads | every AWS read in this account |
-| Member read role `RemediGeniusReadOnly` ([template](../deploy/aws-single/member-read-role.yaml), deploy as a StackSet) | same as the audit role; trusts only the instance role within your organization | AWS reads in member accounts; see [MULTI-ACCOUNT.md](MULTI-ACCOUNT.md) |
+| Member read role `RemediGeniusReadOnly` ([template](../deploy/aws-single/member-read-role.yaml), deploy as a StackSet) | same as the audit role; trusts only the desk identity (`TrustedPrincipalArn`) within your organization | AWS reads in member accounts; see [MULTI-ACCOUNT.md](MULTI-ACCOUNT.md) |
 | Hermes container | none. IMDSv2 hop limit 1 and the egress firewall block instance metadata | — |
 
 The instance role itself has no AWS security read permissions. No inbound port is open; operators reach the dashboard

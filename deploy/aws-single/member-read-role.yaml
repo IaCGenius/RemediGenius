@@ -1,12 +1,17 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: RemediGenius Community Edition (RemediGenius-CE) member-account read-only role, trusted only by the RemediGenius-CE instance role in the same organization.
+Description: RemediGenius Community Edition (RemediGenius-CE) member-account read-only role, trusted only by the RemediGenius-CE desk identity in the same organization.
 Parameters:
-  InstanceRoleArn:
+  TrustedPrincipalArn:
     Type: String
-    AllowedPattern: 'arn:aws:iam::[0-9]{12}:role/.+'
+    AllowedPattern: 'arn:aws:iam::[0-9]{12}:(role|user)/.+'
+    Description: Identity that runs the desk. Spot - the instance role (Terraform output instance_role). Workstation - your IAM role or user. `rgtriage onboarding` prints the exact value.
   OrganizationId:
     Type: String
-    AllowedPattern: 'o-[a-z0-9]{10,32}'
+    Default: ''
+    AllowedPattern: '(o-[a-z0-9]{10,32})?'
+    Description: Your AWS Organizations id. Leave empty only for an account outside an organization.
+Conditions:
+  InOrganization: !Not [!Equals [!Ref OrganizationId, '']]
 Resources:
   MemberReadRole:
     Type: AWS::IAM::Role
@@ -17,11 +22,13 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Ref InstanceRoleArn
+              AWS: !Ref TrustedPrincipalArn
             Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                aws:PrincipalOrgID: !Ref OrganizationId
+            Condition: !If
+              - InOrganization
+              - StringEquals:
+                  aws:PrincipalOrgID: !Ref OrganizationId
+              - !Ref AWS::NoValue
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/SecurityAudit
         - arn:aws:iam::aws:policy/job-function/ViewOnlyAccess

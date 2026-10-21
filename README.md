@@ -11,6 +11,7 @@ Once an AWS account is connected, it:
 2. **Prioritizes** them P1–P4 with a written reason for every point of the score, using severity, exploitability,
    exposure, active threats, "toxic combinations" on one resource, and your business context.
 3. **Brings them to you.** Every chat opens with the attention board, and an optional schedule alerts you to new P1/P2 items.
+   In an AWS Organization it finds the other accounts by itself and says which ones it cannot read yet, and why.
 4. **Investigates** with bounded read-only AWS calls (CloudTrail, IAM, EC2, S3 …) and says what it could not see.
 5. **Proposes the fix in your IaC.** It finds the Terraform, CloudFormation or CDK that deployed the resource,
    writes a minimal diff in your repository's style and runs `terraform validate` on a scratch copy. You apply it.

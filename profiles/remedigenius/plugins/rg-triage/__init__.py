@@ -140,7 +140,7 @@ def _refresh_in_background() -> bool:
 
 # ------------------------------------------------------------------ tool
 
-ACTIONS = ("digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "playbook", "report")
+ACTIONS = ("digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "onboarding", "playbook", "report")
 
 
 def handle(params: dict, **_kwargs) -> str:
@@ -202,7 +202,9 @@ SCHEMA = {
         "remediation playbook. aws = ONE read-only AWS API call (describe/get/list/lookup) for investigation. "
         "validate = terraform init/validate/fmt of a module copy with your proposed .tf files overlaid (no plan/apply). "
         "decide = record the user's decision (acknowledged, investigating, fixing, accepted_risk, false_positive, "
-        "suppressed, resolved) with their reason. doctor = access/coverage check. playbook = remediation guides. "
+        "suppressed, resolved) with their reason. doctor = access/coverage check. onboarding = which AWS accounts are "
+        "read fully, findings-only or not covered, delegated-administrator status, and the exact one-time setup for the rest. "
+        "playbook = remediation guides. "
         "report = write the HTML report. Never changes AWS resources or code."),
     "parameters": {
         "type": "object",

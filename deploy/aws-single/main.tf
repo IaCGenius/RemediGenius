@@ -62,30 +62,20 @@ variable "regions" {
   default     = []
   description = "Regions to read. Empty means var.region only."
 }
-variable "organization_id" {
-  type        = string
-  default     = ""
-  description = "AWS Organizations id (o-...). With it, the instance role may assume member_role_name in any account of this organization."
-}
 variable "member_role_name" {
   type        = string
   default     = "RemediGeniusReadOnly"
-  description = "Read-only role deployed in every member account (member-read-role.yaml, e.g. as a StackSet)."
+  description = "Read-only role in member accounts (member-read-role.yaml as a StackSet). The desk finds every account of its organization where it exists."
 }
 variable "member_account_ids" {
   type        = list(string)
   default     = []
-  description = "Member accounts the desk reads through member_role_name; added to triage.yaml at boot."
+  description = "Optional: member accounts to list in triage.yaml when the desk can neither list the organization nor see them as delegated administrator."
 }
 variable "member_role_arns" {
   type        = list(string)
   default     = []
-  description = "Alternative to organization_id: explicit member read-role ARNs the instance role may assume."
-}
-variable "delegated_admin" {
-  type        = bool
-  default     = false
-  description = "This account is the Security Hub/GuardDuty/Inspector delegated administrator: read its org-wide view."
+  description = "Accounts outside an AWS Organization: explicit read-role ARNs the instance role may assume."
 }
 variable "scan_interval_hours" {
   type    = number
@@ -119,13 +109,6 @@ variable "container_memory_mb" {
 variable "delete_data_on_destroy" {
   type    = bool
   default = false
-}
-
-check "member_access" {
-  assert {
-    condition     = length(var.member_account_ids) == 0 || var.organization_id != "" || length(var.member_role_arns) > 0
-    error_message = "member_account_ids needs organization_id (or explicit member_role_arns) so the instance role may assume the member role."
-  }
 }
 
 check "model_endpoint" {
@@ -214,7 +197,7 @@ locals {
   config = {
     name                = var.name, region = var.region, account_id = var.account_id, bucket = aws_s3_bucket.data.id,
     audit_role_arn      = aws_iam_role.audit.arn, member_role_arns = var.member_role_arns, regions = var.regions,
-    member_role_name    = var.member_role_name, member_account_ids = var.member_account_ids, delegated_admin = var.delegated_admin,
+    member_role_name    = var.member_role_name, member_account_ids = var.member_account_ids,
     archive_key         = aws_s3_object.source.key, archive_sha256 = filesha256(var.source_zip),
     model_secret        = var.model_secret_arn, model_name = var.model_name, model_base_url = var.model_base_url,
     scan_interval_hours = var.scan_interval_hours, watch_deliver = var.watch_deliver,
@@ -293,7 +276,8 @@ output "autoscaling_group" {
   value = aws_autoscaling_group.host.name
 }
 output "instance_role" {
-  value = aws_iam_role.host.arn
+  value       = aws_iam_role.host.arn
+  description = "TrustedPrincipalArn for member-read-role.yaml (rgtriage onboarding prints the full StackSet command)."
 }
 output "audit_role" {
   value = aws_iam_role.audit.arn

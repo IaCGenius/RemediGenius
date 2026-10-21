@@ -32,11 +32,11 @@ resource "aws_iam_role_policy" "host" {
     { Effect = "Allow", Action = "sts:AssumeRole", Resource = concat([aws_iam_role.audit.arn], var.member_role_arns) },
     { Effect = "Allow", Action = ["s3:ListBucket"], Resource = aws_s3_bucket.data.arn },
     { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource = "${aws_s3_bucket.data.arn}/state/*" },
-    { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${aws_s3_bucket.data.arn}/source/*" }
-    ], var.organization_id == "" ? [] : [{
-      # Common role name in every member account, limited to accounts inside this organization.
+    { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${aws_s3_bucket.data.arn}/source/*" },
+    {
+      # The common read role in any account of this account's own organization (none when not in an organization).
       Effect    = "Allow", Action = "sts:AssumeRole", Resource = "arn:aws:iam::*:role/${var.member_role_name}",
-      Condition = { StringEquals = { "aws:ResourceOrgID" = var.organization_id } }
+      Condition = { StringEquals = { "aws:ResourceOrgID" = "$${aws:PrincipalOrgID}" } }
     }],
     var.model_secret_arn == "" ? [] : [{ Effect = "Allow", Action = "secretsmanager:GetSecretValue", Resource = var.model_secret_arn }],
     length(local.model_kms_key_arns) == 0 ? [] : [{ Effect = "Allow", Action = "kms:Decrypt", Resource = local.model_kms_key_arns, Condition = { StringEquals = { "kms:ViaService" = "secretsmanager.${var.region}.amazonaws.com" } } }]

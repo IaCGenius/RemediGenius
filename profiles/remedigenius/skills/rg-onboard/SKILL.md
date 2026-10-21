@@ -1,6 +1,6 @@
 ---
 name: rg-onboard
-description: Onboard AWS accounts and regions for triage, check read access and source coverage, set business context (criticality, applications, goals, IaC repos) and set up scheduled alerts.
+description: Onboard AWS accounts for triage - which organization accounts are read fully, findings-only or not covered, and the one-time read-role StackSet for the rest; check source coverage, set business context (criticality, applications, goals, IaC repos) and scheduled alerts.
 license: Apache-2.0
 ---
 # Onboarding and access
@@ -17,46 +17,34 @@ proposed copy under the proposals folder for them to move).
 - `denied` → the reading identity lacks permissions: attach AWS managed policy `SecurityAudit`.
 - Health `SubscriptionRequired` → Health API needs Business support; Health events still arrive via Security Hub.
 
-## 2. Add accounts (read-only)
-Best practice (borrowed from the AWS Well-Architected Agent model): one read-only **access role** per
-workload account, assumed from the account where the desk runs.
-```hcl
-# in each workload account
-resource "aws_iam_role" "remedigenius_readonly" {
-  name = "RemediGeniusReadOnly"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { AWS = "arn:aws:iam::<DESK_ACCOUNT_ID>:root" }   # or the desk's role ARN
-      Action    = "sts:AssumeRole"
-      Condition = { StringEquals = { "sts:ExternalId" = "<random-string>" } }
-    }]
-  })
-}
-resource "aws_iam_role_policy_attachment" "security_audit" {
-  role       = aws_iam_role.remedigenius_readonly.name
-  policy_arn = "arn:aws:iam::aws:policy/SecurityAudit"
-}
-```
-Then add to `triage.yaml`:
-```yaml
-accounts:
-  - name: prod
-    account_id: "111122223333"
-    role_arn: arn:aws:iam::111122223333:role/RemediGeniusReadOnly
-    external_id: <random-string>
-    regions: [us-east-1, eu-west-1]
-    criticality: mission_critical
-```
-A local CLI profile works too (`aws_profile: prod-readonly`). If Security Hub has a cross-region
-aggregator or a delegated administrator, reading that one account/region already covers the others;
-add member accounts only for GuardDuty/Inspector detail or when there is no delegated admin.
+## 2. Other AWS accounts (onboarding is automatic after one setup step)
+`rg_triage action=onboarding` → organization, whether this account is the Security Hub / GuardDuty / Inspector
+delegated administrator, and every known account as **read fully**, **findings only** (seen through the
+administrator view, no read role) or **not covered**, plus filled-in next steps.
+
+Explain it in plain terms, for example: "I can see findings for 7 accounts through the delegated administrator, and
+read 4 of them fully. For the other 3 I can't investigate (CloudTrail, IAM, Config) until they have the read role."
+
+When accounts are missing, give the user the exact command from `next_steps`. Do not invent values; the desk fills in
+the desk identity ARN and organization id. Tell them:
+- Run it once, with management-account (or StackSets delegated administrator) credentials, from the release folder.
+- It deploys `RemediGeniusReadOnly` (SecurityAudit + ViewOnlyAccess, denies secret/object/KMS reads) to every account,
+  including accounts added later (auto-deployment).
+- Nothing else is needed: no restart, no Terraform or triage.yaml change. The next scan reads every account where the
+  role works, and the board says "Newly onboarded". Offer to run `scan` once they say it is deployed, then run
+  `onboarding` again to confirm.
+- StackSets skip the management account; deploy the template there as a normal stack if it should be covered.
+
+If the desk is not the delegated administrator, mention that running it in the delegated administrator account gives the
+org-wide findings view immediately. If the account is not in an organization, follow the standalone step in
+`next_steps` (one stack per account, then list it under `accounts:` with its `role_arn`).
+You never deploy roles or run the command yourself; you are read-only.
 The tool blocks every non-read AWS call even if the credentials could write.
 
 ## 3. Business context (changes priorities)
 Ask briefly, one question at a time, only what changes ranking:
-- Which accounts are production / mission critical? → `criticality` per account.
+- Which accounts are production / mission critical? → `criticality` per account (discovered accounts can be listed
+  under `accounts:` by `account_id` to override their name or criticality).
 - Which applications matter most and how are they tagged? → `applications: [{name, tags, criticality}]`.
 - Which tag marks environments? → `environment_tag_keys`.
 - Top 1–3 goals in plain words (e.g. "protect customer PII in S3") → `goals` with `boost`

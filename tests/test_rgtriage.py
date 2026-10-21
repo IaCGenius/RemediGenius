@@ -326,7 +326,7 @@ def test_watch_is_silent_unless_new_urgent(home, monkeypatch, capsys):
     cov = [{"source": s, "account": "prod", "account_id": ACCOUNT, "region": "us-east-1", "status": "ok", "count": 1}
            for s in ("securityhub", "guardduty")]
 
-    def fake_collect(profile, sources=None, progress=None):
+    def fake_collect(profile, sources=None, progress=None, **_):
         found = batches.pop(0)
         for f in found:
             f["collected_from"] = [f["source"], ACCOUNT, "us-east-1"]

@@ -147,3 +147,21 @@ def find(scan: dict, ref: str) -> dict | None:
             return next((f for f in scan["findings"] if f["key"] == issue["top_key"]), None)
     matches = [f for f in scan.get("findings", []) if f["key"].startswith(ref)]
     return matches[0] if len(matches) == 1 else None
+
+
+def load_onboarding() -> dict | None:
+    return _read(config.home() / "onboarding.json", None)
+
+
+def save_onboarding(report: dict, profile: dict) -> None:
+    """Keep the last onboarding report; `readable` lets investigations reach discovered accounts between scans."""
+    readable = {a["account_id"]: a["name"] for a in profile["accounts"] if a.get("discovered")}
+    _write(config.home() / "onboarding.json", {**report, "readable": readable})
+
+
+def discovered_accounts(profile: dict) -> list[dict]:
+    report = load_onboarding() or {}
+    org, primary = profile["organization"], (profile["accounts"] or [{}])[0]
+    return [{"name": name, "account_id": account_id, "regions": profile["regions"], "criticality": org["criticality"],
+             "role_arn": f"arn:aws:iam::{account_id}:role/{org['member_role_name']}", "aws_profile": primary.get("aws_profile")}
+            for account_id, name in (report.get("readable") or {}).items()]

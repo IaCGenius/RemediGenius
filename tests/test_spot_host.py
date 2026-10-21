@@ -96,11 +96,9 @@ def test_merge_only_adds_new_member_accounts(host, tmp_path):
     import yaml
     profile = tmp_path / "triage.yaml"
     initial = {"name": "x", "accounts": [{"account_id": "999999999999", "criticality": "mission_critical"}]}
-    flags = {}
 
     def merge(members, exists):
-        request = {"exists": exists, "initial": initial, "members": members, "header": "# h\n",
-                   "main": {"account_id": "999999999999", "flags": flags}}
+        request = {"exists": exists, "initial": initial, "members": members, "header": "# h\n"}
         out = subprocess.run([sys.executable, "-c", host.MERGE, str(profile)], input=json.dumps(request),
                              capture_output=True, text=True, check=True).stdout
         return json.loads(out)["changed"]
@@ -113,15 +111,11 @@ def test_merge_only_adds_new_member_accounts(host, tmp_path):
     assert merge([member], True) is False  # idempotent
     data = yaml.safe_load(profile.read_text())
     assert data["accounts"][0]["owner"] == "operator edit" and len(data["accounts"]) == 2
-    flags["delegated_admin"] = True  # turned on in Terraform after first boot
-    assert merge([member], True) is True and yaml.safe_load(profile.read_text())["accounts"][0]["delegated_admin"] is True
-    edited = yaml.safe_load(profile.read_text())
-    edited["accounts"][0]["delegated_admin"] = False  # operator turned it off: stays off
-    profile.write_text(yaml.safe_dump(edited))
-    assert merge([member], True) is False
 
 
 def test_org_wide_member_role_is_limited_to_the_organization():
     iam = (ROOT / "deploy/aws-single/iam.tf").read_text()
     assert 'Resource = "arn:aws:iam::*:role/${var.member_role_name}"' in iam
-    assert '"aws:ResourceOrgID" = var.organization_id' in iam
+    # The instance role's own organization, resolved by IAM at request time: nothing to configure,
+    # and no access at all when the account is not in an organization.
+    assert '"aws:ResourceOrgID" = "$${aws:PrincipalOrgID}"' in iam

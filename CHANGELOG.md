@@ -21,9 +21,12 @@ explained, with the code change that fixes them.
 - **IaC fixes:** locates the Terraform, CloudFormation or CDK that deployed a resource (evidence-ranked), proposes a
   diff, and runs `terraform validate` on a scratch copy. Remediation playbooks for common controls and threats.
 - **Decisions** (acknowledged … resolved) go through Hermes's approval prompt.
-- **Multiple accounts:** run in your delegated-administrator account for an org-wide Security Hub, GuardDuty and Inspector
-  view, and/or deploy one `RemediGeniusReadOnly` role per account with a StackSet. The instance role may assume it only
-  inside your organization. See [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md).
+- **Multiple accounts, onboarded automatically:** at every scan the desk detects its organization, its Security Hub /
+  GuardDuty / Inspector delegated-administrator rights, and every account where the `RemediGeniusReadOnly` role can be
+  assumed. Those accounts are read from then on, with their existing findings as a baseline. The board shows accounts
+  read fully, findings-only and not covered. `rgtriage onboarding` (or asking the agent) prints the one-time StackSet
+  command filled in for your environment. The instance role may assume the role only inside its own organization, with
+  no organization id to configure. See [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md).
 - **Alerts:** a `security-watch` Hermes cron job reports only new P1/P2 findings, with no model calls.
 - **Durable state:** the Hermes home and desk state are checkpointed to S3 (Spot) or a local folder (workstation) every
   2 minutes, after scans and decisions, on stop and on Spot interruption notices. Restore is verified, and lineage

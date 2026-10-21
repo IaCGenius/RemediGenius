@@ -9,6 +9,7 @@
   rgtriage decide REF STATUS    record acknowledged / fixing / accepted_risk / false_positive / resolved
   rgtriage watch                scan and print only new urgent findings (for schedules)
   rgtriage aws SVC OP           one guarded read-only AWS API call for investigation
+  rgtriage onboarding           which accounts are covered and the one-time setup for the rest
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ from datetime import datetime, timezone
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from . import __version__, aws, collect, config, digest, iac, playbooks, prioritize, store
+from . import __version__, accounts, aws, collect, config, digest, iac, playbooks, prioritize, store
 
 PRIORITY_ORDER = ("P1", "P2", "P3", "P4")
 
@@ -108,14 +109,19 @@ def cmd_doctor(args):
 
 def run_scan(sources=None, progress=None) -> dict:
     profile = config.load()
-    findings, coverage = collect.collect(profile, sources, progress)
+    try:
+        onboarding = accounts.discover(profile, store.load_onboarding())
+    except Exception as exc:  # onboarding must never stop the configured accounts from being scanned
+        onboarding = {"mode": "unknown", "admin": {}, "notes": [f"account discovery failed: {type(exc).__name__}: {exc}"[:240]]}
+    findings, coverage = collect.collect(profile, sources, progress, skip=accounts.skip_pairs(onboarding))
     findings, _ = prioritize.prioritize(findings, profile, store.load_decisions())
     scan = {
         "version": __version__, "scanned_at": collect.now_iso(),
         "profile": {"name": profile["name"], "accounts": [{"name": a["name"], "account_id": a.get("account_id"),
                     "criticality": a["criticality"]} for a in profile["accounts"]], "goals": [g.get("text") for g in profile["goals"]]},
-        "findings": findings, "coverage": coverage,
+        "findings": findings, "coverage": coverage, "onboarding": onboarding,
     }
+    store.save_onboarding(onboarding, profile)
     store.mark_changes(scan)
     scan["issues"] = prioritize.build_issues(findings)  # before capping, so issue counts cover every finding read
     store.cap_findings(scan, int(profile["max_stored_findings"]))
@@ -290,6 +296,10 @@ def cmd_watch(args):
     if not had_previous:
         _out(digest.markdown(scan, limit=5))
         return
+    onboarded = (scan.get("onboarding") or {}).get("newly_readable") or []
+    if onboarded:
+        _out(f"➕ Now reading {len(onboarded)} more account(s) through their read role: {', '.join(onboarded[:10])} "
+             "(existing findings taken as the baseline)")
     if not urgent:
         return  # silent: nothing new that matters
     _out(f"🔔 {len(urgent)} new {'/'.join(PRIORITY_ORDER[:threshold + 1])} security finding(s) — {scan['profile']['name']}")
@@ -301,7 +311,8 @@ def cmd_watch(args):
 
 def cmd_aws(args):
     profile = config.load()
-    account = next((a for a in profile["accounts"] if args.account in (None, a["name"], a.get("account_id"))), None)
+    known = profile["accounts"] + store.discovered_accounts(profile)
+    account = next((a for a in known if args.account in (None, a["name"], a.get("account_id"))), None)
     if not account:
         sys.exit(f"Unknown account {args.account}")
     region = args.region or account["regions"][0]
@@ -385,25 +396,35 @@ def cmd_durable(args):
         _out(json.dumps(result))
 
 
-def cmd_discover_accounts(args):
-    """Print triage.yaml account entries for every ACTIVE account in the AWS Organization (read-only)."""
-    import boto3
-    import yaml
-
-    session = aws.guarded(boto3.Session(profile_name=args.profile or None))
-    try:
-        accounts = collect.paginate(session.client("organizations"), "list_accounts", "Accounts", 1000)
-    except ClientError as exc:
-        sys.exit(f"Cannot list organization accounts ({aws.error_code(exc)}). Run this with management-account or "
-                 "delegated-administrator credentials, or add accounts to triage.yaml by hand.")
-    entries = [{"name": a["Name"].lower().replace(" ", "-"), "account_id": a["Id"],
-                "role_arn": f"arn:aws:iam::{a['Id']}:role/{args.role_name}",
-                **({"external_id": args.external_id} if args.external_id else {}),
-                "criticality": "business_critical"}
-               for a in accounts if a.get("Status", a.get("State")) in ("ACTIVE", None)]
-    _out("# Paste under `accounts:` in triage.yaml, then set criticality per account.")
-    _out(f"# Each account needs a read-only role named {args.role_name} (SecurityAudit) trusting this identity.")
-    _out(yaml.safe_dump({"accounts": entries}, sort_keys=False))
+def cmd_onboarding(args):
+    """Live onboarding check: organization, delegated administrator, which accounts are read and how to add the rest."""
+    profile = config.load()
+    report = accounts.discover(profile, store.load_onboarding())
+    report["next_steps"] = accounts.next_steps(report)
+    if args.json:
+        return _json(report)
+    _out(f"Desk identity (assumes member roles): {report['reader_arn'] or 'unknown'}")
+    if report["mode"] == "organization":
+        listing = {"organization": "all organization accounts",
+                   "admin_members": "accounts known from delegated-administrator member lists"}.get(report["account_list"], "")
+        _out(f"AWS Organization {report['organization_id']} · {report['known_accounts']} accounts known ({listing})")
+    else:
+        _out("Not part of an AWS Organization (or the organization is not readable).")
+    for service in accounts.ADMIN_SERVICES:
+        ids = report["admin"].get(service)
+        _out(f"  {service:<12} " + (f"delegated administrator for {len(ids)} member accounts" if ids else "not administrator"))
+    _out(f"Read fully ({len(report['full_read'])}): {', '.join(report['full_read']) or '-'}")
+    _out(f"Findings only, no {report['member_role_name']} role ({len(report['findings_only'])}): "
+         f"{', '.join(report['findings_only'][:20]) or '-'}")
+    _out(f"Not covered ({len(report['not_covered'])}): {', '.join(report['not_covered'][:20]) or '-'}")
+    for note in report["notes"]:
+        _out(f"Note: {note}")
+    if report["next_steps"]:
+        _out("\nNext steps:")
+        for n, step in enumerate(report["next_steps"], 1):
+            _out(f"{n}. {step}")
+    else:
+        _out("\nEvery known account is read fully. New accounts are picked up automatically at the next scan.")
 
 
 def cmd_playbook(args):
@@ -472,9 +493,8 @@ def main(argv=None):
     p.add_argument("--owner", help="uid:gid to own restored files")
     p.add_argument("--force", action="store_true", help="checkpoint: start a new lineage even if it diverges")
     p.set_defaults(func=cmd_durable)
-    p = sub.add_parser("discover-accounts", help="print account entries for every account in the AWS Organization")
-    p.add_argument("--role-name", default="RemediGeniusReadOnly"); p.add_argument("--external-id"); p.add_argument("--profile")
-    p.set_defaults(func=cmd_discover_accounts)
+    p = sub.add_parser("onboarding", help="account coverage and the one-time setup for accounts not read yet")
+    p.add_argument("--json", action="store_true"); p.set_defaults(func=cmd_onboarding)
     p = sub.add_parser("playbook", help="list or print remediation playbooks"); p.add_argument("name", nargs="?")
     p.set_defaults(func=cmd_playbook)
 

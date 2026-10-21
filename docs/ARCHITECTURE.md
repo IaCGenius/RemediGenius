@@ -117,7 +117,7 @@ remediation playbook. The agent writes a diff, saves it to the proposals folder 
 | Well-Architected Agent | RemediGenius-CE |
 |---|---|
 | Agent profile: accounts, Regions, goals | `triage.yaml`: accounts, regions, `goals` with optional boosts |
-| Execution role + read-only access role per account | audit role / member read roles with `SecurityAudit`; `rgtriage discover-accounts` |
+| Execution role + read-only access role per account | audit role / member read roles with `SecurityAudit`; automatic discovery at every scan; `rgtriage onboarding` |
 | Application context: tags and criticality | `applications` (tag match → `mission_critical` … `test_development`), `environment_tag_keys` |
 | Goal-aligned prioritization | criticality and goal boosts in the score, shown in the reasons |
 | Ready-to-deploy IaC with trade-offs | diff, `terraform validate`, blast radius and rollback; you apply it |
