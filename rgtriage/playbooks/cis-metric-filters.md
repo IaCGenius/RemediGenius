@@ -1,3 +1,24 @@
+---
+type: Playbook
+title: CIS log metric filters and alarms (CloudWatch.1–CloudWatch.14, CIS 3.x "Ensure a log metric filter and alarm exist
+  for ...")
+description: 'Detection gap: CloudTrail metric filters and alarms are missing for sensitive changes; fix all CIS checks in
+  one change.'
+tags:
+- cis
+- cloudwatch
+- cloudtrail
+- detection
+sources:
+- id: controls
+  resource: https://docs.aws.amazon.com/securityhub/latest/userguide/cloudwatch-controls.html
+  title: Security Hub CloudWatch controls
+  author: aws-documentation
+generated:
+  by: remedigenius-ce/0.3.0
+  at: '2026-10-21T00:00:00Z'
+---
+
 # CIS log metric filters and alarms (CloudWatch.1–CloudWatch.14, CIS 3.x "Ensure a log metric filter and alarm exist for ...")
 
 **Means:** CloudTrail events are not turned into alarms for sensitive changes. Each control expects a
@@ -57,3 +78,5 @@ Take exact patterns from each control's remediation URL if the CIS version in th
 
 **Trade-offs:** `unauthorized` is noisy; route it to a lower-urgency channel. Alternative: rely on GuardDuty +
 EventBridge and disable these CIS controls in Security Hub with a documented reason.
+
+**Related:** [securityhub findings](/remedigenius/sources/securityhub.md) · [cloudwatch findings](/remedigenius/sources/cloudwatch.md) · [where to look](/remedigenius/guides/where-to-look.md) · [how the desk works](/remedigenius/guides/how-the-desk-works.md)

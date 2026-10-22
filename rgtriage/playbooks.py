@@ -1,4 +1,4 @@
-"""Pick the remediation playbook for a finding."""
+"""Pick the remediation playbook for a finding. Playbooks are OKF concepts (type Playbook)."""
 from __future__ import annotations
 
 import re
@@ -39,7 +39,13 @@ def select(finding: dict) -> list[str]:
 
 
 def load(name: str) -> str:
-    return (DIR / f"{name}.md").read_text(encoding="utf-8")
+    """Playbook text without its OKF frontmatter (the files are also shipped as knowledge concepts)."""
+    text = (DIR / f"{name}.md").read_text(encoding="utf-8").replace("\r\n", "\n")
+    if text.startswith("---\n"):
+        end = text.find("\n---\n", 4)
+        if end != -1:
+            return text[end + 5:].lstrip("\n")
+    return text
 
 
 def names() -> list[str]:

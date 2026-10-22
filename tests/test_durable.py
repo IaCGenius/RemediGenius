@@ -20,6 +20,8 @@ def home(tmp_path):
     (h / "profiles/remedigenius/SOUL.md").write_text("desk")
     (h / "cache").mkdir()
     (h / "cache/big.bin").write_bytes(b"0" * 1000)
+    (h / ".cache/pip").mkdir(parents=True)  # pip/tool download caches are never checkpointed
+    (h / ".cache/pip/wheel.whl").write_bytes(b"0" * 1000)
     db = sqlite3.connect(h / "state.db")
     db.execute("create table m(t)")
     db.execute("insert into m values ('hello')")

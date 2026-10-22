@@ -26,7 +26,7 @@ from pathlib import Path, PurePosixPath
 SCHEMA = "remedigenius-ce-state/1"
 LINEAGE = ".lineage"  # lineage ids live in the desk state, so homes such as Hermes can stay read-only to the desk
 KEEP = 10  # snapshots kept per home
-EXCLUDE = {".lineage", "cache", "image_cache", "audio_cache", "node_modules", ".git", "backups", "sandboxes", "installs", ".local",
+EXCLUDE = {".lineage", "cache", ".cache", "image_cache", "audio_cache", "node_modules", ".git", "backups", "sandboxes", "installs", ".local",
            ".home", "__pycache__", "checkpoints"}
 SKIP_SUFFIXES = ("-wal", "-shm", ".sock", ".pending", ".tmp", ".lock")
 
@@ -215,7 +215,8 @@ def checkpoint(home: str | Path, name: str, store: Backend, force: bool = False)
             for path in hashes:
                 tar.add(stage / path, arcname=path, recursive=False)
         data = buffer.getvalue()
-    key = f"{name}/snapshots/{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}.tar.gz"
+    # Microseconds keep snapshot names in time order even for several checkpoints within one second (retention sorts by name).
+    key = f"{name}/snapshots/{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{uuid.uuid4().hex[:8]}.tar.gz"
     store.put(key, data)
     manifest = {"schema": SCHEMA, "key": key, "sha256": hashlib.sha256(data).hexdigest(), "files": hashes, "state_id": state_id,
                 "created_at": datetime.now(timezone.utc).isoformat(),

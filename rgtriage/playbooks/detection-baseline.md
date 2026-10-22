@@ -1,3 +1,22 @@
+---
+type: Playbook
+title: Detection and audit baseline (Config.1, CloudTrail.1/2/4/5, GuardDuty.1, SecurityHub.1, Inspector.1)
+description: 'A region or account lacks Config, CloudTrail, GuardDuty, Security Hub or Inspector: you would not see an attack.'
+tags:
+- detection
+- config
+- cloudtrail
+- guardduty
+sources:
+- id: controls
+  resource: https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-controls-reference.html
+  title: Security Hub controls reference
+  author: aws-documentation
+generated:
+  by: remedigenius-ce/0.3.0
+  at: '2026-10-21T00:00:00Z'
+---
+
 # Detection and audit baseline (Config.1, CloudTrail.1/2/4/5, GuardDuty.1, SecurityHub.1, Inspector.1)
 
 **Means:** a region or account lacks the service that records or detects activity. These are
@@ -54,3 +73,5 @@ resource "aws_cloudtrail" "main" {
 In an AWS Organization enable them from the delegated administrator with auto-enable instead of per account.
 
 **Trade-offs:** Config and GuardDuty bill per resource/event; you can limit Config recording to needed types.
+
+**Related:** [securityhub findings](/remedigenius/sources/securityhub.md) · [config findings](/remedigenius/sources/config.md) · [where to look](/remedigenius/guides/where-to-look.md) · [how the desk works](/remedigenius/guides/how-the-desk-works.md)

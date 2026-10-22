@@ -240,7 +240,18 @@ def sync_profile(source: Path, hermes_home: Path):
     scripts = profile / 'scripts'
     scripts.mkdir(exist_ok=True)
     (scripts / 'rgtriage-watch.py').write_text(WATCH_SCRIPT % SOCKET.as_posix())
-    for path in [profile, *profile.rglob('*')]:
+    # Knowledge tab (dashboard plugin): drafts and imports reach the desk through the folders below.
+    tab = hermes_home / 'plugins' / 'rg-knowledge'
+    if tab.exists():
+        shutil.rmtree(tab)
+    shutil.copytree(package / 'dashboard-plugins/rg-knowledge', tab, ignore=shutil.ignore_patterns('__pycache__', 'local.json'))
+    (tab / 'local.json').write_text(json.dumps({'socket': SOCKET.as_posix(), 'home': DESK.as_posix(), 'proposals': PROPOSALS,
+                                                'inbox': '/opt/data/knowledge-inbox', 'files': '/opt/data/knowledge-files',
+                                                'profile': PROFILE}))
+    folders = [hermes_home / 'proposals' / 'knowledge', hermes_home / 'knowledge-inbox', hermes_home / 'knowledge-files']
+    for folder in folders:
+        folder.mkdir(parents=True, exist_ok=True)
+    for path in [profile, *profile.rglob('*'), hermes_home / 'plugins', tab, *tab.rglob('*'), *folders]:
         if hasattr(os, 'lchown'):
             os.lchown(path, UID, UID)
         if not path.is_symlink():
@@ -343,6 +354,25 @@ if key and not any(l.startswith('MODEL_API_KEY=') for l in s.splitlines()):
 ''')
 
 
+ENABLE_PROFILE_PLUGIN = '''
+from pathlib import Path
+from ruamel.yaml import YAML
+yaml, path = YAML(), Path('/opt/data/profiles/%s/config.yaml')
+data = yaml.load(path.read_text())
+enabled = data.setdefault('plugins', {}).setdefault('enabled', [])
+if 'rg-knowledge' not in enabled:
+    enabled.append('rg-knowledge')
+    with path.open('w') as f:
+        yaml.dump(data, f)
+''' % PROFILE
+
+
+def enable_knowledge_tab():
+    """The dashboard serves user plugins only when enabled: in the profile (tab list) and at its launch scope (API)."""
+    in_container('python', '-c', ENABLE_PROFILE_PLUGIN)
+    in_container('hermes', '-p', 'default', 'plugins', 'enable', 'rg-knowledge', capture_output=True)
+
+
 def main():
     cfg = json.loads((ROOT / 'config.json').read_text())
     install_runtime()
@@ -383,6 +413,7 @@ def main():
                         '--name', PROFILE, '--yes'], check=True)
     sync_profile(SOURCE, HERMES_HOME)
     seed_model_key()
+    enable_knowledge_tab()
     in_container('hermes', 'profile', 'use', PROFILE)
     run('docker', 'restart', CONTAINER)
     if cfg.get('watch_deliver'):

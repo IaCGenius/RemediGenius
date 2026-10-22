@@ -27,6 +27,15 @@ explained, with the code change that fixes them.
   read fully, findings-only and not covered. `rgtriage onboarding` (or asking the agent) prints the one-time StackSet
   command filled in for your environment. The instance role may assume the role only inside its own organization, with
   no organization id to configure. See [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md).
+- **Knowledge in Open Knowledge Format (OKF v0.2):** one bundle per installation, replacing v0.2's knowledge library
+  with a standard format. It ships guides (how the desk works, where to look for evidence), a guide per finding source
+  and the remediation playbooks as OKF concepts. Your Application, Account, Risk Exception and Security Goal concepts
+  change priorities once a person has reviewed them, and every effect is cited by path in the finding's reasons. Risk
+  exceptions expire and their findings return. The agent reads, searches and cites the bundle (`rg_triage
+  action=knowledge`) and drafts what it learns into a review queue; it can never approve. The dashboard **Knowledge**
+  tab (Hermes dashboard plugin) has overview and gaps, browse, review, a guided Add form, document import (PDF, Word,
+  PowerPoint, Excel through markitdown, installed on first use) with optional AI drafting that shows the token
+  estimate first, and a graph view. See [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md).
 - **Alerts:** a `security-watch` Hermes cron job reports only new P1/P2 findings, with no model calls.
 - **Durable state:** the Hermes home and desk state are checkpointed to S3 (Spot) or a local folder (workstation) every
   2 minutes, after scans and decisions, on stop and on Spot interruption notices. Restore is verified, and lineage
@@ -39,7 +48,7 @@ explained, with the code change that fixes them.
 
 **Removed** (available at tag `v0.2.0`)
 - The `ce-desk` profile and its runtime plugin, the deterministic collector and read catalog, the fix validator
-  container, knowledge library tools, proactive schedules, the optional third-party browser UI, the dashboard
+  container, the v0.2 knowledge library commands (replaced by the OKF bundle and the Knowledge tab), proactive schedules, the optional third-party browser UI, the dashboard
   session-limit overlay, the retained EBS volume, and the separate storage/IAM stacks.
 
 **Upgrading:** v0.3 is a new deployment, not an in-place upgrade. See [docs/UPGRADING.md](docs/UPGRADING.md).

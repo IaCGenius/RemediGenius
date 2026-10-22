@@ -1,3 +1,21 @@
+---
+type: Playbook
+title: Security group open to the internet (EC2.2, EC2.13, EC2.14, EC2.18, EC2.19, EC2.53, EC2.54, Inspector network reachability)
+description: Security group rules open to 0.0.0.0/0 or ::/0, and Inspector network reachability.
+tags:
+- ec2
+- network
+- exposure
+sources:
+- id: controls
+  resource: https://docs.aws.amazon.com/securityhub/latest/userguide/ec2-controls.html
+  title: Security Hub EC2 controls
+  author: aws-documentation
+generated:
+  by: remedigenius-ce/0.3.0
+  at: '2026-10-21T00:00:00Z'
+---
+
 # Security group open to the internet (EC2.2, EC2.13, EC2.14, EC2.18, EC2.19, EC2.53, EC2.54, Inspector network reachability)
 
 **Means:** an ingress rule allows 0.0.0.0/0 or ::/0 to a port (SSH 22, RDP 3389, database ports, or all).
@@ -29,3 +47,5 @@ or use `SourceSecurityGroupId`.
 
 **Trade-offs:** cutting access can lock out admins or break public services (80/443 on a load balancer
 is usually intended; confirm before flagging). Provide SSM access before removing SSH.
+
+**Related:** [securityhub findings](/remedigenius/sources/securityhub.md) · [inspector findings](/remedigenius/sources/inspector.md) · [where to look](/remedigenius/guides/where-to-look.md) · [how the desk works](/remedigenius/guides/how-the-desk-works.md)

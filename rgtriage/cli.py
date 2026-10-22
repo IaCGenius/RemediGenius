@@ -10,6 +10,8 @@
   rgtriage watch                scan and print only new urgent findings (for schedules)
   rgtriage aws SVC OP           one guarded read-only AWS API call for investigation
   rgtriage onboarding           which accounts are covered and the one-time setup for the rest
+  rgtriage knowledge [VIEW]     the desk's knowledge (OKF bundle): overview, search, show, for REF, gaps, review
+  rgtriage knowledge-edit ...   change the knowledge (dashboard Knowledge tab and operators; never the agent)
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ from datetime import datetime, timezone
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from . import __version__, accounts, aws, collect, config, digest, iac, playbooks, prioritize, store
+from . import __version__, accounts, aws, collect, config, digest, iac, knowledge, okf, playbooks, prioritize, store
 
 PRIORITY_ORDER = ("P1", "P2", "P3", "P4")
 
@@ -114,7 +116,12 @@ def run_scan(sources=None, progress=None) -> dict:
     except Exception as exc:  # onboarding must never stop the configured accounts from being scanned
         onboarding = {"mode": "unknown", "admin": {}, "notes": [f"account discovery failed: {type(exc).__name__}: {exc}"[:240]]}
     findings, coverage = collect.collect(profile, sources, progress, skip=accounts.skip_pairs(onboarding))
-    findings, _ = prioritize.prioritize(findings, profile, store.load_decisions())
+    try:
+        knowledge.ensure()
+        known = knowledge.effective()
+    except Exception as exc:  # unreadable knowledge must never stop a scan; the board says why
+        known = {"error": f"{type(exc).__name__}: {exc}"[:240]}
+    findings, _ = prioritize.prioritize(findings, profile, store.load_decisions(), known)
     scan = {
         "version": __version__, "scanned_at": collect.now_iso(),
         "profile": {"name": profile["name"], "accounts": [{"name": a["name"], "account_id": a.get("account_id"),
@@ -123,6 +130,10 @@ def run_scan(sources=None, progress=None) -> dict:
     }
     store.save_onboarding(onboarding, profile)
     store.mark_changes(scan)
+    try:
+        scan["knowledge"] = knowledge.scan_summary(scan, known) if "error" not in known else {"error": known["error"]}
+    except Exception as exc:
+        scan["knowledge"] = {"error": f"{type(exc).__name__}: {exc}"[:240]}
     scan["issues"] = prioritize.build_issues(findings)  # before capping, so issue counts cover every finding read
     store.cap_findings(scan, int(profile["max_stored_findings"]))
     store.save_scan(scan)
@@ -211,8 +222,12 @@ def cmd_show(args):
             _out(f"{key.capitalize()}: {json.dumps(f['context'][key], default=str)}")
     if f.get("related"):
         _out("Related findings on the same resource: " + ", ".join(f["related"]))
+    if f.get("owner"):
+        _out(f"Owner: {f['owner']['title']} (knowledge {f['owner']['path']})")
     if f.get("decision"):
         _out(f"Decision: {json.dumps(f['decision'])}")
+    if f.get("knowledge"):
+        _out("Knowledge used: " + ", ".join(f["knowledge"]) + "  (`rgtriage knowledge show PATH`)")
     if f["remediation"].get("text") or f["remediation"].get("url"):
         _out(f"\nAWS remediation: {f['remediation'].get('text', '')} {f['remediation'].get('url', '')}")
     _out(f"Console: {f.get('console_url')}")
@@ -254,6 +269,14 @@ def cmd_fix(args):
     _out("\n## Remediation playbook")
     for name in playbooks.select(f):
         _out(playbooks.load(name))
+    try:
+        org = [k for k in knowledge.for_finding(f) if not knowledge.is_shipped(k["path"])]
+    except Exception:  # knowledge is context here; never block the fix context on it
+        org = []
+    if org:
+        _out("\n## Organization knowledge to respect")
+        for k in org[:6]:
+            _out(f"- {k['title']} ({k['type']}, {k['trust']}) — {k['path']}: {k['description']}  [{k['why']}]")
     _out("Rules: propose a minimal unified diff in the repo's existing style; state blast radius and rollback; "
          "the operator reviews and applies. This tool never changes code or cloud resources.")
 
@@ -383,6 +406,10 @@ def cmd_validate(args):
 
 def cmd_serve(args):
     from . import durable, server
+    try:
+        print(f"knowledge: {json.dumps(knowledge.seed())}", flush=True)  # shipped concepts follow the installed version
+    except Exception as exc:
+        print(f"knowledge seed failed: {exc}", flush=True)
     server.serve(args.socket, durable_url=args.durable, homes=durable.parse_homes(args.home), every=args.every, spot=args.spot,
                  scan_every_hours=args.scan_every_hours)
 
@@ -425,6 +452,185 @@ def cmd_onboarding(args):
             _out(f"{n}. {step}")
     else:
         _out("\nEvery known account is read fully. New accounts are picked up automatically at the next scan.")
+
+
+KNOWLEDGE_VIEWS = ("overview", "search", "show", "for", "gaps", "list", "graph", "validate", "review", "inspect", "log", "kinds")
+
+
+def cmd_knowledge(args):
+    """Read the desk's knowledge (OKF bundle). Never changes anything."""
+    b = knowledge.ensure()
+    view, arg = args.view, " ".join(args.arg).strip()
+    if view in ("search", "show", "for", "inspect") and not arg:
+        sys.exit(f"knowledge {view} needs {'a query' if view == 'search' else 'a finding ref' if view == 'for' else 'a path'}")
+    concepts = b.concepts() if view not in ("review", "inspect", "kinds", "log") else []
+    if view == "kinds":
+        return _json({k: {"folder": v["folder"], "effect": v["effect"], "fields": v["fields"],
+                          "affects_triage": k in knowledge.SCORING_KINDS} for k, v in knowledge.KINDS.items()})
+    if view == "search":
+        hits = okf.search(concepts, arg, limit=args.limit)
+        if args.json:
+            return _json(hits)
+        for h in hits:
+            _out(f"- {h['path']} ({h['type']}, {h['trust']}{', ' + h['status'] if h['status'] != 'stable' else ''}"
+                 f"{', STALE' if h['stale'] else ''}) {h['title']}: {h['description']}\n  {h['snippet']}")
+        return _out("" if hits else f"No concept matches {arg!r}. Try fewer words, or `rgtriage knowledge` for the index.")
+    if view == "show":
+        c = b.read(arg)
+        data = {**c.summary(), "meta": c.meta, "body": c.body, "links": c.links, "backlinks": b.backlinks(c.path, concepts),
+                "shipped": knowledge.is_shipped(c.path), "effect": knowledge.KINDS.get(c.type, {}).get("effect", ""),
+                "affects_triage": c.type in knowledge.SCORING_KINDS and not knowledge.is_shipped(c.path),
+                "raw": b.path_of(c.path).read_text(encoding="utf-8", errors="replace")}
+        if args.json:
+            return _json(data)
+        _out(f"# {c.title}\n{c.path} · {c.type} · {data['trust']} · {data['status']}"
+             f"{' · STALE since ' + str(c.meta.get('stale_after')) if data['stale'] else ''}"
+             f"{' · shipped with RemediGenius-CE' if data['shipped'] else ''}")
+        if c.error:
+            return _out(f"Unreadable: {c.error}")
+        if data["effect"]:
+            _out(f"Effect on triage: {data['effect']}")
+        ext = c.meta.get("remedigenius")
+        if ext:
+            _out(f"Settings: {json.dumps(ext, default=str)}")
+        for s in c.meta.get("sources") or []:
+            if isinstance(s, dict):
+                _out(f"Source {s.get('id', '')}: {s.get('title', '')} {s.get('resource', '')}".rstrip())
+        _out("\n" + c.body.strip())
+        if data["links"] or data["backlinks"]:
+            _out(f"\nLinks: {', '.join(data['links']) or '-'}\nLinked from: {', '.join(data['backlinks']) or '-'}")
+        return
+    if view == "for":
+        scan = _latest_or_exit()
+        items = knowledge.for_finding(_ref_or_exit(scan, arg), b)
+        if args.json:
+            return _json(items)
+        for k in items:
+            _out(f"- {k['path']} ({k['type']}, {k['trust']}): {k['title']} — {k['why']}")
+        return
+    if view == "gaps":
+        gaps = knowledge.gaps(store.load_latest(), b)
+        return _json(gaps) if args.json else _out("\n".join(f"- {g}" for g in gaps) or "No knowledge gaps found.")
+    if view == "list":
+        rows = [c.summary() for c in concepts if not args.type or c.type == args.type]
+        return _json(rows) if args.json else _out("\n".join(f"{r['path']}  {r['type']}  {r['trust']}  {r['status']}" for r in rows))
+    if view == "graph":
+        return _json(b.graph(concepts))
+    if view == "validate":
+        issues = b.validate(concepts)
+        if args.json:
+            return _json({"concepts": len(concepts), "errors": sum(i["level"] == "error" for i in issues), "issues": issues})
+        _out(f"{len(concepts)} concepts · {sum(i['level'] == 'error' for i in issues)} errors · "
+             f"{sum(i['level'] == 'warning' for i in issues)} warnings")
+        return _out("\n".join(f"{i['level']:<8} {i['path']}: {i['message']}" for i in issues))
+    if view == "review":
+        queue = knowledge.review_queue()
+        if args.json:
+            return _json({"root": str(knowledge.review_root()), "drafts": queue})
+        return _out("\n".join(f"- {q['name']}: {q.get('type', '?')} {q.get('title', '')} → {q.get('target', q.get('error'))}"
+                              for q in queue) or "The review queue is empty.")
+    if view == "inspect":
+        return _json(knowledge.inspect_file(arg))
+    if view == "log":
+        entries = b.log_entries(args.limit)
+        return _json(entries) if args.json else _out("\n".join(f"{e['date']}  {e['text']}" for e in entries))
+    summary = knowledge.summary(b, concepts)
+    eff = knowledge.effective(b)
+    if args.json:
+        return _json({**summary, "applied": {k: len(eff[k]) for k in ("applications", "accounts", "exceptions", "goals")},
+                      "gaps": knowledge.gaps(store.load_latest(), b), "kinds": list(knowledge.KINDS)})
+    _out(f"Knowledge bundle (OKF {okf.OKF_VERSION}): {summary['bundle']}")
+    _out(f"Organization: {summary['organization']} concepts {summary['by_type'] or ''} · {summary['human_reviewed']} human-reviewed"
+         f" · {summary['drafts']} drafts · {len(summary['stale'])} stale")
+    _out(f"Shipped with RemediGenius-CE: {summary['shipped']} concepts (remedigenius/: guides, source guides, playbooks)")
+    _out(f"Changing priorities now: {len(eff['applications'])} applications, {len(eff['accounts'])} accounts, "
+         f"{len(eff['exceptions'])} risk exceptions, {len(eff['goals'])} goals · review queue: {summary['review_queue']}")
+    gaps = knowledge.gaps(store.load_latest(), b)
+    if gaps:
+        _out("Gaps:\n" + "\n".join(f"- {g}" for g in gaps[:5]))
+    _out("Start with: remedigenius/guides/how-the-desk-works.md · remedigenius/guides/where-to-look.md · "
+         "remedigenius/guides/organization-knowledge.md")
+    index = b.root / "index.md"
+    if index.exists():
+        _out("\n" + okf.split(index.read_text(encoding="utf-8"))[1].strip())
+
+
+DERIVED = ("knowledge", "owner", "expired_exception", "application")
+
+
+def rescore() -> dict:
+    """Re-rank the stored scan with the current knowledge and decisions; no AWS calls.
+
+    Knowledge approved in the dashboard applies to the board at once instead of at the next scan.
+    """
+    scan = store.load_latest()
+    if not scan:
+        return {"findings": 0, "changed_priority": 0}
+    profile = config.load()
+    known = knowledge.effective()
+    before = {f["key"]: f["priority"] for f in scan["findings"]}
+    for f in scan["findings"]:
+        for key in DERIVED:
+            f.pop(key, None)
+        if (f.get("decision") or {}).get("knowledge"):
+            f.pop("decision")  # a risk exception's decision is re-derived from the current concept
+    findings, issues = prioritize.prioritize(scan["findings"], profile, store.load_decisions(), known)
+    if scan.get("stored_overflow"):
+        # Issue counts were taken before storage was capped: keep them and refresh what the top finding says.
+        tops = {f["key"]: f for f in findings}
+        for issue in scan["issues"]:
+            top = tops.get(issue["top_key"])
+            if top:
+                issue.update(priority=top["priority"], score=top["score"], reasons=top["reasons"], decision=top.get("decision"),
+                             owner=top.get("owner"), knowledge=top.get("knowledge") or [])
+        scan["issues"].sort(key=lambda i: (-i["score"], -i["finding_count"]))
+    else:
+        scan["issues"] = issues
+    scan["knowledge"] = knowledge.scan_summary(scan, known)
+    store.write_latest(scan)
+    write_outputs(scan)
+    changed = sum(1 for f in findings if before.get(f["key"]) != f["priority"])
+    return {"findings": len(findings), "changed_priority": changed}
+
+
+def cmd_knowledge_edit(args):
+    """Change the knowledge bundle. For the dashboard Knowledge tab and operators; the agent has no access."""
+    b = knowledge.ensure()
+    if args.action == "seed":
+        return _json(knowledge.seed(b))
+    if args.action == "reindex":
+        knowledge.reindex(b)
+        return _json({"reindexed": str(b.root)})
+    actor = knowledge.check_actor(args.by or "")
+    if args.action == "save":
+        if args.fields:
+            fields = json.loads(knowledge.inbox_file(args.fields).read_text(encoding="utf-8"))
+            meta, body = knowledge.compose(args.kind or fields.pop("kind", ""), fields, actor)
+        elif args.file:
+            meta, body = okf.parse(knowledge.inbox_file(args.file).read_text(encoding="utf-8"))
+        else:
+            sys.exit("save needs --file (an OKF concept) or --fields (wizard fields as JSON)")
+        result = knowledge.save(meta, body, actor, path=args.path, verify=args.verify, replace=args.replace, b=b)
+    elif args.action == "verify":
+        result = knowledge.verify(args.path, actor, b)
+    elif args.action == "deprecate":
+        result = knowledge.deprecate(args.path, actor, args.reason or "", b)
+    elif args.action == "remove":
+        result = knowledge.remove(args.path, actor, b)
+    elif args.action == "import":
+        if not args.file or not args.name:
+            sys.exit("import needs --file (converted markdown) and --name (original file name)")
+        text = knowledge.inbox_file(args.file).read_text(encoding="utf-8", errors="replace")
+        result = knowledge.import_reference(text, args.name, actor, sha256=args.sha256 or "", converter=args.converter or "",
+                                            title=args.title or "", b=b)
+    else:
+        sys.exit(f"unknown action {args.action}")
+    if args.action != "import":
+        try:
+            result["rescored"] = rescore()
+        except Exception as exc:  # the change is saved; the board catches up at the next scan
+            result["rescored"] = {"error": f"{type(exc).__name__}: {exc}"[:200]}
+    _json(result)
 
 
 def cmd_playbook(args):
@@ -497,12 +703,31 @@ def main(argv=None):
     p.add_argument("--json", action="store_true"); p.set_defaults(func=cmd_onboarding)
     p = sub.add_parser("playbook", help="list or print remediation playbooks"); p.add_argument("name", nargs="?")
     p.set_defaults(func=cmd_playbook)
+    p = sub.add_parser("knowledge", help="read the desk's knowledge (OKF bundle)")
+    p.add_argument("view", nargs="?", default="overview", choices=KNOWLEDGE_VIEWS)
+    p.add_argument("arg", nargs="*", help="query (search), concept path (show), finding ref (for), file (inspect)")
+    p.add_argument("--type", help="list: only this concept type")
+    p.add_argument("--limit", type=int, default=10); p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_knowledge)
+    p = sub.add_parser("knowledge-edit", help="change the knowledge bundle (dashboard and operators only)")
+    p.add_argument("action", choices=["save", "verify", "deprecate", "remove", "import", "seed", "reindex"])
+    p.add_argument("--by", help="reviewer, human:<name>")
+    p.add_argument("--file", help="OKF concept (save) or converted markdown (import), inside the knowledge inbox")
+    p.add_argument("--fields", help="wizard fields as JSON, inside the knowledge inbox"); p.add_argument("--kind")
+    p.add_argument("--path", help="concept path in the bundle")
+    p.add_argument("--verify", action="store_true", help="save: record the reviewer's confirmation")
+    p.add_argument("--replace", action="store_true", help="save: overwrite an existing concept")
+    p.add_argument("--reason"); p.add_argument("--name", help="import: original file name")
+    p.add_argument("--sha256"); p.add_argument("--converter"); p.add_argument("--title")
+    p.set_defaults(func=cmd_knowledge_edit)
 
     args = parser.parse_args(argv)
     try:
         args.func(args)
     except FileNotFoundError as exc:
         sys.exit(str(exc))
+    except okf.OKFError as exc:
+        sys.exit(f"knowledge: {exc}")
 
 
 if __name__ == "__main__":

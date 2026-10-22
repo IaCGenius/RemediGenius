@@ -155,6 +155,17 @@ def start_desk(args):
     raise SystemExit(f"desk did not start: docker logs {DESK}")
 
 
+ENABLE_PROFILE_PLUGIN = r'''
+from pathlib import Path
+from ruamel.yaml import YAML
+yaml, path = YAML(), Path("/opt/data/profiles/remedigenius/config.yaml")
+data = yaml.load(path.read_text())
+enabled = data.setdefault("plugins", {}).setdefault("enabled", [])
+if "rg-knowledge" not in enabled:
+    enabled.append("rg-knowledge")
+    with path.open("w") as f:
+        yaml.dump(data, f)
+'''
 SYNC = r'''
 import json, os, shutil
 from pathlib import Path
@@ -170,6 +181,15 @@ shutil.copytree(pkg / "plugins/rg-triage", plugin, ignore=shutil.ignore_patterns
                                                "proposals": "/opt/data/proposals"}))
 (prof / "scripts").mkdir(exist_ok=True)
 (prof / "scripts/rgtriage-watch.py").write_text(WATCH)
+# Knowledge tab (dashboard plugin) and the folders it hands files to the desk through.
+tab = Path("/opt/data/plugins/rg-knowledge")
+shutil.rmtree(tab, ignore_errors=True)
+shutil.copytree(pkg / "dashboard-plugins/rg-knowledge", tab, ignore=shutil.ignore_patterns("__pycache__", "local.json"))
+(tab / "local.json").write_text(json.dumps({"socket": "/run/rgtriage/rgtriage.sock", "home": "/data/rgtriage",
+                                            "proposals": "/opt/data/proposals", "inbox": "/opt/data/knowledge-inbox",
+                                            "files": "/opt/data/knowledge-files", "profile": "remedigenius"}))
+for d in ("proposals/knowledge", "knowledge-inbox", "knowledge-files"):
+    Path("/opt/data", d).mkdir(parents=True, exist_ok=True)
 key = os.environ.get("MODEL_API_KEY", "")
 env = prof / ".env"
 text = env.read_text() if env.exists() else ""
@@ -243,6 +263,9 @@ def start_hermes(args):
     if docker("exec", HERMES, "test", "-d", f"/opt/data/profiles/{PROFILE}", check=False, capture=True).returncode:
         docker("exec", HERMES, "hermes", "profile", "install", "/opt/remedigenius-package", "--name", PROFILE, "--yes", capture=True)
     docker("exec", "-i", "--user", "10000:10000", HERMES, "python", "-", input=f"WATCH = {WATCH!r}\n{SYNC}")
+    # The dashboard serves user plugins only when enabled: in the profile (tab list) and at its launch scope (API).
+    docker("exec", "-i", "--user", "10000:10000", HERMES, "python", "-", input=ENABLE_PROFILE_PLUGIN)
+    docker("exec", "--user", "10000:10000", HERMES, "hermes", "-p", "default", "plugins", "enable", "rg-knowledge", capture=True)
     docker("exec", "--user", "10000:10000", HERMES, "hermes", "profile", "use", PROFILE, capture=True)
     docker("restart", HERMES, capture=True)
     for _ in range(60):

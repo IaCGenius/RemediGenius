@@ -11,6 +11,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 from .config import CRITICALITY_POINTS
+from .knowledge import exception_for
 
 SEVERITY_POINTS = {"CRITICAL": 60, "HIGH": 45, "MEDIUM": 25, "LOW": 10, "INFORMATIONAL": 0}
 PRIORITY_THRESHOLDS = (("P1", 70), ("P2", 50), ("P3", 30))
@@ -43,9 +44,16 @@ def _parse_time(value: str):
         return None
 
 
-def business_context(finding: dict, profile: dict) -> tuple[str, str, str | None]:
-    """Return (criticality, why, application) for the finding's resource."""
+def business_context(finding: dict, profile: dict, knowledge: dict | None = None) -> tuple[str, str, str | None]:
+    """Return (criticality, why, application) for the finding's resource.
+
+    Reviewed knowledge concepts come first (and are cited by path), then triage.yaml, then environment tags.
+    """
     tags = {str(k): str(v) for k, v in (finding["resource"].get("tags") or {}).items()}
+    for app in (knowledge or {}).get("applications", []):
+        if all(tags.get(k) == v for k, v in app["tags"].items()):
+            _cite(finding, app)
+            return app["criticality"], f"application {app['title']}, knowledge {app['path']}{_stale(app)}", app["title"]
     for app in profile.get("applications", []):
         want = app.get("tags") or {}
         if want and all(tags.get(k) == str(v) for k, v in want.items()):
@@ -56,13 +64,32 @@ def business_context(finding: dict, profile: dict) -> tuple[str, str, str | None
             return "business_critical", f"tag {key}={tags[key]}", None
         if value in NONPROD_VALUES:
             return "test_development", f"tag {key}={tags[key]}", None
+    account_concept = (knowledge or {}).get("accounts", {}).get(finding["account"])
+    if account_concept:
+        _cite(finding, account_concept)
+        return (account_concept["criticality"], f"account {account_concept['title']}, knowledge {account_concept['path']}"
+                f"{_stale(account_concept)}", None)
     for account in profile.get("accounts", []):
         if account.get("account_id") == finding["account"]:
             return account.get("criticality", "business_critical"), f"account {account['name']}", None
     return "business_critical", "default", None
 
 
-def score_finding(finding: dict, profile: dict, now: datetime | None = None) -> dict:
+def _cite(finding: dict, concept: dict) -> None:
+    used = finding.setdefault("knowledge", [])
+    if concept["path"] not in used:
+        used.append(concept["path"])
+    if concept.get("owner") and not finding.get("owner"):
+        finding["owner"] = concept["owner"]
+        if concept["owner"].get("exists") and concept["owner"]["path"] not in used:
+            used.append(concept["owner"]["path"])
+
+
+def _stale(concept: dict) -> str:
+    return " (stale: ask the owner to re-review it)" if concept.get("stale") else ""
+
+
+def score_finding(finding: dict, profile: dict, now: datetime | None = None, knowledge: dict | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     signals = finding.get("signals", {})
     reasons: list[str] = []
@@ -105,23 +132,32 @@ def score_finding(finding: dict, profile: dict, now: datetime | None = None) -> 
     if signals.get("correlated"):
         add(10, f"toxic combination on the same resource: {signals['correlated']}")
 
-    criticality, why, app = business_context(finding, profile)
+    criticality, why, app = business_context(finding, profile, knowledge)
     points = CRITICALITY_POINTS.get(criticality, 0)
     if points:
         add(points, f"business criticality {criticality} ({why})")
-    for goal in profile.get("goals", []):
+    for goal in (knowledge or {}).get("goals", []) + profile.get("goals", []):
         boost = goal.get("boost") or {}
         if (finding["resource"]["type"] in (boost.get("resource_types") or [])
                 or finding.get("category") in (boost.get("categories") or [])
                 or any(signals.get(s) for s in boost.get("signals") or [])):
-            add(int(boost.get("points", 5)), f"matches goal: {goal['text']}")
+            if goal.get("path"):
+                _cite(finding, goal)
+            add(int(boost.get("points", 5)), f"matches goal: {goal['text']}"
+                + (f" (knowledge {goal['path']})" if goal.get("path") else ""))
             break
 
     last = _parse_time(finding.get("last_seen"))
     if finding["category"] == "threat" and last and now - last > timedelta(days=30):
         add(-10, "no threat activity for over 30 days")
     if finding.get("decision"):
-        reasons.append(f"operator decision: {finding['decision']['status']}")
+        decision = finding["decision"]
+        reasons.append(f"operator decision: {decision['status']}"
+                       + (f" (risk exception {decision['knowledge']}, expires {decision.get('expires')})"
+                          if decision.get("knowledge") else ""))
+    elif finding.get("expired_exception"):
+        reasons.append(f"risk exception {finding['expired_exception']['path']} expired on "
+                       f"{finding['expired_exception']['expires']}: back in the queue until it is renewed or fixed")
 
     score = max(0, min(100, score))
     finding["score"] = score
@@ -200,18 +236,35 @@ def build_issues(findings: list[dict]) -> list[dict]:
             "resources": resources[:25], "resource_count": len(resources), "finding_count": len(members),
             "finding_keys": [m["key"] for m in members][:50], "top_key": top["key"], "reasons": top["reasons"],
             "decision": top.get("decision"), "new": any(m.get("new") for m in members),
+            "owner": top.get("owner"), "knowledge": top.get("knowledge") or [],
         })
     issues.sort(key=lambda i: (-i["score"], -i["finding_count"]))
     return issues
 
 
-def prioritize(findings: list[dict], profile: dict, decisions: dict | None = None) -> tuple[list[dict], list[dict]]:
+def prioritize(findings: list[dict], profile: dict, decisions: dict | None = None,
+               knowledge: dict | None = None) -> tuple[list[dict], list[dict]]:
+    """`knowledge` is `rgtriage.knowledge.effective()`: reviewed organization concepts that change priorities."""
     decisions = decisions or {}
+    knowledge = knowledge or {}
     correlate(findings)
     for f in findings:
         if f["key"] in decisions:
             f["decision"] = decisions[f["key"]]
-        score_finding(f, profile)
+        else:
+            exception = exception_for(f, knowledge.get("exceptions", []))
+            if exception:
+                # A reviewed risk exception acts like an accepted_risk decision until it expires.
+                f["decision"] = {"status": "accepted_risk", "reason": exception["description"] or exception["title"],
+                                 "by": f"knowledge:{exception['path']}", "knowledge": exception["path"],
+                                 "expires": exception["expires"], "approved_by": exception.get("approved_by")}
+                _cite(f, exception)
+            else:
+                expired = exception_for(f, knowledge.get("expired", []))
+                if expired:
+                    f["expired_exception"] = {"path": expired["path"], "expires": expired["expires"]}
+                    _cite(f, expired)
+        score_finding(f, profile, knowledge=knowledge)
     findings.sort(key=lambda f: (-f["score"], f["title"]))
     return findings, build_issues(findings)
 

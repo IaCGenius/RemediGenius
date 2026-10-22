@@ -21,7 +21,7 @@ rgtriage = "rgtriage.cli:main"
 include = ["rgtriage*"]
 
 [tool.setuptools.package-data]
-rgtriage = ["playbooks/*.md"]
+rgtriage = ["playbooks/*.md", "knowledge_base/*/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

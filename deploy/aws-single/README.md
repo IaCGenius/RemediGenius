@@ -61,7 +61,10 @@ bash tools/open-remedigenius.sh --with-login          # PowerShell: tools\open-r
 ```
 
 This prints the private login (from `/data/hermes/remedigenius-login.json`) and opens an SSM port-forward to
-`http://127.0.0.1:9125/chat?profile=remedigenius`. Keep the window open; say "hi".
+`http://127.0.0.1:9125/chat?profile=remedigenius`. Keep the window open; say "hi". The **Knowledge** tab holds what the
+desk knows about your organization ([docs/KNOWLEDGE.md](../../docs/KNOWLEDGE.md)); its bundle is part of the desk state
+in S3. Importing PDF or Office files installs markitdown into the Hermes home on first use (HTTPS egress, about 350 MB,
+reinstalled after an instance replacement).
 
 ## What the stack creates
 

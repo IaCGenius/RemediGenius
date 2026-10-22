@@ -14,8 +14,10 @@ reaches your model provider, for every change you make to your cloud, and for AW
   off, denied or unavailable is reported as a blind spot, never as "clean".
 - **Volumes are capped, and the caps are stated.** Detail is read up to `detail_limits` per source/account/region,
   totals come from aggregation APIs where AWS offers them, and capped tiers are labelled "at least N".
-- **Priorities are a transparent heuristic,** not a risk assessment of your business. Business context in
-  `triage.yaml` changes them; the reasons are always shown.
+- **Priorities are a transparent heuristic,** not a risk assessment of your business. Reviewed knowledge concepts
+  (applications, accounts, risk exceptions, goals) and `triage.yaml` change them; the reasons always cite what did.
+- **Knowledge is what people put in.** Search is lexical, matching uses exact tags and ids, and the agent's drafts are
+  only applied after a person approves them. See [KNOWLEDGE.md](KNOWLEDGE.md).
 - **Investigations are bounded.** CloudTrail `LookupEvents` covers 90 days of management events per region. S3/Lambda
   data events are not visible through it; the agent says so.
 - **Decisions are local triage records.** They do not archive or suppress findings in AWS.
@@ -28,8 +30,9 @@ reaches your model provider, for every change you make to your cloud, and for AW
 
 ## Data that reaches your model provider
 
-Finding titles, resource identifiers, account ids, tags, CloudTrail excerpts the agent reads, your IaC excerpts and
-your chat messages. Self-hosting compute does not make inference local. Choose a provider and retention policy your
+Finding titles, resource identifiers, account ids, tags, CloudTrail excerpts the agent reads, your IaC excerpts,
+knowledge concepts the agent reads, documents you choose to *Draft with AI* (the Knowledge tab shows the token estimate
+and asks first), and your chat messages. Self-hosting compute does not make inference local. Choose a provider and retention policy your
 organization permits; see [MODELS.md](MODELS.md).
 
 ## Upstream prompts

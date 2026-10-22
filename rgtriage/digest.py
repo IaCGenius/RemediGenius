@@ -7,6 +7,7 @@ import json
 from collections import Counter
 
 from .accounts import summary_lines
+from .knowledge import board_lines
 from .prioritize import is_open
 
 PRIORITY_HEADINGS = {"P1": "P1 — act now", "P2": "P2 — fix this week", "P3": "P3 — backlog", "P4": "P4 — monitor"}
@@ -80,11 +81,12 @@ def markdown(scan: dict, limit: int = 5, include_low: bool = False) -> str:
         for n, issue in enumerate(items[:limit], 1):
             new = " 🆕" if issue.get("new") else ""
             status = f" · status: {issue['decision']['status']}" if issue.get("decision") else ""
+            owner = f" · owner {issue['owner']['title']}" if issue.get("owner") else ""
             ident = issue["control_id"] or issue["type"] or ""
             lines.append(
                 f"{n}. **{issue['title'][:110]}**{new} — {issue['product']} {issue['severity']}"
                 f"{' · ' + ident if ident else ''} · {issue['finding_count']} finding(s) on {_resources(issue)}"
-                f" · account {', '.join(issue['accounts'])}{status}\n"
+                f" · account {', '.join(issue['accounts'])}{owner}{status}\n"
                 f"   Why {priority}: {'; '.join(_reason(r) for r in issue['reasons'][1:5]) or issue['reasons'][0]}\n"
                 f"   Ref: `{issue['top_key']}`")
         if len(items) > limit:
@@ -101,6 +103,10 @@ def markdown(scan: dict, limit: int = 5, include_low: bool = False) -> str:
     if gaps:
         lines.append("Gaps (absence of findings here is NOT a clean bill of health):")
         lines.extend(f"- {g}" for g in gaps[:12])
+    knowledge = board_lines(scan)
+    if knowledge:
+        lines.append("\n## Knowledge")
+        lines.extend(knowledge)
     return "\n".join(lines)
 
 

@@ -1,3 +1,21 @@
+---
+type: Playbook
+title: IAM users, keys and policies (IAM.1, IAM.2, IAM.3, IAM.5, IAM.8, IAM.22, Access Analyzer unused access, GuardDuty IAMUser
+  anomalies)
+description: Admin policies, user-attached policies, old keys, users without MFA and unused access.
+tags:
+- iam
+- identity
+sources:
+- id: controls
+  resource: https://docs.aws.amazon.com/securityhub/latest/userguide/iam-controls.html
+  title: Security Hub IAM controls
+  author: aws-documentation
+generated:
+  by: remedigenius-ce/0.3.0
+  at: '2026-10-21T00:00:00Z'
+---
+
 # IAM users, keys and policies (IAM.1, IAM.2, IAM.3, IAM.5, IAM.8, IAM.22, Access Analyzer unused access, GuardDuty IAMUser anomalies)
 
 **Means:** full-admin customer policies (`"Action":"*","Resource":"*"`), policies attached directly to users,
@@ -18,3 +36,5 @@ Check CloudTrail for that key (`lookup_events` with `AttributeKey=AccessKeyId`).
 (`aws iam update-access-key --user-name U --access-key-id K --status Inactive`), rotates it and reviews its changes.
 
 **Trade-offs:** removing permissions can break automation; stage changes and watch AccessDenied in CloudTrail.
+
+**Related:** [securityhub findings](/remedigenius/sources/securityhub.md) · [accessanalyzer findings](/remedigenius/sources/accessanalyzer.md) · [guardduty findings](/remedigenius/sources/guardduty.md) · [where to look](/remedigenius/guides/where-to-look.md) · [how the desk works](/remedigenius/guides/how-the-desk-works.md)

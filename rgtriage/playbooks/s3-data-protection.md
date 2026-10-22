@@ -1,3 +1,21 @@
+---
+type: Playbook
+title: S3 data protection (S3.5 SSL-only, S3.9 access logging, S3.14 versioning, S3.17 KMS, S3.15 object lock)
+description: SSL-only access, access logging, versioning, KMS encryption and object lock for S3 buckets.
+tags:
+- s3
+- data
+- encryption
+sources:
+- id: controls
+  resource: https://docs.aws.amazon.com/securityhub/latest/userguide/s3-controls.html
+  title: Security Hub S3 controls
+  author: aws-documentation
+generated:
+  by: remedigenius-ce/0.3.0
+  at: '2026-10-21T00:00:00Z'
+---
+
 # S3 data protection (S3.5 SSL-only, S3.9 access logging, S3.14 versioning, S3.17 KMS, S3.15 object lock)
 
 **Means:** the bucket allows plaintext HTTP requests, has no access logs, cannot recover
@@ -62,3 +80,5 @@ condition `Bool: {aws:SecureTransport: false}`.
 
 **Trade-offs:** versioning increases storage cost (add lifecycle `noncurrent_version_expiration`);
 KMS adds request cost and key-policy dependencies for every reader; the log bucket must not log to itself.
+
+**Related:** [securityhub findings](/remedigenius/sources/securityhub.md) · [where to look](/remedigenius/guides/where-to-look.md) · [how the desk works](/remedigenius/guides/how-the-desk-works.md)

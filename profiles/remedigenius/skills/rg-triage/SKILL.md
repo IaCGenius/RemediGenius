@@ -42,8 +42,10 @@ active threat (+10/+20 for compromise/exfiltration/impact types), root credentia
 volume), public exposure (+15), exploit available (+12), EPSS ≥ 0.1 (+5), detection/audit gap (+8),
 fix available (+3), toxic combination on one resource (+10), business criticality of the
 account/application/env tag (−10..+15), business-goal match (+5), stale threat >30 days (−10).
-P1 ≥ 70, P2 ≥ 50, P3 ≥ 30, else P4. Criticality, applications and goals live in `triage.yaml`
-(see `rg-onboard`). Never quietly override the score; explain disagreements and record them.
+P1 ≥ 70, P2 ≥ 50, P3 ≥ 30, else P4. Criticality, applications, accounts, goals and risk exceptions come
+from reviewed knowledge concepts (cited by path in the reasons; see `rg-knowledge`), then `triage.yaml`.
+A reviewed Risk Exception makes matching findings accepted risk until it expires. Never quietly override
+the score; explain disagreements and record them.
 
 ## 5. Record decisions (the user's, not yours)
 Only record a decision the user stated in this conversation ("yes that was me", "accept it, it's a

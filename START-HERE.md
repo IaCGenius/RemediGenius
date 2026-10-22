@@ -9,6 +9,8 @@ Ask it things like:
 - "investigate 3f9c2a7b1d04" → bounded read-only CloudTrail/IAM/GuardDuty reads and a verdict
 - "fix 8e41d0c9a6b2 — our Terraform is in /data/iac/infra" → code location, diff, `terraform validate`, rollback
 - "that bucket is a public website, accept the risk" → recorded after you approve the prompt
+- "who owns payments-db?" → answered from the knowledge base, with the concept it used; if nobody knows yet, it asks
+  you once and drafts the answer for review
 - `/triage` → the board without a model call (interactive chat)
 
 ## Choose a path
@@ -37,5 +39,7 @@ Already running Hermes? [docs/LOCAL-HERMES.md](docs/LOCAL-HERMES.md) adds the pr
 ## Before you rely on it
 
 - Read [docs/LIMITS.md](docs/LIMITS.md): what is and is not covered, and what data reaches your model provider.
-- Put your business context in `triage.yaml` (critical accounts, application tags, goals, IaC repositories). It changes
-  priorities; ask the agent "help me onboard" to fill it in conversationally.
+- Tell the desk what matters: open the dashboard **Knowledge** tab. *Overview → What the desk is missing* lists the
+  gaps that change priorities (unowned P1/P2 resources, accounts without a description). Add applications, accounts,
+  teams and accepted risks there, import your runbooks and policies, and approve what the agent drafts. See
+  [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md). IaC repository paths and regions stay in `triage.yaml`.

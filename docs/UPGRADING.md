@@ -16,3 +16,8 @@ and remove the v0.2 deployment when you no longer need it. Keep the v0.2 Terrafo
 exported anything you want from them; v0.2 remains available at tag `v0.2.0`.
 
 Checkpoints written by v0.3 are not compatible with v0.2 backups, and v0.3 never reads v0.2 state.
+
+**Knowledge from v0.2:** v0.2 stored reviewed knowledge with OKF-style frontmatter. Export it from the v0.2 deployment
+(its library folder or the exported concept files), zip the `.md` files, and import the zip in the v0.3 **Knowledge**
+tab: each concept lands in the review queue, where you approve it into the bundle. Plain documents (policies, runbooks)
+can be imported directly. See [KNOWLEDGE.md](KNOWLEDGE.md).

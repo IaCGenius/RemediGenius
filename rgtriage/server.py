@@ -16,14 +16,15 @@ import time
 import urllib.request
 from pathlib import Path
 
-ALLOWED = {"digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "onboarding", "playbook", "report", "watch"}
+ALLOWED = {"digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "onboarding", "playbook", "report", "watch",
+           "knowledge", "knowledge-edit"}
 MAX_REQUEST = 64 * 1024
 MAX_OUTPUT = 400 * 1024
 TIMEOUT = {"scan": 900, "watch": 900, "validate": 600}
 
 
 CHECKPOINT = {"store": None, "homes": {}, "lock": threading.Lock()}
-STATE_CHANGING = {"scan", "decide", "watch"}
+STATE_CHANGING = {"scan", "decide", "watch", "knowledge-edit"}
 
 
 def checkpoint_all(reason: str) -> None:

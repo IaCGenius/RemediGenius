@@ -1,3 +1,22 @@
+---
+type: Playbook
+title: Root account use and protection (GuardDuty Policy:IAMUser/RootCredentialUsage, IAM.4, IAM.6, IAM.9, CloudWatch.1, CIS
+  1.x)
+description: Root user API activity, root access keys and missing (hardware) MFA.
+tags:
+- root
+- iam
+- identity
+sources:
+- id: root
+  resource: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user.html
+  title: AWS account root user
+  author: aws-documentation
+generated:
+  by: remedigenius-ce/0.3.0
+  at: '2026-10-21T00:00:00Z'
+---
+
 # Root account use and protection (GuardDuty Policy:IAMUser/RootCredentialUsage, IAM.4, IAM.6, IAM.9, CloudWatch.1, CIS 1.x)
 
 **Means:** the root user makes API calls, has access keys, or lacks (hardware) MFA. IAM policies cannot
@@ -41,3 +60,5 @@ resource "aws_organizations_policy" "deny_root" {
 
 **Trade-offs:** SCPs never apply to the management account. Deleting root keys breaks whatever uses them;
 identify the user agent first.
+
+**Related:** [guardduty findings](/remedigenius/sources/guardduty.md) · [securityhub findings](/remedigenius/sources/securityhub.md) · [where to look](/remedigenius/guides/where-to-look.md) · [how the desk works](/remedigenius/guides/how-the-desk-works.md)

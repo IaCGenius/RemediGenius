@@ -66,8 +66,9 @@ def merge_config(path: Path, model_from_template: bool) -> None:
     plugins = current.setdefault("plugins", {}) or {}
     current["plugins"] = plugins
     enabled = plugins.setdefault("enabled", []) or []
-    if "rg-triage" not in enabled:
-        enabled.append("rg-triage")
+    for name in ("rg-triage", "rg-knowledge"):
+        if name not in enabled:
+            enabled.append(name)
     plugins["enabled"] = enabled
     pts = current.setdefault("platform_toolsets", {}) or {}
     for platform, toolsets in template["platform_toolsets"].items():
@@ -125,9 +126,25 @@ def main() -> None:
     scripts.mkdir(exist_ok=True)
     (scripts / "rgtriage-watch.py").write_text(WATCH_SCRIPT.format(home=str(home), src=str(REPO), python=sys.executable),
                                                encoding="utf-8")
-    print("  installed SOUL.md, skills rg-*, plugin rg-triage, scripts/rgtriage-watch.py")
+    tab = root / "plugins" / "rg-knowledge"
+    if tab.exists():
+        shutil.rmtree(tab)
+    shutil.copytree(SOURCE / "dashboard-plugins" / "rg-knowledge", tab, ignore=shutil.ignore_patterns("__pycache__", "local.json"))
+    (tab / "local.json").write_text(json.dumps({"python": sys.executable, "src": str(REPO), "home": str(home),
+                                                "proposals": str(home / "proposals"), "inbox": str(home / "knowledge-inbox"),
+                                                "files": str(home / "knowledge-files"), "profile": args.profile}, indent=1),
+                                    encoding="utf-8")
+    for folder in ("proposals/knowledge", "knowledge-inbox", "knowledge-files"):
+        (home / folder).mkdir(parents=True, exist_ok=True)
+    print("  installed SOUL.md, skills rg-*, plugin rg-triage, scripts/rgtriage-watch.py, dashboard Knowledge tab")
 
     env = dict(os.environ, RGTRIAGE_HOME=str(home), PYTHONPATH=str(REPO))
+    # The dashboard serves user plugins only when they are enabled at its launch scope too.
+    enabled = run([args.hermes, "-p", "default", "plugins", "enable", "rg-knowledge"])
+    print("  enabled the Knowledge tab for the dashboard" if enabled.returncode == 0 else
+          f"  could not enable rg-knowledge at the default scope: {enabled.stdout[-200:]} {enabled.stderr[-200:]}")
+    seeded = subprocess.run([sys.executable, "-m", "rgtriage", "knowledge-edit", "seed"], env=env, text=True, capture_output=True)
+    print(f"  knowledge bundle: {home / 'knowledge'}" if seeded.returncode == 0 else f"  knowledge seed failed: {seeded.stderr[-300:]}")
     if not (home / "triage.yaml").exists():
         cmd = [sys.executable, "-m", "rgtriage", "init"]
         if args.aws_profile:

@@ -32,6 +32,10 @@ RemediGenius-CE is running: http://127.0.0.1:9125/chat?profile=remedigenius
 Get the dashboard login with `python tools/workstation.py login`. It is stored in `~/RemediGenius-CE/login.json`;
 keep it out of chat and screenshots. Say "hi".
 
+The **Knowledge** tab (next to Chat) is where you tell the desk what matters: owners, critical applications and
+accounts, accepted risks, policies and runbooks. Importing PDF or Office files installs the open-source converter
+markitdown into the Hermes volume on first use (about 350 MB, needs internet once). See [KNOWLEDGE.md](KNOWLEDGE.md).
+
 `run` keeps the desk's AWS credentials fresh (assumed-role credentials last an hour). Use `start` instead to start
 and exit; `refresh` renews credentials once.
 

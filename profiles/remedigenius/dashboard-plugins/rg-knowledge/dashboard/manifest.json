@@ -1,0 +1,14 @@
+{
+  "name": "rg-knowledge",
+  "label": "Knowledge",
+  "description": "RemediGenius Community Edition knowledge base (Open Knowledge Format): review, add, import and explore what the security desk knows.",
+  "icon": "Database",
+  "version": "0.3.0",
+  "tab": {
+    "path": "/knowledge",
+    "position": "after:chat"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

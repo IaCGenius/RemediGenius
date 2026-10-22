@@ -8,7 +8,8 @@ RemediGenius Community Edition (RemediGenius-CE) splits the work in two:
   question that matters, and writing the code change.
 
 No custom agent runtime: Hermes provides chat, the dashboard, skills, memory, schedules and messaging. RemediGenius-CE
-adds one Python package, one profile (SOUL, four skills, one plugin) and two deployment paths.
+adds one Python package, one profile (SOUL, five skills, one plugin), one dashboard tab (Knowledge) and two deployment
+paths. Organization knowledge is one Open Knowledge Format bundle ([KNOWLEDGE.md](KNOWLEDGE.md)).
 
 ```mermaid
 flowchart TB
@@ -18,13 +19,16 @@ flowchart TB
   subgraph Desk[Desk service - only component with AWS credentials]
     C[collect<br/>read-only botocore guard] --> N[normalize + dedupe] --> P[prioritize + group] --> B[board.md · latest.json · report.html]
     L[IaC locator + terraform validate]
+    KB[(knowledge<br/>OKF bundle)] --> P
     K[checkpoints]
   end
   subgraph Agent[Hermes container - no AWS credentials]
-    PL[plugin rg-triage<br/>tool · session-start board · guards] --- SK[skills rg-triage · rg-investigate · rg-iac-fix · rg-onboard]
+    PL[plugin rg-triage<br/>tool · session-start board · guards] --- SK[skills rg-triage · rg-investigate · rg-iac-fix · rg-onboard · rg-knowledge]
+    KT[dashboard tab Knowledge<br/>review · add · import · graph]
   end
   AWS -- read-only role --> C
   PL -- Unix socket: fixed list of triage commands --> Desk
+  KT -- Unix socket: knowledge and knowledge-edit --> Desk
   K -- S3 or local folder --> D[(Durable storage)]
 ```
 
@@ -32,11 +36,12 @@ flowchart TB
 
 | Piece | What it does |
 | --- | --- |
-| `rg_triage` tool | `digest`, `scan`, `list`, `show`, `fix`, `aws` (one read-only call), `validate`, `decide`, `doctor`, `playbook`, `report` |
+| `rg_triage` tool | `digest`, `scan`, `list`, `show`, `fix`, `aws` (one read-only call), `validate`, `decide`, `doctor`, `onboarding`, `playbook`, `report`, `knowledge` (read-only views) |
 | Session-start hook | puts the current board in front of the agent on the first turn; starts a background refresh when the scan is stale |
 | Guards | blocks file writes outside the proposals folder; blocks reads of credential stores, keys, `.env` and Terraform state; routes every `decide` through Hermes's approval prompt |
 | `/triage` | the board without a model call (interactive chat and gateways) |
-| Skills | `rg-triage` (briefing, priorities, decisions), `rg-investigate` (threat triage), `rg-iac-fix` (code location, diff, validation), `rg-onboard` (accounts, context, schedules) |
+| Skills | `rg-triage` (briefing, priorities, decisions), `rg-investigate` (threat triage), `rg-iac-fix` (code location, diff, validation), `rg-onboard` (accounts, context, schedules), `rg-knowledge` (read, cite and draft knowledge) |
+| Knowledge tab | Hermes dashboard plugin `rg-knowledge`: overview and gaps, browse, review queue, Add form, document import with optional AI drafting, graph. Its backend holds no AWS credentials and changes the bundle only through the desk's `knowledge-edit` command |
 
 The Hermes toolsets enabled are `skills`, `clarify`, `file` (repository reading plus writes to proposals) and
 `rg_triage`. There is no terminal toolset, so the agent cannot run shell commands.
@@ -77,14 +82,15 @@ into the finding's `reasons`:
 | Detection or audit gap (Config.1, CloudTrail.*, GuardDuty.1 …) | +8 |
 | Toxic combination: more than one risk type on the same resource | +10 |
 | One fix (AMI/image/function rebuild) clears ≥100 / ≥1,000 findings | +5 / +8 |
-| Business criticality (account, application tags, env tag) | −10 … +15 |
-| Matches a stated business goal | +5 |
+| Business criticality (reviewed Application/Account concepts, then `triage.yaml`, then env tag) | −10 … +15 |
+| Matches a stated business goal (Security Goal concept or `triage.yaml`) | +1 … +15 (default +5) |
 | Threat with no activity for 30+ days | −10 |
 
 P1 ≥ 70 (act now), P2 ≥ 50 (this week), P3 ≥ 30 (backlog), otherwise P4. Findings that share one fix collapse into
 one issue: the same control across standards, one package across many CVEs and instances, and all 14 CIS CloudWatch
 metric-filter controls. Decisions (acknowledged, investigating, fixing, accepted_risk, false_positive, suppressed,
-resolved) hide or annotate issues; they are local triage records and do not change AWS.
+resolved) hide or annotate issues; they are local triage records and do not change AWS. A reviewed Risk Exception
+concept acts as an `accepted_risk` decision until it expires. Every knowledge effect is cited with the concept path.
 
 ## IaC fixes
 
@@ -116,9 +122,9 @@ remediation playbook. The agent writes a diff, saves it to the proposals folder 
 
 | Well-Architected Agent | RemediGenius-CE |
 |---|---|
-| Agent profile: accounts, Regions, goals | `triage.yaml`: accounts, regions, `goals` with optional boosts |
+| Agent profile: accounts, Regions, goals | `triage.yaml`: accounts, regions; Account and Security Goal knowledge concepts |
 | Execution role + read-only access role per account | audit role / member read roles with `SecurityAudit`; automatic discovery at every scan; `rgtriage onboarding` |
-| Application context: tags and criticality | `applications` (tag match → `mission_critical` … `test_development`), `environment_tag_keys` |
+| Application context: tags and criticality | Application concepts (tag match → `mission_critical` … `test_development`, owner), `environment_tag_keys` |
 | Goal-aligned prioritization | criticality and goal boosts in the score, shown in the reasons |
 | Ready-to-deploy IaC with trade-offs | diff, `terraform validate`, blast radius and rollback; you apply it |
 | Scheduled refresh | scan timer plus a session-start refresh when stale; `security-watch` alerts |

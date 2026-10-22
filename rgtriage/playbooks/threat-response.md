@@ -1,3 +1,21 @@
+---
+type: Playbook
+title: Threat findings (GuardDuty, security CloudWatch alarms)
+description: 'Triage GuardDuty and security alarm findings: who, what, when, expected or not; containment the operator runs.'
+tags:
+- threat
+- guardduty
+- incident
+sources:
+- id: types
+  resource: https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-active.html
+  title: GuardDuty finding types
+  author: aws-documentation
+generated:
+  by: remedigenius-ce/0.3.0
+  at: '2026-10-21T00:00:00Z'
+---
+
 # Threat findings (GuardDuty, security CloudWatch alarms)
 
 GuardDuty detects behavior, not configuration. High `event_count`, recent last-seen, unknown IPs/ASNs and
@@ -23,3 +41,5 @@ a legitimate user running a new tool, script or Terraform also triggers them.
 **Close-out:** expected activity → `rgtriage decide <ref> false_positive --reason "..."`. For recurring benign
 patterns, propose a narrowly scoped suppression rule in IaC (`aws_guardduty_filter` with `action = "ARCHIVE"`,
 criteria on finding type + principal + resource).
+
+**Related:** [guardduty findings](/remedigenius/sources/guardduty.md) · [cloudwatch findings](/remedigenius/sources/cloudwatch.md) · [where to look](/remedigenius/guides/where-to-look.md) · [how the desk works](/remedigenius/guides/how-the-desk-works.md)

@@ -15,6 +15,11 @@ Once an AWS account is connected, it:
 4. **Investigates** with bounded read-only AWS calls (CloudTrail, IAM, EC2, S3 …) and says what it could not see.
 5. **Proposes the fix in your IaC.** It finds the Terraform, CloudFormation or CDK that deployed the resource,
    writes a minimal diff in your repository's style and runs `terraform validate` on a scratch copy. You apply it.
+6. **Knows your organization.** One [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format)
+   bundle holds who owns what, how critical it is, accepted risks, policies and runbooks, next to shipped guides on
+   where to find evidence. Reviewed concepts change priorities, with a citation in every finding. The dashboard
+   **Knowledge** tab is where people add, import (PDF, Word, PowerPoint, Excel), review and explore it as a graph; the
+   agent drafts what it learns for a person to approve.
 
 At scale it shows fixes rather than findings. 40,000 Inspector findings become "rebuild this AMI" and
 "upgrade this package (37 with public exploits)", and a CVE's severity alone never makes it P1.
@@ -25,6 +30,8 @@ flowchart LR
   D -- Unix socket --> H[Hermes agent<br/>profile remedigenius<br/>no AWS credentials]
   H -- chat / alerts --> U[You]
   H -- proposals --> P[Reviewed IaC diff]
+  K[(Knowledge<br/>OKF bundle)] -- reviewed concepts --> D
+  H -- read, cite, draft --> K
   D -- checkpoints --> S[(Durable storage<br/>S3 or local folder)]
 ```
 
@@ -47,11 +54,12 @@ for the five-minute orientation.
   Deployments also use a read-only role (SecurityAudit + ViewOnlyAccess with explicit denies).
 - **The agent never holds AWS credentials.** Only the desk service does; Hermes talks to it over a Unix socket.
 - **No silent changes.** The agent cannot edit your repositories (only a proposals folder), cannot read credential
-  files, and every triage decision goes through Hermes's approval prompt.
+  files, and every triage decision goes through Hermes's approval prompt. Knowledge it learns stays a draft until a
+  person approves it in the Knowledge tab.
 - **Durable state.** Conversations, decisions and scan history are checkpointed to S3 (Spot) or a folder on your
   machine (workstation). A replaced Spot instance or a wiped Docker volume restores itself.
 
-Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md) · [docs/IAM.md](docs/IAM.md) · [docs/LIMITS.md](docs/LIMITS.md)
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) · [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md) · [docs/IAM.md](docs/IAM.md) · [docs/LIMITS.md](docs/LIMITS.md)
 
 ## Validated configuration
 

@@ -1,3 +1,21 @@
+---
+type: Playbook
+title: Software vulnerabilities (Inspector package/code findings on EC2, ECR images, Lambda)
+description: 'Inspector CVE findings: prioritize by exploit, EPSS and reachability; fix in the image or package, not in place.'
+tags:
+- inspector
+- cve
+- vulnerability
+sources:
+- id: inspector
+  resource: https://docs.aws.amazon.com/inspector/latest/user/findings-understanding.html
+  title: Understanding Inspector findings
+  author: aws-documentation
+generated:
+  by: remedigenius-ce/0.3.0
+  at: '2026-10-21T00:00:00Z'
+---
+
 # Software vulnerabilities (Inspector package/code findings on EC2, ECR images, Lambda)
 
 **Prioritize by:** exploit available, EPSS, network reachability, internet-facing workload, fix available.
@@ -15,3 +33,5 @@ A CRITICAL CVE with no reachable path and no exploit can wait behind an exploite
 Inspector rescans automatically on push/patch.
 
 **Trade-offs:** major-version bumps can break the app; run its tests. Always show `installed -> fixed_in`.
+
+**Related:** [inspector findings](/remedigenius/sources/inspector.md) · [where to look](/remedigenius/guides/where-to-look.md) · [how the desk works](/remedigenius/guides/how-the-desk-works.md)

@@ -16,7 +16,7 @@ __pycache__/
 modules/lambda-kiosk/build/
 .venv/
 *.egg-info/
-dist/
+/dist/
 build/
 .rgce/
 playwright-output/

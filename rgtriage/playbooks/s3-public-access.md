@@ -1,3 +1,26 @@
+---
+type: Playbook
+title: S3 public access (S3.1, S3.2, S3.3, S3.8, S3.19, Access Analyzer public S3)
+description: Buckets or accounts that do not block public access, or policies and ACLs that grant access to everyone.
+tags:
+- s3
+- public
+- exposure
+- data
+sources:
+- id: bpa
+  resource: https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html
+  title: Blocking public access to S3
+  author: aws-documentation
+- id: controls
+  resource: https://docs.aws.amazon.com/securityhub/latest/userguide/s3-controls.html
+  title: Security Hub S3 controls
+  author: aws-documentation
+generated:
+  by: remedigenius-ce/0.3.0
+  at: '2026-10-21T00:00:00Z'
+---
+
 # S3 public access (S3.1, S3.2, S3.3, S3.8, S3.19, Access Analyzer public S3)
 
 **Means:** a bucket (or the account) does not block public access, or a bucket policy/ACL
@@ -48,3 +71,5 @@ OwnershipControls:
 **Trade-offs / blast radius:** breaks anonymous consumers (static sites, public downloads,
 third parties using ACL grants). Check CloudFront origins and bucket policy principals first.
 **Verify after:** rescan; the control should move to PASSED after Security Hub re-evaluates (change-triggered, up to ~24h for periodic checks).
+
+**Related:** [securityhub findings](/remedigenius/sources/securityhub.md) · [accessanalyzer findings](/remedigenius/sources/accessanalyzer.md) · [where to look](/remedigenius/guides/where-to-look.md) · [how the desk works](/remedigenius/guides/how-the-desk-works.md)

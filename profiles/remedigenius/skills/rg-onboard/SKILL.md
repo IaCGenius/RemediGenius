@@ -42,15 +42,15 @@ You never deploy roles or run the command yourself; you are read-only.
 The tool blocks every non-read AWS call even if the credentials could write.
 
 ## 3. Business context (changes priorities)
-Ask briefly, one question at a time, only what changes ranking:
-- Which accounts are production / mission critical? → `criticality` per account (discovered accounts can be listed
-  under `accounts:` by `account_id` to override their name or criticality).
-- Which applications matter most and how are they tagged? → `applications: [{name, tags, criticality}]`.
-- Which tag marks environments? → `environment_tag_keys`.
-- Top 1–3 goals in plain words (e.g. "protect customer PII in S3") → `goals` with `boost`
-  (`resource_types`, `categories`, or `signals` such as `public_exposure`, `identity_risk`).
-- Where is the IaC? → `iac_paths` (local clones of Terraform/CloudFormation/CDK repos).
-Show the YAML change, then re-run `scan` so the new context applies.
+Business context lives in the knowledge base (load `rg-knowledge`). Start from `rg_triage action=knowledge view=gaps`
+and ask briefly, one question at a time, only what changes ranking:
+- Which accounts are production / mission critical? → an Account concept draft.
+- Which applications matter most, how are their resources tagged, who owns them? → Application and Team drafts.
+- Top 1–3 goals in plain words (e.g. "protect customer PII in S3") → a Security Goal draft.
+Write drafts under the proposals folder's `knowledge/` and tell the user to approve them in the dashboard
+**Knowledge** tab (or to use its Add form directly); approved concepts apply at the next `scan`.
+`triage.yaml` keeps the technical settings: regions, `iac_paths` (local clones of Terraform/CloudFormation/CDK repos),
+`environment_tag_keys`, sources and limits. Show any YAML change for the user to save.
 
 ## 4. Bring findings to the user without being asked
 - Every new session opens with the attention board (plugin), refreshed in the background when stale.
