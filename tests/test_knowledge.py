@@ -1,6 +1,7 @@
 """Knowledge: OKF v0.2 bundle handling, shipped concepts, what changes triage, write guards, CLI and the Knowledge tab helpers."""
 import importlib.util
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -356,6 +357,88 @@ def test_board_shows_knowledge_line():
     board = digest.markdown(scan)
     assert "Knowledge: 4 organization concepts (3 reviewed) · business context applied to 12 of 40 findings · 2 draft(s) to review · 1 stale" in board
     assert "Knowledge gap: 5 open P1/P2" in board
+
+
+# ------------------------------------------------------------------ the generated wiki view (Hermes WebUI)
+
+def test_wiki_view_is_generated_from_the_bundle(home):
+    knowledge.seed()
+    b = knowledge.bundle()
+    concept(b, "applications/payments.md", {"type": "Application", "title": "Payments", "description": "Card payments.",
+                                            "remedigenius": {"match_tags": {"app": "payments"}}, **REVIEWED}, "Runs in prod.")
+    concept(b, "references/runbook.md", {"type": "Reference", "title": "Runbook", "description": "Imported."})
+    b.log("Creation", "[Payments](/applications/payments.md) by human:alex", day="2026-10-21")
+    dest = home / "rg-wiki"
+    counts = knowledge.export_wiki(dest)
+    assert counts["entities"] == 1 and counts["raw"] == 1 and counts["concepts"] >= 20
+    assert counts["pages"] == counts["entities"] + counts["concepts"] + counts["raw"]
+    page = dest / "entities/applications-payments.md"
+    meta, body = okf.parse(page.read_text(encoding="utf-8"))
+    assert meta["title"] == "Payments" and meta["remedigenius"]["match_tags"] == {"app": "payments"}  # frontmatter kept
+    assert meta["updated_by"].startswith("human:")  # the WebUI shows the reviewer as last writer, not "ai-agent"
+    shipped, _ = okf.parse((dest / "concepts/data-protection.md").read_text(encoding="utf-8"))
+    assert shipped["updated_by"].startswith("remedigenius-ce")
+    assert body.startswith("> Generated from applications/payments.md (human-reviewed). Edit in the dashboard Knowledge tab.")
+    assert "Runs in prod." in body
+    assert (dest / "concepts/data-protection.md").exists() and (dest / "raw/runbook.md").exists()
+    index = (dest / "index.md").read_text(encoding="utf-8")
+    assert "## Application" in index and "applications/payments.md, human-reviewed, stable" in index
+    assert "## Guide" in index and "concepts/" in index and "## Reference" in index
+    assert "Do not edit; edit in the dashboard Knowledge tab." in (dest / "SCHEMA.md").read_text(encoding="utf-8")
+    assert "## [2026-10-21] Creation | /applications/payments.md" in (dest / "log.md").read_text(encoding="utf-8")
+    if os.name == "posix":
+        assert page.stat().st_mode & 0o777 == 0o644 and dest.stat().st_mode & 0o777 == 0o755
+
+
+def test_wiki_view_drops_pages_of_removed_concepts(home):
+    knowledge.seed()
+    b = knowledge.bundle()
+    concept(b, "notes/first.md", {"type": "Note", "title": "First", "description": "x"})
+    dest = home / "rg-wiki"
+    knowledge.export_wiki(dest)
+    assert (dest / "entities/notes-first.md").exists()
+    b.path_of("notes/first.md").unlink()
+    knowledge.export_wiki(dest)
+    assert not (dest / "entities/notes-first.md").exists()
+    assert not any(p.name.startswith(".build-") for p in dest.iterdir())  # the staging folder is gone
+
+
+def test_wiki_export_writes_only_inside_dest_and_never_follows_links(home, tmp_path):
+    b = knowledge.bundle()
+    concept(b, "notes/escape.md", {"type": "Note", "title": "../../outside", "description": "x"})
+    dest = home / "rg-wiki"
+    knowledge.export_wiki(dest)
+    assert all(dest in p.parents for p in dest.rglob("*"))  # nothing escaped the destination
+    assert all(p.is_dir() or p.suffix == ".md" for p in dest.rglob("*"))
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("keep", encoding="utf-8")
+    try:
+        (dest / "raw").symlink_to(outside, target_is_directory=True)
+        (b.root / "notes/link.md").symlink_to(outside / "keep.txt")
+    except OSError:
+        pytest.skip("symlinks need privileges on this OS")
+    knowledge.export_wiki(dest)
+    assert (outside / "keep.txt").read_text(encoding="utf-8") == "keep"  # never written through
+    assert not (dest / "raw/keep.txt").exists() and not (dest / "entities/notes-link.md").exists()
+
+
+def test_wiki_export_failure_never_breaks_a_knowledge_change(home, monkeypatch, capsys):
+    from rgtriage import store
+    (home / "triage.yaml").write_text("name: t\naccounts:\n  - name: desk\n    account_id: '111122223333'\n", encoding="utf-8")
+    findings, _ = prioritize.prioritize([finding()], cli.config.load(), {}, {})
+    store.save_scan({"version": "t", "scanned_at": "2026-10-21T00:00:00Z", "profile": {"name": "t", "accounts": []},
+                     "findings": findings, "coverage": [], "onboarding": {}, "changes": {},
+                     "issues": prioritize.build_issues(findings)})
+    monkeypatch.setenv("RGTRIAGE_WIKI_DIR", str(home / "rg-wiki"))
+
+    def broken(*_args, **_kw):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(knowledge, "export_wiki", broken)
+    assert cli.rescore()["findings"] == 1
+    assert "wiki export failed: OSError: disk full" in capsys.readouterr().err
+    assert not (home / "rg-wiki").exists()
 
 
 # ------------------------------------------------------------------ Knowledge tab backend helpers

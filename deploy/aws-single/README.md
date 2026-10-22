@@ -82,6 +82,12 @@ bash tools/open-remedigenius.sh --webui      # PowerShell: tools\open-remedigeni
 Then open `http://127.0.0.1:9126/`. To leave it out, set `webui = false` and apply. The Hermes API server it uses
 listens only on the private container network, with its own key (`/data/hermes/.remedigenius-api-key`).
 
+Its **Insights → LLM Wiki** card shows a read-only, generated view of the desk's knowledge bundle (`/data/hermes/rg-wiki`
+on the host, `/opt/data/rg-wiki` in the containers): organization concepts under `entities/`, shipped guides and
+playbooks under `concepts/`, imported documents under `raw/`, with an index and the knowledge change log. The desk
+refreshes it after every scan and knowledge change; edits there are overwritten, so change knowledge in the dashboard
+Knowledge tab ([docs/KNOWLEDGE.md](../../docs/KNOWLEDGE.md)).
+
 ## What the stack creates
 
 - **S3 bucket** (private, versioned, TLS-only, SSE-S3). `state/` holds checkpoints (old versions expire after 30 days);
