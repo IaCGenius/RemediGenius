@@ -122,6 +122,19 @@ three times too low; the cron removal parsed the wrong line; a proposed draft pa
 | Offline agent tasks (`deepseek-v4.1-flash`, Acme fixture) | all 21 tasks once: 0.85 overall; the evaluation found a missed accepted-risk check, a guessed guide path and a loose grading pattern, all fixed. The 10 affected tasks re-run: 1.00. Repeats: OIDC verification 3/3, OIDC permissions (policy document, not name) 3/3, accepted risk 3/3 after `show` listed the same issue on other resources, SCP question 1.0 / 0.8 / 0.8 (correct simulator verdict; the unread SCP text was not always named) |
 | AWS Spot, live account, through the dashboard chat | rescan reclassified a GitHub OIDC role from HIGH "without a repository condition" to MEDIUM "any branch, tag, environment or pull request of one repository", matching its trust policy. Verification answered from one `iam get_role` read with the Evidence line, no invented change timeline. "Is it read-only?" read the inline policy and used the IAM simulator (organization decision included). "Which roles can be assumed from outside?" listed every role, matched the Access Analyzer findings and found an unconditional cross-account trust. An explanation-only request on open SSH checked attachments (none), said "reachable on paper", and proposed no fix |
 
+## Trust and closure (issues #4–#10, validated 2026-10-22, `deepseek-v4.1-flash-1017`)
+
+| Check | Result |
+| --- | --- |
+| Unit tests | 176 passed, 1 skipped: exposure findings (OCSF parsing, AWS severity floor, not-enabled reporting, old boto3), attack sequences, labelled desk-derived signals, unsupported evidence ids flagged, coverage headline, fix-record lifecycle (decided → PR → deployed → verified → reopened, stalled; unknown when the source was not read), proof reads refuse writes, business-context basics, one-click `remember`, `decide` fix fields, local vs third-party model endpoint |
+| Desk checks | 19/19 |
+| Terraform | `terraform validate` passes with the new `data_notice` output |
+| AWS Spot, live account | board headline: "Inspected: 1 account · 1 of 17 enabled region(s) · 6 of 8 sources read. Not inspected, resources found: one region (1 VPC). Not covered: 3 account(s)." Security Hub exposure analysis reported as not enabled (blind spot), not silence |
+| Live chat | "Is my environment secure?" → not as it stands, with the coverage limits quoted. "Was data exfiltrated?" → not established, evidence ids on every observed fact, the logging boundary named, the hypothesis labelled, one question to the user. "Where does my data go?" → third-party provider, from `doctor`, with what is sent |
+
+Not validated live: AWS Security Hub exposure findings (the test account does not have the current Security Hub enabled;
+parsing is tested with a documented-shape fixture), a full fix-record cycle through a real PR and deployment.
+
 ## Not covered by this release's validation
 
 - Discovery of a *different* account whose read role works (exercised by unit tests; this validation had no second
