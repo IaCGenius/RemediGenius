@@ -1,6 +1,8 @@
 # RemediGenius Community Edition (RemediGenius-CE) Hermes profile `remedigenius`.
 # Spot and the Docker workstation install it with `hermes profile install`;
 # tools/install_local_hermes.py merges only the keys below into an existing Hermes.
+# Schema version of the pinned Hermes image; without it Hermes treats the file as pre-v12 and never migrates it.
+_config_version: 50
 model:
   default: __MODEL_NAME__
   provider: custom
