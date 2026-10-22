@@ -38,6 +38,8 @@ def test_desk_service_is_hardened_checkpoints_to_s3_and_watches_spot(host):
                       "ReadWritePaths=/data/rgtriage", "RuntimeDirectoryPreserve=yes", "PYTHONPATH=/opt/rgtriage/src"):
         assert directive in desk
     assert "serve --socket /run/rgtriage/rgtriage.sock --durable s3://bucket-x/state" in desk
+    assert "Environment=RGTRIAGE_WIKI_DIR=/data/hermes/rg-wiki" in desk  # generated wiki view for the WebUI
+    assert "ReadWritePaths=/data/rgtriage -/data/hermes/rg-wiki" in desk  # optional path: never blocks the desk
     assert "--home hermes=/data/hermes --home desk=/data/rgtriage" in desk and "--spot" in desk
     assert "ExecStopPost=" in desk and "durable checkpoint" in desk  # final checkpoint on shutdown
     assert "OnUnitActiveSec=4h" in units["remedigenius-scan.timer"]
@@ -67,6 +69,7 @@ def test_sync_profile_writes_socket_mode_and_watch_script(host, tmp_path, monkey
     local = json.loads((profile / "plugins/rg-triage/local.json").read_text())
     assert local == {"socket": "/run/rgtriage/rgtriage.sock", "home": "/data/rgtriage", "proposals": "/opt/data/proposals"}
     assert (profile / "skills/rg-iac-fix/SKILL.md").exists()
+    assert (tmp_path / "rg-wiki").is_dir()  # the desk writes the WebUI's wiki view here
     script = (profile / "scripts/rgtriage-watch.py").read_text()
     compile(script, "rgtriage-watch.py", "exec")
     assert '"watch"' in script and "/run/rgtriage/rgtriage.sock" in script
@@ -128,6 +131,7 @@ def test_webui_is_pinned_disclosed_private_and_uses_the_profile_gateway(host):
     assert ":/webui:ro" in webui and "--user 10000:10000" in webui
     assert "-p 127.0.0.1:8787:8787" in webui and "0.0.0.0:8787" not in webui.split("HERMES_WEBUI_HOST")[0]
     assert "HERMES_WEBUI_CHAT_BACKEND=gateway" in webui and "/p/remedigenius" in webui
+    assert "-e WIKI_PATH=/opt/data/rg-wiki" in webui  # Insights -> LLM Wiki reads the desk's generated view
     assert "--env-file /run/remedigenius/webui.env" in webui and "PASSWORD=" not in webui  # secrets only in the env file
     assert "MIT" in webui and "nesquena/hermes-webui" in webui
     hermes = host.units(CFG)["remedigenius-hermes.service"]

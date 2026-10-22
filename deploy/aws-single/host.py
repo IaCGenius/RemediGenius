@@ -23,6 +23,7 @@ ROOT = Path('/opt/remedigenius')          # root-only: config, source archive
 SOURCE = ROOT / 'source'
 UID = 10000                               # Hermes container user; also the desk service user
 HERMES_HOME = Path('/data/hermes')
+WIKI = HERMES_HOME / 'rg-wiki'            # generated, read-only view of the knowledge bundle for the WebUI
 DESK = Path('/data/rgtriage')
 IAC = Path('/data/iac')
 RUNDIR = Path('/run/rgtriage')
@@ -259,7 +260,7 @@ def sync_profile(source: Path, hermes_home: Path):
                                                 'profile': PROFILE, 'improve': '/opt/data/rg-improve',
                                                 'package': '/opt/remedigenius-package'}))
     folders = [hermes_home / 'proposals' / 'knowledge', hermes_home / 'knowledge-inbox', hermes_home / 'knowledge-files',
-               hermes_home / 'rg-improve', hermes_home / 'rg-traces']
+               hermes_home / 'rg-improve', hermes_home / 'rg-traces', hermes_home / WIKI.name]
     for folder in folders:
         folder.mkdir(parents=True, exist_ok=True)
     # Skill improvements a person approved survive instance replacement when made for this shipped version.
@@ -278,9 +279,10 @@ def units(cfg: dict) -> dict:
            f'Environment=HOME={DESK.as_posix()}/.home\nEnvironment=AWS_DEFAULT_REGION={cfg["region"]}\n'
            f'Environment=AWS_STS_REGIONAL_ENDPOINTS=regional\nEnvironment=TF_PLUGIN_CACHE_DIR={DESK.as_posix()}/.home/plugins\n'
            f'Environment=REMEDIGENIUS_MODEL_NAME={cfg.get("model_name") or ""}\n'
-           f'Environment=REMEDIGENIUS_MODEL_BASE_URL={cfg.get("model_base_url") or ""}\n')
+           f'Environment=REMEDIGENIUS_MODEL_BASE_URL={cfg.get("model_base_url") or ""}\n'
+           f'Environment=RGTRIAGE_WIKI_DIR={WIKI.as_posix()}\n')
     harden = (f'User={UID}\nGroup={UID}\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\n'
-              f'ReadWritePaths={DESK.as_posix()}\n')
+              f'ReadWritePaths={DESK.as_posix()} -{WIKI.as_posix()}\n')
     python = (VENV / 'bin/python').as_posix()
     homes = f'--home hermes={HERMES_HOME.as_posix()} --home desk={DESK.as_posix()}'
     store = durable_url(cfg)
@@ -340,7 +342,7 @@ Requires=docker.service
 ExecStartPre=-/usr/bin/docker rm -f {WEBUI_CONTAINER}
 ExecStartPre=-/usr/bin/docker volume rm -f {WEBUI_CONTAINER}-src
 ExecStartPre=/usr/bin/docker run --rm --entrypoint sh -v {WEBUI_CONTAINER}-src:/webui {WEBUI_IMAGE} -c "cp -a /apptoo/. /webui/ && chmod -R a+rX,go-w /webui"
-ExecStart=/usr/bin/docker run --rm --name {WEBUI_CONTAINER} --network {CONTAINER} --user {UID}:{UID} --entrypoint /opt/hermes/.venv/bin/python --env-file /run/remedigenius/webui.env -e HOME=/opt/data -e HERMES_HOME=/opt/data -e HERMES_WEBUI_STATE_DIR=/opt/data/webui -e HERMES_WEBUI_HOST=0.0.0.0 -e HERMES_WEBUI_PORT=8787 -e HERMES_WEBUI_SKIP_ONBOARDING=1 -e HERMES_WEBUI_CHAT_BACKEND=gateway -e HERMES_WEBUI_GATEWAY_BASE_URL=http://{CONTAINER}:{API_PORT}/p/{PROFILE} -e HERMES_API_URL=http://{CONTAINER}:{API_PORT} -e HERMES_WEBUI_AGENT_DIR=/opt/hermes -e AWS_EC2_METADATA_DISABLED=true -w /webui -v {HERMES_HOME.as_posix()}:/opt/data -v {WEBUI_CONTAINER}-src:/webui:ro -p 127.0.0.1:8787:8787 --memory 1024m --pids-limit 512 {cfg['image']} /webui/server.py
+ExecStart=/usr/bin/docker run --rm --name {WEBUI_CONTAINER} --network {CONTAINER} --user {UID}:{UID} --entrypoint /opt/hermes/.venv/bin/python --env-file /run/remedigenius/webui.env -e HOME=/opt/data -e HERMES_HOME=/opt/data -e HERMES_WEBUI_STATE_DIR=/opt/data/webui -e HERMES_WEBUI_HOST=0.0.0.0 -e HERMES_WEBUI_PORT=8787 -e HERMES_WEBUI_SKIP_ONBOARDING=1 -e HERMES_WEBUI_CHAT_BACKEND=gateway -e HERMES_WEBUI_GATEWAY_BASE_URL=http://{CONTAINER}:{API_PORT}/p/{PROFILE} -e HERMES_API_URL=http://{CONTAINER}:{API_PORT} -e HERMES_WEBUI_AGENT_DIR=/opt/hermes -e WIKI_PATH=/opt/data/rg-wiki -e AWS_EC2_METADATA_DISABLED=true -w /webui -v {HERMES_HOME.as_posix()}:/opt/data -v {WEBUI_CONTAINER}-src:/webui:ro -p 127.0.0.1:8787:8787 --memory 1024m --pids-limit 512 {cfg['image']} /webui/server.py
 ExecStop=/usr/bin/docker stop -t 20 {WEBUI_CONTAINER}
 Restart=always
 RestartSec=10
@@ -438,6 +440,8 @@ def main():
     restore_state(cfg)
     write_desk_profile(cfg)
     network()
+    WIKI.mkdir(parents=True, exist_ok=True)  # before the desk starts: its ReadWritePaths names this folder
+    os.chown(WIKI, UID, UID)
     model_key = ''
     if cfg.get('model_secret'):
         model_key = run('aws', 'secretsmanager', 'get-secret-value', '--secret-id', cfg['model_secret'], '--region',
