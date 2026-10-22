@@ -191,6 +191,12 @@ def log():
     return _desk_json(["knowledge", "log", "--limit", "100", "--json"])
 
 
+@router.get("/fixes")
+def fixes():
+    """Fix records from decision to verified closure (read-only)."""
+    return _desk_json(["fixes", "--json"])
+
+
 @router.get("/kinds")
 def kinds():
     return _desk_json(["knowledge", "kinds", "--json"])

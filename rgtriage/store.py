@@ -37,12 +37,15 @@ def load_decisions() -> dict:
     return _read(config.home() / "decisions.json", {})
 
 
-def save_decision(key: str, status: str, reason: str, by: str = "operator") -> dict:
+def save_decision(key: str, status: str, reason: str, by: str = "operator", fix: dict | None = None) -> dict:
     if status not in DECISION_STATUSES:
         raise ValueError(f"status must be one of {', '.join(DECISION_STATUSES)}")
     decisions = load_decisions()
+    previous = decisions.get(key) or {}
     decisions[key] = {"status": status, "reason": reason, "by": by,
                       "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    if fix or previous.get("fix"):  # a fix record survives later decisions on the same finding
+        decisions[key]["fix"] = fix or previous["fix"]
     _write(config.home() / "decisions.json", decisions)
     return decisions[key]
 

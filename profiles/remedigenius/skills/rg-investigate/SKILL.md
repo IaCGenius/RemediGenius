@@ -30,7 +30,12 @@ every read; IAM, STS and Organizations events are in us-east-1. Evidence guide:
 3. Read CloudTrail fields that decide the case: `userAgent` (Terraform? console browser? aws-cli? SDK
    in a script?), `sourceIPAddress` (matches the user's other activity?), `sessionCredentialFromConsole`,
    `mfaAuthenticated`, error codes, time pattern.
-4. Conclude in this shape:
+4. Keep **could** (what configuration allows) apart from **did** (what logs show). Exfiltration, lateral movement
+   and "before the history" questions usually end at an evidence boundary: say "not established", name it, and give
+   the next step from `remedigenius/guides/beyond-the-desk.md` (an Athena or CloudTrail Lake query for the operator to
+   run, S3 data events, flow logs, Detective, AWS Security Incident Response for an active incident). Attack-path
+   reasoning is a hypothesis unless a read or an AWS exposure finding supports it.
+5. Conclude in this shape:
    ```
    Verdict: likely expected | suspicious | compromise indicators | can't tell yet
    Evidence: 3 bullets with times, IPs, user agents, APIs (observed, quoted from the reads)
@@ -39,7 +44,7 @@ every read; IAM, STS and Organizations events are in us-east-1. Evidence guide:
    Do now: the exact commands the operator should run (containment, e.g. deactivate/delete the exposed key, revoke sessions) or "nothing", and the long-term fix (load rg-iac-fix when code is involved). Name the playbook you followed.
    ```
 <!-- PROTECTED_START -->
-5. If only the user can confirm ("was this you running terraform at 14:02 UTC?"), ask once. Propose
+6. If only the user can confirm ("was this you running terraform at 14:02 UTC?"), ask once. Propose
    the decision (`false_positive` + reason if expected; `investigating` otherwise) and record it with
    `decide` only after the user confirms. Never record decisions in unattended/scheduled runs.
 <!-- PROTECTED_END -->

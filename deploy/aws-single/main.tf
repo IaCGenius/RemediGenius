@@ -269,6 +269,11 @@ resource "aws_autoscaling_group" "host" {
   depends_on = [aws_iam_role_policy.host, aws_iam_role_policy_attachment.ssm, aws_s3_bucket_public_access_block.data, aws_s3_bucket_versioning.data]
 }
 
+output "data_notice" {
+  description = "Read before first use."
+  value       = "RemediGenius-CE runs on Hermes with the model provider you configure. Findings, resource identifiers, IaC excerpts, knowledge and chat are sent to that provider; RemediGenius-CE runs no model of its own and stores nothing elsewhere. One operator, one organization per installation (not multi-tenant). Details: docs/DATA-FLOW.md. Model endpoint: ${var.model_base_url == "" ? "set in the dashboard" : var.model_base_url}"
+}
+
 output "bucket" {
   value = aws_s3_bucket.data.id
 }

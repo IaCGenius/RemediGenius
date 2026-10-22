@@ -51,7 +51,13 @@ answer that (rg-triage) and offer the fix.
    It runs init (no backend) + validate + fmt on a temp copy. Fix errors from the real diagnostics
    (up to 3 attempts) and say "validated (syntax/schema), not planned". If terraform is missing,
    say it was not validated.
-7. Offer to record `decide status=fixing` with the user's plan (only after they confirm).
+7. Define the **proof of done** with the fix: the decisive read-only call and the values it must return once the
+   change is deployed (e.g. `s3 get_public_access_block` → `PublicAccessBlockConfiguration.BlockPublicPolicy: true`).
+   Say how the change reaches AWS (their PR and CI/CD; you never apply it).
+8. After the user confirms, record `decide status=fixing` with `owner` and `proof` (and `pr` once they have one). The
+   desk then tracks it: in PR → deployed (proof passes) → verified (proof passes and the AWS finding is gone), or
+   reopened / stalled. Show progress with `rg_triage action=fixes`. Terraform validate is syntax and schema only; the
+   proof read is what shows the fix worked.
 
 ## When there is no IaC
 Say so plainly. Give the operator CLI/console fix from the playbook now, plus a code snippet to bring

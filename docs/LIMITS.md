@@ -22,6 +22,12 @@ reaches your model provider, for every change you make to your cloud, and for AW
   only applied after a person approves them. See [KNOWLEDGE.md](KNOWLEDGE.md).
 - **Investigations are bounded.** CloudTrail `LookupEvents` covers 90 days of management events per region. S3/Lambda
   data events are not visible through it; the agent says so.
+- **No detectors of its own.** The desk ranks what your AWS services report where it looks (the board's
+  "Inspected:" line) plus live checks on request. Regions with resources outside the scan scope are listed as not
+  inspected. AWS Security Hub exposure findings are used when the current Security Hub is enabled; otherwise ranking uses
+  the desk's own combination rules, labelled as such. See [AWS-CAPABILITIES.md](AWS-CAPABILITIES.md).
+- **Fix tracking is evidence-based, not deployment.** A fix record closes when its proof-of-done read passes and the
+  AWS finding is gone; the desk never applies changes and cannot see your CI/CD.
 - **Evidence has known gaps.** Service control and resource control policy texts are readable only from the management
   or a delegated administrator account; from a member account the IAM simulator's verdict is the evidence. Network
   reachability is assembled from security groups, routes, NACLs and load balancers (Reachability Analyzer is not run).

@@ -36,6 +36,24 @@ explained, with the code change that fixes them.
   tab (Hermes dashboard plugin) has overview and gaps, browse, review, a guided Add form, document import (PDF, Word,
   PowerPoint, Excel through markitdown, installed on first use) with optional AI drafting that shows the token
   estimate first, and a graph view. See [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md).
+- **Trust and closure (issues #4–#10):**
+  - Evidence: answers cite evidence ids for observed facts; the desk flags cited ids it never returned. When evidence
+    does not settle a question the agent says "not confirmed" (and what would confirm it) or asks you. Desk-derived
+    signals are labelled ("path not verified", "desk heuristic").
+  - Coverage: every board starts with what was inspected (accounts, regions of enabled, sources) and lists regions
+    with resources outside the scan scope; scope can be confirmed once and recorded.
+  - Current AWS signals: Security Hub exposure findings (OCSF, `GetFindingsV2`) with AWS's traits, attack path and
+    remediation; AWS Critical/High exposures and GuardDuty attack sequences are never ranked lower than AWS rates them;
+    Access Analyzer internal access. boto3 ≥ 1.42. Capability matrix: [docs/AWS-CAPABILITIES.md](docs/AWS-CAPABILITIES.md).
+  - Could vs did: configuration answers what could happen, logs what did; beyond the evidence the agent names the
+    boundary and hands off (new guide "Beyond the desk's evidence" with Athena / CloudTrail Lake queries).
+  - Fix records: deciding to fix starts a record with owner, PR and a proof of done; the desk advances it at every scan
+    (in PR → deployed → verified, reopened, stalled) and shows it on the board and in a Fixes view.
+  - Business context: the board shows "N of 5 basics set"; the agent prefills account, application, owner, IaC and
+    policy suggestions from tags, Organizations and CODEOWNERS; facts you state in chat become active with one click;
+    batch approve in Review.
+  - Data flow: the installer and the dashboard show where data goes, once; `doctor` says whether the model endpoint is
+    local or third-party ([docs/DATA-FLOW.md](docs/DATA-FLOW.md)).
 - **Answers from live evidence:** a finding is a lead, not proof. Every AWS security question (explain or verify a
   finding, or a question without one, such as "which roles can be assumed from outside?") follows one method: scope,
   the smallest read that decides it, stop when supported, and an answer split into observed, inferred and gaps.

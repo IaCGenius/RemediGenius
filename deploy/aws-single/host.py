@@ -267,7 +267,9 @@ def sync_profile(source: Path, hermes_home: Path):
 def units(cfg: dict) -> dict:
     env = (f'Environment=RGTRIAGE_HOME={DESK.as_posix()}\nEnvironment=PYTHONPATH={CODE.as_posix()}\n'
            f'Environment=HOME={DESK.as_posix()}/.home\nEnvironment=AWS_DEFAULT_REGION={cfg["region"]}\n'
-           f'Environment=AWS_STS_REGIONAL_ENDPOINTS=regional\nEnvironment=TF_PLUGIN_CACHE_DIR={DESK.as_posix()}/.home/plugins\n')
+           f'Environment=AWS_STS_REGIONAL_ENDPOINTS=regional\nEnvironment=TF_PLUGIN_CACHE_DIR={DESK.as_posix()}/.home/plugins\n'
+           f'Environment=REMEDIGENIUS_MODEL_NAME={cfg.get("model_name") or ""}\n'
+           f'Environment=REMEDIGENIUS_MODEL_BASE_URL={cfg.get("model_base_url") or ""}\n')
     harden = (f'User={UID}\nGroup={UID}\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\n'
               f'ReadWritePaths={DESK.as_posix()}\n')
     python = (VENV / 'bin/python').as_posix()

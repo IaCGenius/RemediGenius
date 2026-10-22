@@ -231,6 +231,8 @@ def normalize_guardduty(f: dict) -> dict:
     finding["signals"]["active_threat"] = True
     finding["signals"]["event_count"] = svc.get("Count", 1)
     ftype = f.get("Type", "")
+    if ftype.startswith("AttackSequence:"):  # Extended Threat Detection: GuardDuty correlated several steps of one attack
+        finding["signals"]["attack_sequence"] = True
     if "RootCredentialUsage" in ftype or (f.get("Resource", {}).get("AccessKeyDetails") or {}).get("UserType") == "Root":
         finding["signals"]["identity_risk"] = True
         finding["signals"]["root_usage"] = True
@@ -521,7 +523,7 @@ def collect_accessanalyzer(session, account, region, opts):
         raise _Disabled("No active IAM Access Analyzer in this region")
     findings = []
     for analyzer in analyzers:
-        external = analyzer["type"] in ("ACCOUNT", "ORGANIZATION")
+        external = analyzer["type"] in ("ACCOUNT", "ORGANIZATION")  # internal/unused analyzers: summary only
         raw = paginate(aa, "list_findings_v2", "findings", limit, analyzerArn=analyzer["arn"],
                        filter={"status": {"eq": ["ACTIVE"]}})
         for f in raw:
@@ -535,11 +537,15 @@ def collect_accessanalyzer(session, account, region, opts):
                               "actions": (full.get("action") or [])[:8], "condition": full.get("condition")}
                 except (ClientError, KeyError):
                     detail = {}
-                if GITHUB_OIDC in json.dumps((detail.get("principal") or {}).get("Federated", ""))                         and f.get("resourceType") == "AWS::IAM::Role":
+                if GITHUB_OIDC in json.dumps((detail.get("principal") or {}).get("Federated", "")) \
+                        and f.get("resourceType") == "AWS::IAM::Role":
                     detail.update(_role_trust(session, region, resource_name(f.get("resource", ""))))
             public = bool(detail.get("is_public"))
             if kind == "ExternalAccess":
                 sev, title, public = classify_external_access(rtype, resource_name(f.get("resource", "")), detail, public)
+            elif kind == "InternalAccess":
+                sev, title = "MEDIUM", (f"{rtype or 'Resource'} {resource_name(f.get('resource', ''))} is accessible to "
+                                        "principals inside your organization or account (internal access)")
             else:
                 sev, title = "LOW", f"{kind}: unused access on {resource_name(f.get('resource', ''))}"
             finding = base_finding(
@@ -647,8 +653,61 @@ def collect_health(session, account, region, opts):
     return findings, {}
 
 
+# ---------------------------------------------------------------- Security Hub exposure findings (OCSF)
+
+OCSF_SEVERITY = {6: "CRITICAL", 5: "CRITICAL", 4: "HIGH", 3: "MEDIUM", 2: "LOW", 1: "INFORMATIONAL", 0: "INFORMATIONAL"}
+EXPOSURE_FILTER = {"CompositeFilters": [{"StringFilters": [
+    {"FieldName": "class_name", "Filter": {"Value": "Exposure", "Comparison": "EQUALS"}}]}]}
+
+
+def normalize_exposure(f: dict, region: str) -> dict:
+    """An AWS Security Hub exposure finding: AWS's own correlation of reachability, vulnerabilities, misconfiguration,
+    permissions and data sensitivity. Fields follow OCSF; anything else is kept as evidence, not interpreted."""
+    info = f.get("finding_info") or {}
+    cloud = f.get("cloud") or {}
+    resources = f.get("resources") or [{}]
+    primary = resources[0] or {}
+    severity = OCSF_SEVERITY.get(f.get("severity_id"), str(f.get("severity") or "MEDIUM").upper())
+    finding = base_finding(
+        "securityhub-exposure", str(info.get("uid") or f.get("uid") or json.dumps(info, sort_keys=True)[:300]),
+        product="Security Hub exposure", account=str((cloud.get("account") or {}).get("uid") or ""),
+        region=cloud.get("region") or region, title=info.get("title") or "Security Hub exposure finding",
+        description=str(info.get("desc") or "")[:1500], severity=severity, category="exposure", type="Exposure",
+        first_seen=str(info.get("created_time_dt") or info.get("first_seen_time_dt") or ""),
+        last_seen=str(info.get("modified_time_dt") or info.get("last_seen_time_dt") or ""),
+        console_url=f"https://{region}.console.aws.amazon.com/securityhub/v2/home?region={region}",
+        remediation={"text": str((f.get("remediation") or {}).get("desc") or "")[:2000],
+                     "url": "https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings.html"},
+    )
+    finding["resource"] = {"type": primary.get("type", ""), "id": primary.get("uid", ""),
+                           "name": primary.get("name") or resource_name(primary.get("uid", "")), "tags": {}}
+    finding["signals"]["aws_exposure"] = True
+    # AWS's correlated evidence (traits, related resources, attack path) travels with the finding as AWS wrote it.
+    keep = {k: v for k, v in f.items() if k not in ("metadata", "raw_data", "unmapped", "finding_info", "cloud", "remediation")}
+    finding["context"]["exposure"] = _trim({"types": info.get("types"), **keep}, 4000)
+    return finding
+
+
+def collect_securityhub_exposure(session, account, region, opts):
+    sh = aws.client(session, "securityhub", region)
+    if not hasattr(sh, "describe_security_hub_v2"):
+        raise _Disabled("this boto3 has no Security Hub V2 APIs (needs boto3 >= 1.42); exposure findings not read")
+    try:
+        sh.describe_security_hub_v2()
+    except ClientError as exc:
+        if aws.error_code(exc) in ("ResourceNotFoundException", "ConflictException", "InvalidAccessException"):
+            raise _Disabled("The current AWS Security Hub (exposure analysis, attack paths) is not enabled in this region; "
+                            "ranking uses the desk's own combination rules instead") from exc
+        raise
+    raw, more = paginate_ex(sh, "get_findings_v2", "Findings", opts["limit"], Filters=EXPOSURE_FILTER)
+    findings = [normalize_exposure(f, region) for f in raw
+                if str(f.get("status") or "").lower() not in ("resolved", "suppressed", "archived")]
+    return findings, {"truncated": more}
+
+
 COLLECTORS = {
-    "securityhub": collect_securityhub, "guardduty": collect_guardduty, "inspector": collect_inspector,
+    "securityhub": collect_securityhub, "securityhub-exposure": collect_securityhub_exposure,
+    "guardduty": collect_guardduty, "inspector": collect_inspector,
     "accessanalyzer": collect_accessanalyzer, "config": collect_config, "cloudwatch": collect_cloudwatch,
     "health": collect_health,
 }
@@ -747,6 +806,39 @@ def collect(profile: dict, sources: list[str] | None = None, progress=None,
 
     run_all(hub_jobs, hub_opts)
     return dedupe(findings, coverage), coverage
+
+
+# ---------------------------------------------------------------- footprint (what exists outside the scan scope)
+
+FOOTPRINT_PROBES = (
+    ("ec2", "describe_instances", {"MaxResults": 50}, lambda r: sum(len(x.get("Instances", [])) for x in r.get("Reservations", [])), "instances"),
+    ("ec2", "describe_vpcs", {"Filters": [{"Name": "is-default", "Values": ["false"]}]}, lambda r: len(r.get("Vpcs", [])), "VPCs"),
+    ("lambda", "list_functions", {"MaxItems": 50}, lambda r: len(r.get("Functions", [])), "functions"),
+    ("rds", "describe_db_instances", {"MaxRecords": 50}, lambda r: len(r.get("DBInstances", [])), "databases"),
+)
+
+
+def footprint(session, account: dict) -> dict:
+    """Enabled regions of an account and, for regions outside the scan scope, whether anything runs there.
+    Lists and counts only (first page); a region with resources but no scan is a blind spot, never silence."""
+    regions = sorted(r["RegionName"] for r in aws.client(session, "ec2", "us-east-1").describe_regions()["Regions"])
+    scoped = set(account["regions"])
+
+    def probe(region):
+        found = {}
+        for service, op, params, count, label in FOOTPRINT_PROBES:
+            try:
+                n = count(getattr(aws.client(session, service, region), op)(**params))
+            except (ClientError, BotoCoreError):
+                continue
+            if n:
+                found[label] = n
+        return region, found
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        outside = {r: f for r, f in pool.map(probe, [r for r in regions if r not in scoped]) if f}
+    return {"enabled_regions": regions, "scanned_regions": sorted(scoped & set(regions) or scoped),
+            "unscanned_with_resources": outside, "checked_at": now_iso()}
 
 
 def dedupe(findings: list[dict], coverage: list[dict]) -> list[dict]:

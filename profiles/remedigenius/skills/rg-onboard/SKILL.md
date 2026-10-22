@@ -48,7 +48,28 @@ You never deploy roles or run the command yourself; you are read-only.
 The tool blocks every non-read AWS call even if the credentials could write.
 <!-- PROTECTED_END -->
 
-## 3. Business context (changes priorities)
+## 2a. Confirm the scope once
+The board's "Inspected:" line and `footprint` say which regions are enabled and which hold resources outside the scan.
+Show the user: accounts read fully, findings-only, not covered; regions scanned; regions with resources not scanned.
+Ask once: "Are these all your accounts and regions that matter?" Record the answer as a Note concept
+(`knowledge/notes/scope.md`: what is in scope, what is deliberately out, who confirmed, the date) and call
+`rg_triage action=remember path=<draft>`. If they want more regions, show the `regions:` change for `triage.yaml`.
+
+## 3. Business context in ten minutes (changes priorities)
+When the board says "Business context: N of 5 basics set", offer this. Prefill from read-only evidence, then ask the
+user to confirm in a few short answers; each confirmed fact becomes a draft plus `remember` (one click each):
+1. Accounts: `organizations list_accounts` (management or delegated account) or the configured accounts. Ask which
+   are production / mission critical → Account concepts.
+2. Critical applications: `resourcegroupstaggingapi get_tag_keys`, then `get_tag_values` for keys like `app`,
+   `Application`, `Project`, `service`. Suggest the values behind the most findings; ask for the top 1–3 →
+   Application concepts with `match_tags`.
+3. Owners: `owner`/`team` tag values and CODEOWNERS in the configured IaC repositories (`read_file`); ask for a
+   contact per application → Team concepts.
+4. IaC locations: `rg_triage action=doctor` lists them; if none, show the `iac_paths` change for `triage.yaml`.
+5. One policy: offer "no SSH from the internet" or "production buckets never public" → Policy concept.
+Keep it to these five; more can come later. Do not ask about anything the evidence already answers.
+
+## 3b. Business context, the long form
 Business context lives in the knowledge base (load `rg-knowledge`). Start from `rg_triage action=knowledge view=gaps`
 and ask briefly, one question at a time, only what changes ranking:
 - Which accounts are production / mission critical? → an Account concept draft.

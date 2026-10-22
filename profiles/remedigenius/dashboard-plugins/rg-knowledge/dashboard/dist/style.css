@@ -143,3 +143,7 @@
 .rgk-up { color: var(--rgk-ok); font-weight: 600; }
 .rgk-down { color: var(--rgk-bad); font-weight: 600; }
 .rgk-card h4 { margin: 10px 0 4px; font-size: 13px; }
+
+.rgk-kanban { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.rgk-kanban-col { display: flex; flex-direction: column; gap: 6px; }
+.rgk-kanban-card { border: 1px solid var(--rgk-border, #8884); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
