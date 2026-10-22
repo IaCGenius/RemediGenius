@@ -119,3 +119,17 @@ def test_org_wide_member_role_is_limited_to_the_organization():
     # The instance role's own organization, resolved by IAM at request time: nothing to configure,
     # and no access at all when the account is not in an organization.
     assert '"aws:ResourceOrgID" = "$${aws:PrincipalOrgID}"' in iam
+
+
+def test_webui_is_pinned_disclosed_private_and_uses_the_profile_gateway(host):
+    webui = host.units(CFG)["remedigenius-webui.service"]
+    assert "ghcr.io/nesquena/hermes-webui:0.52.492@sha256:" in host.WEBUI_IMAGE and host.WEBUI_IMAGE in webui
+    assert "-p 127.0.0.1:8787:8787" in webui and "0.0.0.0:8787" not in webui.split("HERMES_WEBUI_HOST")[0]
+    assert "HERMES_WEBUI_CHAT_BACKEND=gateway" in webui and "/p/remedigenius" in webui
+    assert "--env-file /run/remedigenius/webui.env" in webui and "PASSWORD=" not in webui  # secrets only in the env file
+    assert "MIT" in webui and "nesquena/hermes-webui" in webui
+    hermes = host.units(CFG)["remedigenius-hermes.service"]
+    assert "8642" not in hermes  # the API server is not published on the host
+    notice = (ROOT / "NOTICE").read_text(encoding="utf-8")
+    assert "https://github.com/nesquena/hermes-webui" in notice and "MIT" in notice and "0.52.492" in notice
+    assert 'variable "webui"' in (ROOT / "deploy/aws-single/main.tf").read_text(encoding="utf-8")

@@ -85,6 +85,11 @@ variable "scan_interval_hours" {
     error_message = "Choose a whole number of hours from 1 to 168."
   }
 }
+variable "webui" {
+  type        = bool
+  default     = true
+  description = "Also run the community Hermes WebUI (MIT, github.com/nesquena/hermes-webui, pinned) behind the same SSM tunnel and login."
+}
 variable "watch_deliver" {
   type        = string
   default     = "local"
@@ -201,7 +206,7 @@ locals {
     archive_key         = aws_s3_object.source.key, archive_sha256 = filesha256(var.source_zip),
     model_secret        = var.model_secret_arn, model_name = var.model_name, model_base_url = var.model_base_url,
     scan_interval_hours = var.scan_interval_hours, watch_deliver = var.watch_deliver,
-    container_memory_mb = var.container_memory_mb,
+    container_memory_mb = var.container_memory_mb, webui = var.webui,
     image               = "nousresearch/hermes-agent:stable@sha256:444b42594e7f467425872fc35e077a227d377f0fe0726bc818706d62175fad8b"
   }
 }

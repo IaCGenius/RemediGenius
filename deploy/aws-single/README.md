@@ -49,6 +49,7 @@ terraform apply -var-file=local.tfvars
 | `running` | `true` | `false` scales to zero; state stays in S3 |
 | `spot_instance_types` / `container_memory_mb` | `t3.large, t3a.large` / `6144` | |
 | `public_ip` | `true` | `false` for a private subnet with NAT |
+| `webui` | `true` | also run the community Hermes WebUI (MIT, pinned) behind the same tunnel and login |
 | `delete_data_on_destroy` | `false` | `true` lets `terraform destroy` delete the bucket and all checkpoints |
 
 First boot takes about 5 minutes: packages, the pinned Hermes image, the desk runtime and a pinned, checksum-verified
@@ -65,6 +66,20 @@ This prints the private login (from `/data/hermes/remedigenius-login.json`) and 
 desk knows about your organization ([docs/KNOWLEDGE.md](../../docs/KNOWLEDGE.md)); its bundle is part of the desk state
 in S3. Importing PDF or Office files installs markitdown into the Hermes home on first use (HTTPS egress, about 350 MB,
 reinstalled after an instance replacement).
+
+### Optional: the Hermes WebUI
+
+The stack also runs [Hermes WebUI](https://github.com/nesquena/hermes-webui), a lightweight browser chat for Hermes.
+It is a **separate community project** (MIT License), pinned by version and digest (0.52.492), and not maintained by
+RemediGenius or Nous Research. It uses the same password as the dashboard and sends chat through the Hermes gateway
+of the `remedigenius` profile, so skills, plugin guards and approval prompts work as in the dashboard.
+
+```sh
+bash tools/open-remedigenius.sh --webui      # PowerShell: tools\open-remedigenius.ps1 -WebUI
+```
+
+Then open `http://127.0.0.1:9126/`. To leave it out, set `webui = false` and apply. The Hermes API server it uses
+listens only on the private container network, with its own key (`/data/hermes/.remedigenius-api-key`).
 
 ## What the stack creates
 

@@ -19,6 +19,10 @@ CloudWatch log events. The desk's guard refuses those reads even with administra
 offline evaluation before relying on them. `rgtriage doctor` says whether the configured endpoint is local or a
 third-party provider.
 
+**Optional Hermes WebUI (Spot):** a separate community project ([nesquena/hermes-webui](https://github.com/nesquena/hermes-webui),
+MIT, pinned), not maintained by RemediGenius or Nous Research. It runs on the same instance, reachable only through the
+SSM tunnel, and sends chat to the Hermes gateway on the private container network; it adds no other destination.
+
 **Scope:** one named operator, one organization per installation. It is not multi-user or multi-tenant: an MSP runs
 one installation per customer. The installer shows this notice once and records the acknowledgement; the dashboard
 Knowledge tab shows it until you dismiss it.

@@ -6,6 +6,7 @@ name=remedigenius-ce
 port=9125
 login=false
 only_login=false
+webui=false
 while (($#)); do
   case "$1" in
     --region) region="${2:?Missing region}"; shift 2 ;;
@@ -13,7 +14,8 @@ while (($#)); do
     --port) port="${2:?Missing local port}"; shift 2 ;;
     --with-login) login=true; shift ;;
     --show-login) login=true; only_login=true; shift ;;
-    *) echo 'Usage: bash tools/open-remedigenius.sh [--region us-east-1] [--name remedigenius-ce] [--port 9125] [--with-login|--show-login]' >&2; exit 2 ;;
+    --webui) webui=true; [[ "$port" == 9125 ]] && port=9126; shift ;;
+    *) echo 'Usage: bash tools/open-remedigenius.sh [--region us-east-1] [--name remedigenius-ce] [--port 9125] [--with-login|--show-login] [--webui]' >&2; exit 2 ;;
   esac
 done
 [[ "$port" =~ ^[0-9]+$ ]] && ((port >= 1024 && port <= 65535)) || { echo 'Use a local port from 1024 to 65535' >&2; exit 2; }
@@ -27,5 +29,11 @@ if "$login"; then
     --parameters '{"command":["sudo cat /data/hermes/remedigenius-login.json"]}'
   if "$only_login"; then exit 0; fi
 fi
-echo "Open http://127.0.0.1:$port/chat?profile=remedigenius in your browser. Keep this tunnel open."
-exec aws ssm start-session --region "$region" --target "$instance" --document-name AWS-StartPortForwardingSession --parameters "portNumber=9120,localPortNumber=$port"
+remote=9120
+if "$webui"; then
+  remote=8787
+  echo "Hermes WebUI (community project, MIT, github.com/nesquena/hermes-webui): open http://127.0.0.1:$port/ (same password). Keep this tunnel open."
+else
+  echo "Open http://127.0.0.1:$port/chat?profile=remedigenius in your browser. Keep this tunnel open."
+fi
+exec aws ssm start-session --region "$region" --target "$instance" --document-name AWS-StartPortForwardingSession --parameters "portNumber=$remote,localPortNumber=$port"
