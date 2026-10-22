@@ -44,7 +44,8 @@ explained, with the code change that fixes them.
   lines that point findings to the right skill and practice; a deterministic security gate (safety lint, protected
   regions, strict held-out improvement, no critical regression, desk checks, OKF validity) before a person approves; an
   Improve tab with the candidate queue, diffs, rollback and a nightly Hermes cron review. See
-  [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md).
+  [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md). The shipped `rg-investigate` skill already includes one improvement learned
+  this way (cite the finding ref, playbook and knowledge a conclusion relies on), gated and reviewed.
 - **Alerts:** a `security-watch` Hermes cron job reports only new P1/P2 findings, with no model calls.
 - **Durable state:** the Hermes home and desk state are checkpointed to S3 (Spot) or a local folder (workstation) every
   2 minutes, after scans and decisions, on stop and on Spot interruption notices. Restore is verified, and lineage

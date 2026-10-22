@@ -374,3 +374,15 @@ def test_every_desk_command_the_tab_and_runner_use_is_allowed_over_the_socket():
     used = set(__import__("re").findall(r'\["(improve|knowledge|knowledge-edit)"', sources))
     assert used and used <= server.ALLOWED
     assert "improve" in server.ALLOWED and server.TIMEOUT["improve"] >= 900
+
+
+def test_provider_tool_call_markup_is_honoured_never_taken_as_the_answer(workspace):
+    ws, desk, runner, llm = workspace
+    markup = '<\uff5cDSML\uff5c invoke name="tool"><\uff5cDSML\uff5c parameter name="action": "digest", "limit": 3}</\uff5cDSML\uff5c parameter>'
+    replies = iter([json.dumps({"skill": "rg-triage"}), markup, json.dumps({"answer": "Root credentials are in use."})])
+    client = llm.MockClient(lambda messages: next(replies))
+    handle, schema = runner.load_handle(ws.triage_plugin, desk)
+    result = runner.run_task({"id": "t", "prompt": "brief me"}, ws, {}, client, handle, schema, "board")
+    assert [s["type"] for s in result["trajectory"]] == ["skill", "tool"]
+    assert result["trajectory"][1]["params"] == {"action": "digest", "limit": 3}
+    assert result["answer"] == "Root credentials are in use."

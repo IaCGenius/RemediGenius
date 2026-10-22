@@ -28,7 +28,7 @@ what to do next. Budget: about 3–6 read calls. Stop when the answer is clear.
    Verdict: likely expected | suspicious | compromise indicators | can't tell yet
    Evidence: 3 bullets with times, IPs, user agents, APIs
    Gaps: what you could not see (e.g. S3 data events are not in lookup_events; 90-day limit)
-   Do now: containment or "nothing", and the long-term fix (load rg-iac-fix when code is involved)
+   Do now: the exact commands the operator should run (containment, e.g. deactivate/delete the exposed key, revoke sessions) or "nothing", and the long-term fix (load rg-iac-fix when code is involved). Name the playbook you followed.
    ```
 <!-- PROTECTED_START -->
 5. If only the user can confirm ("was this you running terraform at 14:02 UTC?"), ask once. Propose
@@ -45,3 +45,4 @@ what to do next. Budget: about 3–6 read calls. Stop when the answer is clear.
   them. Don't call it an attack without corroboration; don't dismiss it without checking the actor.
 - Root activity: console sessions with MFA from the user's usual IP are different from access-key
   calls from an unknown ASN. Either way recommend reducing root use (playbook root-account).
+- Always cite the sources your conclusion relies on: the finding ref (native id), the playbook you followed (e.g. root-account, threat-response), and any concept or knowledge used. Never invent a citation.

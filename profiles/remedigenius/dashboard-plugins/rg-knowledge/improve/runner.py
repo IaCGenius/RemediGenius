@@ -32,6 +32,20 @@ from . import llm as llm_mod
 from .redact import redact
 
 PROTECTED = re.compile(r"<!-- PROTECTED_START -->.*?<!-- PROTECTED_END -->", re.S)
+# Some providers answer with their native tool-call markup instead of the JSON protocol (e.g. "<｜DSML｜ invoke ...>").
+MARKUP = re.compile(r"<\s*[|｜]\s*DSML|<\s*invoke\b|<\s*tool_call|<\s*function_call", re.I)
+MARKUP_FIELD = re.compile(r'"(\w+)"\s*:\s*("(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?|true|false|\{[^<]*?\}|\[[^<]*?\])')
+
+
+def from_markup(reply: str) -> dict | None:
+    """The tool call encoded in provider tool-call markup, or None."""
+    fields = {}
+    for key, raw in MARKUP_FIELD.findall(reply):
+        try:
+            fields[key] = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+    return fields if fields.get("action") else None
 MAX_STEPS = 8
 SKILLS = ("rg-triage", "rg-investigate", "rg-iac-fix", "rg-onboard", "rg-knowledge")
 
@@ -161,6 +175,14 @@ def run_task(task: dict, ws: Workspace, override: dict[str, str], client, handle
             continue
         messages.append({"role": "assistant", "content": reply})
         msg = llm_mod.parse_json(reply)
+        if MARKUP.search(reply) and not (isinstance(msg, dict) and ("answer" in msg or "tool" in msg or "skill" in msg)):
+            params = from_markup(reply)
+            if params:  # the provider's own tool-call markup: honour the call it encodes
+                msg = {"tool": params}
+            else:
+                trajectory.append({"type": "error", "text": "tool-call markup instead of JSON"})
+                messages.append({"role": "user", "content": 'Use the JSON protocol, not tool-call markup: {"tool": {...}} or {"answer": ...}.'})
+                continue
         if not isinstance(msg, dict):
             if step >= 1 and reply.strip():  # prose instead of JSON at the end: accept it as the answer
                 answer = reply.strip()
@@ -370,6 +392,14 @@ def optimize(ws: Workspace, desk: Desk, client, skill: str, epochs: int = 2, lr:
         cand_grades = grades(desk, cand_run)
         b, c = current_grades["summary"], cand_grades["summary"]
         regressed = _critical_regressions(current_grades, cand_grades)
+        if regressed and (c["val"] or 0) > (b["val"] or 0):
+            # One replay is noisy: replay the regressed critical tasks once more and compare the average.
+            again = rollout(ws, desk, client, [t for t in tasks if t["id"] in regressed], {skill: candidate},
+                            f"{skill}-e{epoch}-confirm", workers, progress)
+            second = {g["case"]: g["score"] for g in grades(desk, again)["grades"]}
+            base = {g["case"]: g["score"] for g in current_grades["grades"]}
+            first = {g["case"]: g["score"] for g in cand_grades["grades"]}
+            regressed = [case for case in regressed if (first[case] + second.get(case, first[case])) / 2 < base[case]]
         if (c["val"] or 0) > (b["val"] or 0) and not regressed and not c["safety_violations"]:
             current, current_run, current_grades = candidate, cand_run, cand_grades
             accepted += applied

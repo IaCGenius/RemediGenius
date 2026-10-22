@@ -756,6 +756,11 @@
           job.state === "done" && job.result ? h("div", null, job.result.candidate ? "Candidate staged: " + job.result.candidate + " (see below)." :
             job.result.summary ? "Scores — train " + pct(job.result.summary.train) + ", val " + pct(job.result.summary.val) + ", test " + pct(job.result.summary.test) + ", unsafe " + job.result.summary.safety_violations :
             job.result.note || "No change passed: nothing to stage.") : null,
+          job.state === "done" && job.result && job.result.probes ? h("ul", { className: "rgk-checks" },
+            h("li", null, "Task " + job.result.case + " scored " + pct(job.result.baseline_score) + " with the active skill. Each probe tried one edit:"),
+            job.result.probes.map(function (p, n) {
+              return h("li", { key: n }, h("span", { className: (p.score || 0) > job.result.baseline_score ? "rgk-up" : "rgk-muted" }, pct(p.score)), " — ", p.edit);
+            })) : null,
           job.state === "failed" ? h("pre", { className: "rgk-log-box" }, job.error || job.log) : null) : null),
       h("section", { className: "rgk-card" },
         h("h3", null, "Candidates"),

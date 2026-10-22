@@ -825,9 +825,12 @@ def improve_schedule(body: dict):
         if proc.returncode:
             raise HTTPException(500, (proc.stderr or proc.stdout)[-400:])
     elif not body.get("enable") and state["enabled"]:
-        for line in _cron(["list"]).stdout.splitlines():
-            if "rg-improve" in line:
-                job_id = next((w for w in re.split(r"[\s│|]+", line) if re.fullmatch(r"[0-9a-f]{6,}", w)), None)
-                if job_id:
-                    _cron(["remove", job_id])
+        job_id = None
+        for line in _cron(["list"]).stdout.splitlines():  # blocks: "<id> [active]" then "Name: <name>" ...
+            header = re.match(r"\s*([0-9a-f]{8,})\s+\[", line)
+            if header:
+                job_id = header.group(1)
+            elif job_id and re.match(r"\s*Name:\s*rg-improve\s*$", line):
+                _cron(["remove", job_id])
+                job_id = None
     return _schedule_state()
