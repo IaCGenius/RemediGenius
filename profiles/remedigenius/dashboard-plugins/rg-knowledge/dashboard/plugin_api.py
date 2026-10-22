@@ -562,7 +562,7 @@ def ai_draft(body: dict):
 
 # ------------------------------------------------------------------ Improve: traces, evaluation, candidates (offline, gated)
 
-TASK_TOKENS = 9000  # rough tokens per replayed task (board, skill, 3-5 tool results), for estimates shown before a job
+TASK_TOKENS = 27000  # measured: about 27,000 tokens per replayed task with deepseek-v4.1-flash (board, skills, tool results)
 
 
 def _improve_paths() -> dict:

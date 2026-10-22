@@ -366,3 +366,11 @@ def test_improve_cli_reads_only_allowed_files(home, monkeypatch, tmp_path):
     secret.write_text("x")
     with pytest.raises(SystemExit, match="not in the improvement folder"):
         cli.main(["improve", "lint", "--skill-file", str(secret)])
+
+
+def test_every_desk_command_the_tab_and_runner_use_is_allowed_over_the_socket():
+    from rgtriage import server
+    sources = (TAB / "dashboard" / "plugin_api.py").read_text() + (TAB / "improve" / "runner.py").read_text()
+    used = set(__import__("re").findall(r'\["(improve|knowledge|knowledge-edit)"', sources))
+    assert used and used <= server.ALLOWED
+    assert "improve" in server.ALLOWED and server.TIMEOUT["improve"] >= 900
