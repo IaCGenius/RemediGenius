@@ -113,6 +113,15 @@ uses); the replay harness recorded empty replies and accepted a provider's tool-
 replay could block a good candidate (regressed critical tasks are now replayed once more); the tab's token estimate was
 three times too low; the cron removal parsed the wrong line; a proposed draft path was counted as an invented citation.
 
+## Answers from live evidence and IAM reads (validated 2026-10-22)
+
+| Check | Result |
+| --- | --- |
+| Unit tests | 162 passed, 1 skipped: trust-policy classifier (none / wildcard / one repository / pinned), missing analyzer detail, policy evaluations allowed, credential-returning reads refused, account scoping, Evidence line, same-issue siblings in `show` |
+| Desk checks | 19/19, including guidance by intent (explain → rg-triage, fix → rg-iac-fix) and the evidence guide per domain |
+| Offline agent tasks (`deepseek-v4.1-flash`, Acme fixture) | all 21 tasks once: 0.85 overall; the evaluation found a missed accepted-risk check, a guessed guide path and a loose grading pattern, all fixed. The 10 affected tasks re-run: 1.00. Repeats: OIDC verification 3/3, OIDC permissions (policy document, not name) 3/3, accepted risk 3/3 after `show` listed the same issue on other resources, SCP question 1.0 / 0.8 / 0.8 (correct simulator verdict; the unread SCP text was not always named) |
+| AWS Spot, live account, through the dashboard chat | rescan reclassified a GitHub OIDC role from HIGH "without a repository condition" to MEDIUM "any branch, tag, environment or pull request of one repository", matching its trust policy. Verification answered from one `iam get_role` read with the Evidence line, no invented change timeline. "Is it read-only?" read the inline policy and used the IAM simulator (organization decision included). "Which roles can be assumed from outside?" listed every role, matched the Access Analyzer findings and found an unconditional cross-account trust. An explanation-only request on open SSH checked attachments (none), said "reachable on paper", and proposed no fix |
+
 ## Not covered by this release's validation
 
 - Discovery of a *different* account whose read role works (exercised by unit tests; this validation had no second
