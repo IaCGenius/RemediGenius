@@ -1,7 +1,7 @@
 account_id = "123456789012"
 subnet_id  = "subnet-REPLACE"
 name       = "remedigenius-ce"
-source_zip = "../../dist/v0.3.1/remedigenius-ce-0.3.1-spot.zip"
+source_zip = "../../dist/v0.3.2/remedigenius-ce-0.3.2-spot.zip"
 running    = true
 
 # Existing Secrets Manager secret holding only your model API key (never put the key itself here).

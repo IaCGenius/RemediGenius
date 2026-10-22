@@ -1,5 +1,13 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
+## v0.3.2
+
+**Fixed**
+- The dashboard **Knowledge** tab rendered blank (React error #310) in v0.3.0 and v0.3.1: the Data & model notice
+  added a hook after the Overview's loading return. Hooks now run before it.
+- `SHA256SUMS` and `RELEASE.json` are written with LF line endings, so `sha256sum -c SHA256SUMS` works on Linux and
+  macOS. The checksum files on the v0.3.0 and v0.3.1 releases were replaced with LF copies; the hashes are unchanged.
+
 ## v0.3.1
 
 **New**
