@@ -557,6 +557,14 @@ def summary(b: okf.Bundle | None = None, concepts: list[okf.Concept] | None = No
             "review_queue": len(review_queue())}
 
 
+def practices_for(control_id: str, concepts: list[okf.Concept]) -> list[okf.Concept]:
+    """Shipped Security Practice concepts whose `remedigenius.controls` list the Security Hub control id."""
+    if not control_id:
+        return []
+    return [c for c in concepts if is_shipped(c.path) and c.type == "Security Practice"
+            and control_id in [str(x) for x in _ext(c).get("controls") or []]]
+
+
 def for_finding(finding: dict, b: okf.Bundle | None = None) -> list[dict]:
     """Concepts relevant to one finding: what was applied, the shipped guides, and matching organization concepts."""
     b = b or bundle()
@@ -571,6 +579,8 @@ def for_finding(finding: dict, b: okf.Bundle | None = None) -> list[dict]:
 
     for path in finding.get("knowledge") or []:
         add(path, "applied to this finding's priority")
+    for practice in practices_for(finding.get("control_id") or "", list(concepts.values())):
+        add(practice.path, f"the security practice control {finding.get('control_id')} belongs to")
     for name in playbooks.select(finding):
         add(f"{SHIPPED}/playbooks/{name}.md", "remediation playbook for this control or finding type")
     add(f"{SHIPPED}/sources/{finding.get('source')}.md", f"how to read {finding.get('product') or finding.get('source')} findings")

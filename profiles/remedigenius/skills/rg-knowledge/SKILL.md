@@ -6,8 +6,11 @@ license: Apache-2.0
 # Knowledge (OKF bundle)
 
 The desk has one knowledge bundle per installation, in Open Knowledge Format (markdown concepts with YAML
-frontmatter). `remedigenius/` is shipped (how the desk works, where to look, a guide per finding source, the
-remediation playbooks). Everything else is the organization's: applications, accounts, teams, risk exceptions,
+frontmatter). `remedigenius/` is shipped: how the desk works, where to look, the CIS AWS Foundations Benchmark and AWS
+Foundational Security Best Practices frameworks, six security practices (each lists the Security Hub control ids it
+covers), a guide per finding source and the remediation playbooks. When you explain a failed control, name its
+practice and why it matters (`view=for ref=...` returns it); when asked what to add, point to
+`remedigenius/guides/build-your-knowledge.md`. Everything else is the organization's: applications, accounts, teams, risk exceptions,
 security goals, policies, runbooks, architecture notes and imported references.
 
 ## 1. Read it the OKF way (progressive disclosure)

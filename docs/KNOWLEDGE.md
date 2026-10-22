@@ -20,7 +20,9 @@ flowchart LR
 
 | Folder | Who writes it | What it is |
 | --- | --- | --- |
-| `remedigenius/guides/` | shipped | How the desk works, where to look for evidence, how organization knowledge changes triage |
+| `remedigenius/guides/` | shipped | How the desk works, where to look for evidence, how organization knowledge changes triage, how to build on it |
+| `remedigenius/frameworks/` | shipped | CIS AWS Foundations Benchmark and AWS Foundational Security Best Practices: what each covers, its areas, how the desk treats its findings (our summary; the benchmark text itself is free from CIS) |
+| `remedigenius/practices/` | shipped | Identity and root, logging and detection, data protection, network exposure, vulnerability and patching, incident readiness: goal, why it matters, the Security Hub controls that check it and their usual priority, and what your organization should add. Every finding's control id maps to its practice in `rgtriage show`, `fix` and the agent's answers |
 | `remedigenius/sources/` | shipped | One guide per finding source: what it tells you, how it is scored, blind spots, what to check next |
 | `remedigenius/playbooks/` | shipped | The remediation playbooks `rgtriage fix` uses (S3 public access, security groups, root, IAM, threats, CVEs …) |
 | `applications/`, `accounts/`, `teams/` | you | What runs where, how critical it is, who owns it |

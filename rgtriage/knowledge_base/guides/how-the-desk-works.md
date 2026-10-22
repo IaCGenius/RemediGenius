@@ -32,9 +32,12 @@ A CVE's severity alone never makes P1: exploitability and exposure decide urgenc
 
 # Knowledge
 
-The desk's knowledge is one OKF bundle. The `remedigenius/` folder is shipped (these guides, the
-[source guides](/remedigenius/sources/) and the [playbooks](/remedigenius/playbooks/)). Everything else is the
-organization's own knowledge; see [how organization knowledge changes triage](/remedigenius/guides/organization-knowledge.md).
+The desk's knowledge is one OKF bundle. The `remedigenius/` folder is shipped: these guides, the
+[frameworks](/remedigenius/frameworks/) (CIS AWS Foundations Benchmark, AWS Foundational Security Best Practices), the
+[security practices](/remedigenius/practices/) every control id maps to, the [source guides](/remedigenius/sources/) and
+the [playbooks](/remedigenius/playbooks/). Everything else is the organization's own knowledge; see
+[how organization knowledge changes triage](/remedigenius/guides/organization-knowledge.md) and
+[build on this knowledge](/remedigenius/guides/build-your-knowledge.md).
 
 # Answering well
 

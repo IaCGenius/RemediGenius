@@ -117,6 +117,20 @@ def test_shipped_knowledge_is_conformant_linked_and_idempotent(home):
     assert (b.root / org).exists()
 
 
+def test_frameworks_and_practices_map_controls(home):
+    knowledge.seed()
+    concepts = knowledge.bundle().concepts()
+    types = {c.type for c in concepts}
+    assert {"Framework", "Security Practice"} <= types
+    practices = [c for c in concepts if c.type == "Security Practice"]
+    assert len(practices) == 6 and all(c.meta["remedigenius"]["controls"] for c in practices)
+    assert [c.path for c in knowledge.practices_for("S3.8", concepts)] == ["remedigenius/practices/data-protection.md"]
+    assert [c.path for c in knowledge.practices_for("EC2.53", concepts)] == ["remedigenius/practices/network-exposure.md"]
+    assert knowledge.practices_for("NotAControl.1", concepts) == []
+    related = [k["path"] for k in knowledge.for_finding(finding())]
+    assert related[0] == "remedigenius/practices/data-protection.md" and "remedigenius/playbooks/s3-public-access.md" in related
+
+
 def test_playbooks_are_okf_concepts_and_fix_prints_them_without_frontmatter():
     for name in playbooks.names():
         meta, _ = okf.parse((playbooks.DIR / f"{name}.md").read_text(encoding="utf-8"))

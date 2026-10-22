@@ -232,6 +232,12 @@ def cmd_show(args):
         _out(f"\nAWS remediation: {f['remediation'].get('text', '')} {f['remediation'].get('url', '')}")
     _out(f"Console: {f.get('console_url')}")
     _out(f"Playbooks: {', '.join(playbooks.select(f))}  (`rgtriage fix {f['key']}`)")
+    try:
+        practices = knowledge.practices_for(f.get("control_id") or "", knowledge.bundle().concepts())
+    except Exception:  # knowledge is context; never block show on it
+        practices = []
+    for p in practices:
+        _out(f"Security practice: {p.title} — {p.path}  (`rgtriage knowledge show {p.path}`)")
 
 
 def cmd_fix(args):
