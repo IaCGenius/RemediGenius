@@ -585,10 +585,14 @@ def for_finding(finding: dict, b: okf.Bundle | None = None) -> list[dict]:
         add(f"{SHIPPED}/playbooks/{name}.md", "remediation playbook for this control or finding type")
     add(f"{SHIPPED}/sources/{finding.get('source')}.md", f"how to read {finding.get('product') or finding.get('source')} findings")
     add(f"{SHIPPED}/guides/where-to-look.md", "where to find the evidence")
-    terms = " ".join(str(x) for x in (finding.get("control_id"), finding.get("application"), finding["resource"].get("type"),
-                                      finding["resource"].get("name"), finding.get("type")) if x)
-    for hit in okf.search([c for c in concepts.values() if not is_shipped(c.path)], terms, limit=5):
-        add(hit["path"], "matches the finding's control, application or resource")
+    # Specific identifiers only (control id, application, resource name or id): generic words would match everything.
+    org = [c for c in concepts.values() if not is_shipped(c.path)]
+    resource = finding.get("resource") or {}
+    for term, why in ((finding.get("control_id"), "mentions control"), (finding.get("application"), "about application"),
+                      (resource.get("name"), "mentions resource"), (resource.get("id"), "mentions resource")):
+        if term and len(str(term)) > 2:
+            for hit in okf.search(org, str(term), limit=5):
+                add(hit["path"], f"{why} {term}")
     return out
 
 

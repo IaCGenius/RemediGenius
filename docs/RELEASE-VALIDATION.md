@@ -12,7 +12,7 @@ OpenAI-compatible endpoint, AWS us-east-1. Sources enabled in the account: Secur
 
 | Check | Result |
 | --- | --- |
-| `pytest tests` (Windows, Python 3.12; tests never reach AWS) | 127 passed, 1 skipped (symlink case needs Linux) |
+| `pytest tests` (Windows, Python 3.12; tests never reach AWS) | 128 passed, 1 skipped (symlink case needs Linux) |
 | Scale: 40,000 Inspector + 3,000 Security Hub findings through the CLI (`test_rgtriage_scale.py`) | ~1 s; 23 Inspector detail pages; Security Hub read without Inspector copies; 5 MB state; board < 8 KB; newly enabled source = baseline, no alert storm |
 | Durable storage (`test_durable.py`) | round trip, live SQLite copy, unchanged-skip, no overwrite of live state, tamper rejection, retention, lineage protection (`DIVERGED`), read-only homes |
 | `python tools/demo.py` | synthetic board + IaC match, no AWS or model |
@@ -83,6 +83,7 @@ misses one is reported `INCOMPLETE` and never uploaded. After the fix, a full Do
 | AWS Spot, review | a resource-less S3.8 risk exception was flagged as applying to every bucket and rejected; a duplicate application rejected; team, policy, runbook and account drafts approved; an account draft without an id reported as a gap instead of applied |
 | AWS Spot, priorities | an Account concept (mission critical) re-ranked 2 of 89 stored findings immediately (no AWS calls); P1 reasons cite `knowledge accounts/…`; issues show the owner |
 | AWS Spot, durability | instance replaced: bundle, references and review drafts restored from S3; the converter (excluded from checkpoints) reinstalled from the tab |
+| Shipped CIS / best-practice knowledge on Spot | 32 shipped concepts seeded on boot (frameworks, six practices, guides, source guides, playbooks; conformant, every link resolves); `show` on a live EC2.19 finding named its practice (network exposure), owner and the knowledge applied |
 | Spot instance role, organization scope | the instance role assumed `RemediGeniusReadOnly` under `aws:ResourceOrgID` = `${aws:PrincipalOrgID}` and read through it |
 
 Defects found and fixed during these runs: Hermes's dashboard serves user plugins only when enabled in both the profile

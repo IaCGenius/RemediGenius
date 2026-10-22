@@ -129,6 +129,11 @@ def test_frameworks_and_practices_map_controls(home):
     assert knowledge.practices_for("NotAControl.1", concepts) == []
     related = [k["path"] for k in knowledge.for_finding(finding())]
     assert related[0] == "remedigenius/practices/data-protection.md" and "remedigenius/playbooks/s3-public-access.md" in related
+    b = knowledge.bundle()
+    concept(b, "policies/buckets.md", {"type": "Policy", "title": "Bucket rules", "description": "S3.8 must pass on pay-data."})
+    concept(b, "notes/unrelated.md", {"type": "Note", "title": "Software and configuration checks", "description": "x"})
+    related = [k["path"] for k in knowledge.for_finding(finding(type="Software and Configuration Checks/AWS Security Best Practices"))]
+    assert "policies/buckets.md" in related and "notes/unrelated.md" not in related  # identifiers, not generic words
 
 
 def test_playbooks_are_okf_concepts_and_fix_prints_them_without_frontmatter():
