@@ -102,4 +102,5 @@ def test_register_wires_tool_hooks_and_command(plugin):
 
     ctx = Ctx()
     plugin.register(ctx)
-    assert ctx.tools == ["rg_triage"] and set(ctx.hooks) == {"pre_llm_call", "pre_tool_call"} and ctx.commands == ["triage"]
+    assert ctx.tools == ["rg_triage"] and sorted(ctx.commands) == ["rate", "triage"]
+    assert set(ctx.hooks) == {"pre_llm_call", "pre_tool_call", "post_tool_call", "on_skill_lifecycle", "post_api_request", "post_llm_call"}

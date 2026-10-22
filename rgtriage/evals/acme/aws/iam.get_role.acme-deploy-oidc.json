@@ -1,0 +1,9 @@
+{"Role": {"Path": "/", "RoleName": "acme-deploy-oidc", "RoleId": "AROAEXAMPLEDEPLOY01",
+  "Arn": "arn:aws:iam::111122223333:role/acme-deploy-oidc", "CreateDate": "2025-11-02T09:14:00Z",
+  "AssumeRolePolicyDocument": {"Version": "2012-10-17", "Statement": [{"Effect": "Allow",
+    "Principal": {"Federated": "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"},
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {"StringEquals": {"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"},
+                  "StringLike": {"token.actions.githubusercontent.com:sub": "repo:acme/platform-infra:*"}}}]},
+  "Description": "GitHub Actions deploy role for platform-infra", "MaxSessionDuration": 3600,
+  "RoleLastUsed": {"LastUsedDate": "2026-10-20T17:42:11Z", "Region": "us-east-1"}}}

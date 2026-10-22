@@ -329,7 +329,7 @@ def test_approving_knowledge_rescores_the_stored_board_without_aws(home, capsys)
     latest = store.load_latest()
     assert any("knowledge applications/payments.md" in r for r in latest["findings"][0]["reasons"])
     assert latest["knowledge"]["used_in"] == 1
-    assert "Knowledge: 1 organization concepts (1 reviewed) · used in 1 findings" in (home / "board.md").read_text(encoding="utf-8")
+    assert "Knowledge: 1 organization concepts (1 reviewed) · business context applied to 1 of 1 findings" in (home / "board.md").read_text(encoding="utf-8")
     cli.main(["knowledge-edit", "remove", "--path", "applications/payments.md", "--by", "human:alex"])
     capsys.readouterr()
     assert not any("knowledge" in r for r in store.load_latest()["findings"][0]["reasons"])  # removal applies at once too
@@ -351,10 +351,10 @@ def test_socket_allows_knowledge_and_the_agent_tool_is_read_only():
 
 def test_board_shows_knowledge_line():
     scan = {"scanned_at": "2026-10-21T00:00:00", "profile": {"name": "t"}, "issues": [], "findings": [], "coverage": [],
-            "changes": {}, "knowledge": {"organization": 4, "human_reviewed": 3, "used_in": 12, "review_queue": 2, "stale": ["a"],
+            "changes": {}, "knowledge": {"organization": 4, "human_reviewed": 3, "used_in": 12, "findings": 40, "review_queue": 2, "stale": ["a"],
                                          "gaps": ["5 open P1/P2 findings sit on resources the desk cannot map"]}}
     board = digest.markdown(scan)
-    assert "Knowledge: 4 organization concepts (3 reviewed) · used in 12 findings · 2 draft(s) to review · 1 stale" in board
+    assert "Knowledge: 4 organization concepts (3 reviewed) · business context applied to 12 of 40 findings · 2 draft(s) to review · 1 stale" in board
     assert "Knowledge gap: 5 open P1/P2" in board
 
 

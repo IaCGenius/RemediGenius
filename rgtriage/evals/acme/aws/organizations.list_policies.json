@@ -1,0 +1,1 @@
+{"Error": "AccessDeniedException: You don't have permissions to access this resource. (organizations:ListPolicies is only available in the management account or a delegated administrator)"}

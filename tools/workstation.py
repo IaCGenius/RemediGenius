@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
@@ -143,7 +144,8 @@ def start_desk(args):
            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "1g",
            "-v", f"{VOLUMES['creds']}:/creds:ro", "-v", f"{VOLUMES['desk']}:/data/rgtriage",
            "-v", f"{VOLUMES['hermes']}:/opt/data:ro", "-v", f"{VOLUMES['socket']}:/run/rgtriage",
-           "-v", f"{host_path(args.data / 'durable')}:/durable", "-e", f"AWS_DEFAULT_REGION={args.region}"]
+           "-v", f"{host_path(args.data / 'durable')}:/durable", "-e", f"AWS_DEFAULT_REGION={args.region}",
+           "-e", f"REMEDIGENIUS_MODEL_NAME={args.model_name or ''}", "-e", f"REMEDIGENIUS_MODEL_BASE_URL={args.model_base_url or ''}"]
     if args.iac:
         run += ["-v", f"{host_path(Path(args.iac))}:/data/iac:ro"]
     docker(*run, DESK_IMAGE, "serve", "--socket", SOCKET, "--durable", "/durable", "--home", "hermes=/opt/data",
@@ -187,9 +189,15 @@ shutil.rmtree(tab, ignore_errors=True)
 shutil.copytree(pkg / "dashboard-plugins/rg-knowledge", tab, ignore=shutil.ignore_patterns("__pycache__", "local.json"))
 (tab / "local.json").write_text(json.dumps({"socket": "/run/rgtriage/rgtriage.sock", "home": "/data/rgtriage",
                                             "proposals": "/opt/data/proposals", "inbox": "/opt/data/knowledge-inbox",
-                                            "files": "/opt/data/knowledge-files", "profile": "remedigenius"}))
-for d in ("proposals/knowledge", "knowledge-inbox", "knowledge-files"):
+                                            "files": "/opt/data/knowledge-files", "profile": "remedigenius",
+                                            "improve": "/opt/data/rg-improve", "package": "/opt/remedigenius-package"}))
+for d in ("proposals/knowledge", "knowledge-inbox", "knowledge-files", "rg-improve", "rg-traces"):
     Path("/opt/data", d).mkdir(parents=True, exist_ok=True)
+# Skill improvements a person approved survive restarts when they were made for this shipped version.
+import sys
+sys.path.insert(0, str(tab))
+from improve.runner import apply_approved
+print(json.dumps(apply_approved(Path("/opt/data/rg-improve"), pkg / "skills", prof / "skills")))
 key = os.environ.get("MODEL_API_KEY", "")
 env = prof / ".env"
 text = env.read_text() if env.exists() else ""
@@ -283,8 +291,23 @@ def start_hermes(args):
 
 # ---------------------------------------------------------------- commands
 
+DATA_NOTICE = ("RemediGenius-CE runs on Hermes with the model provider you configure. Findings, resource identifiers, IaC excerpts, knowledge and chat are sent to that provider; RemediGenius-CE runs no model of its own and stores nothing elsewhere. One operator, one organization per installation (not multi-tenant). Details: docs/DATA-FLOW.md")
+
+
+def data_notice(args) -> None:
+    """Shown before the first start; the operator's acknowledgement is recorded once (#10)."""
+    ack = args.data / "data-notice-accepted"
+    if ack.exists():
+        return
+    print("\n" + DATA_NOTICE + "\n")
+    if sys.stdin.isatty() and input("Type yes to continue: ").strip().lower() != "yes":
+        sys.exit("Not started.")
+    ack.write_text(datetime.now(timezone.utc).isoformat() + "\n", encoding="utf-8")
+
+
 def cmd_start(args):
     args.data.mkdir(parents=True, exist_ok=True)
+    data_notice(args)
     (args.data / "durable").mkdir(exist_ok=True)
     print("Building the desk image ...")
     build_desk_image()

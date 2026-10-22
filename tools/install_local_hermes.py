@@ -132,10 +132,15 @@ def main() -> None:
     shutil.copytree(SOURCE / "dashboard-plugins" / "rg-knowledge", tab, ignore=shutil.ignore_patterns("__pycache__", "local.json"))
     (tab / "local.json").write_text(json.dumps({"python": sys.executable, "src": str(REPO), "home": str(home),
                                                 "proposals": str(home / "proposals"), "inbox": str(home / "knowledge-inbox"),
-                                                "files": str(home / "knowledge-files"), "profile": args.profile}, indent=1),
+                                                "files": str(home / "knowledge-files"), "profile": args.profile,
+                                                "improve": str(home / "rg-improve"), "package": str(SOURCE)}, indent=1),
                                     encoding="utf-8")
-    for folder in ("proposals/knowledge", "knowledge-inbox", "knowledge-files"):
+    for folder in ("proposals/knowledge", "knowledge-inbox", "knowledge-files", "rg-improve", "rg-traces"):
         (home / folder).mkdir(parents=True, exist_ok=True)
+    sys.path.insert(0, str(tab))
+    from improve.runner import apply_approved  # approved skill improvements survive re-installs of the same release
+    for item in apply_approved(home / "rg-improve", SOURCE / "skills", profile_home / "skills"):
+        print(f"  approved skill improvement {item['skill']}: {'applied' if item['applied'] else item.get('reason')}")
     print("  installed SOUL.md, skills rg-*, plugin rg-triage, scripts/rgtriage-watch.py, dashboard Knowledge tab")
 
     env = dict(os.environ, RGTRIAGE_HOME=str(home), PYTHONPATH=str(REPO))

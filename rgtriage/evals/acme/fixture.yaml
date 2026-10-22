@@ -1,0 +1,18 @@
+# Acme: a fictional organization for offline evaluation. Placeholder account ids only.
+profile:
+  name: acme
+  regions: [us-east-1, eu-west-1]
+  accounts:
+    - {name: acme-prod, account_id: "111122223333", criticality: business_critical}
+    - {name: acme-sandbox, account_id: "444455556666", criticality: test_development}
+  iac_paths: ["{home}/iac"]
+coverage:
+  - {source: securityhub, account: acme-prod, account_id: "111122223333", region: us-east-1, status: ok, count: 6}
+  - {source: guardduty, account: acme-prod, account_id: "111122223333", region: us-east-1, status: ok, count: 2}
+  - {source: guardduty, account: acme-prod, account_id: "111122223333", region: eu-west-1, status: not_enabled,
+     note: "GuardDuty is not enabled in this region"}
+  - {source: inspector, account: acme-prod, account_id: "111122223333", region: us-east-1, status: ok, count: 2}
+  - {source: accessanalyzer, account: acme-prod, account_id: "111122223333", region: us-east-1, status: ok, count: 1}
+  - {source: health, account: acme-prod, account_id: "111122223333", region: us-east-1, status: not_available,
+     note: "SubscriptionRequiredException"}
+  - {source: securityhub, account: acme-sandbox, account_id: "444455556666", region: us-east-1, status: ok, count: 1}

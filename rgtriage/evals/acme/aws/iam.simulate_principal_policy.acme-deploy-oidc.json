@@ -1,0 +1,3 @@
+{"EvaluationResults": [{"EvalActionName": "s3:DeleteBucket", "EvalResourceName": "arn:aws:s3:::acme-payments-exports",
+  "EvalDecision": "explicitDeny", "MatchedStatements": [], "MissingContextValues": [],
+  "OrganizationsDecisionDetail": {"AllowedByOrganizations": false}}], "IsTruncated": false}

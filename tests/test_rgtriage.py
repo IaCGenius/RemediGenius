@@ -476,10 +476,16 @@ def test_iac_excerpt(repo):
     assert 'resource "aws_s3_bucket" "payments"' in text
 
 
+GITHUB = {"Federated": "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"}
+
+
 @pytest.mark.parametrize("detail,name,severity,words", [
-    ({"principal": {"Federated": "arn:aws:iam::1:oidc-provider/token.actions.githubusercontent.com"}}, "gh", "HIGH", "without a repository"),
-    ({"principal": {"Federated": "arn:aws:iam::1:oidc-provider/token.actions.githubusercontent.com"},
-      "condition": {"StringLike": {"token.actions.githubusercontent.com:sub": "repo:org/app:*"}}}, "gh", "LOW", "repository-scoped"),
+    ({"principal": GITHUB, "trust_policy": {"Statement": [{"Effect": "Allow", "Principal": GITHUB}]}}, "gh", "HIGH",
+     "without a repository"),
+    ({"principal": GITHUB, "trust_policy": {"Statement": [{"Effect": "Allow", "Principal": GITHUB, "Condition": {
+        "StringEquals": {"token.actions.githubusercontent.com:sub": "repo:org/app:ref:refs/heads/main"}}}]}}, "gh", "LOW", "pinned"),
+    ({"principal": GITHUB, "condition": {"StringLike": {"token.actions.githubusercontent.com:sub": "repo:org/app:*"}}}, "gh",
+     "MEDIUM", "not confirmed"),
     ({"principal": {"Federated": "arn:aws:iam::1:saml-provider/AWSSSO_x"}}, "sso", "LOW", "usually intended"),
     ({"principal": {"Federated": "cognito-identity.amazonaws.com"}}, "Cognito_x_Unauth_Role", "MEDIUM", "unauthenticated"),
     ({"principal": {"AWS": "444455556666"}}, "ops-admin", "MEDIUM", "external account 444455556666"),
@@ -514,3 +520,46 @@ def test_inspector_scope_member_vs_delegated_admin(monkeypatch):
     seen["agg"].clear(); seen["list"].clear()
     _, meta = collect.collect_inspector(None, {"account_id": ACCOUNT, "delegated_admin": True}, "us-east-1", opts)
     assert all(a is None for a in seen["agg"] + seen["list"]) and meta["org_wide"]
+
+
+def test_policy_evaluations_are_allowed_reads_and_marked_as_evaluations():
+    for name in ("SimulatePrincipalPolicy", "SimulateCustomPolicy", "CheckNoPublicAccess", "CheckAccessNotGranted",
+                 "CheckNoNewAccess", "ValidatePolicy"):
+        assert aws.is_read_operation(name) and name in aws.EVALUATIONS
+    for name in ("StartPolicyGeneration", "CreateAccessPreview", "StartResourceScan", "GenerateServiceLastAccessedDetails"):
+        assert not aws.is_read_operation(name)
+
+
+
+def _trust(condition):
+    return {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": GITHUB,
+                                                    "Action": "sts:AssumeRoleWithWebIdentity", "Condition": condition}]}
+
+
+def test_github_oidc_scope_reads_the_trust_policy():
+    aud = {"StringEquals": {"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"}}
+    assert collect.github_oidc_scope(_trust(aud))["scope"] == "none"
+    sub = lambda v: {**aud, "StringLike": {"token.actions.githubusercontent.com:sub": v}}  # noqa: E731
+    assert collect.github_oidc_scope(_trust(sub("*")))["scope"] == "broad"
+    assert collect.github_oidc_scope(_trust(sub("repo:acme/*")))["scope"] == "broad"
+    assert collect.github_oidc_scope(_trust(sub("repo:acme/infra:*")))["scope"] == "repository"
+    assert collect.github_oidc_scope(_trust(sub("repo:acme/infra:ref:refs/heads/*")))["scope"] == "repository"
+    assert collect.github_oidc_scope(_trust(sub(["repo:acme/infra:ref:refs/heads/main",
+                                                 "repo:acme/infra:environment:prod"])))["scope"] == "pinned"
+    assert collect.github_oidc_scope({"Statement": [{"Effect": "Allow", "Principal": {"Service": "ec2.amazonaws.com"}}]})["scope"] == "unknown"
+
+
+def test_external_access_headline_comes_from_evidence_not_from_an_empty_summary():
+    principal = {"principal": GITHUB, "condition": {}}
+    # Access Analyzer's condition summary is empty but the trust policy was not read: no claim either way.
+    sev, title, public = collect.classify_external_access("AwsIamRole", "deploy", principal, False)
+    assert sev == "MEDIUM" and "not confirmed" in title and "any GitHub workflow" not in title
+    scoped = dict(principal, trust_policy=_trust({"StringLike": {"token.actions.githubusercontent.com:sub": "repo:acme/infra:*"}}))
+    sev, title, _ = collect.classify_external_access("AwsIamRole", "deploy", scoped, False)
+    assert sev == "MEDIUM" and "pull request of repo:acme/infra:*" in title
+    open_ = dict(principal, trust_policy=_trust({"StringEquals": {"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"}}))
+    sev, title, public = collect.classify_external_access("AwsIamRole", "deploy", open_, False)
+    assert sev == "HIGH" and "any GitHub workflow" in title and public
+    # Detail could not be fetched: say so instead of guessing a HIGH headline.
+    sev, title, _ = collect.classify_external_access("AwsIamRole", "deploy", {}, False)
+    assert sev == "MEDIUM" and "detail not retrieved" in title

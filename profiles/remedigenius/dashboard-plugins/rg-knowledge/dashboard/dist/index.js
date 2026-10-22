@@ -10,7 +10,7 @@
   var useState = SDK.hooks.useState, useEffect = SDK.hooks.useEffect, useMemo = SDK.hooks.useMemo,
       useRef = SDK.hooks.useRef, useCallback = SDK.hooks.useCallback;
   var API = "/api/plugins/rg-knowledge";
-  var TABS = ["Overview", "Browse", "Review", "Add", "Import", "Graph"];
+  var TABS = ["Overview", "Browse", "Review", "Add", "Import", "Graph", "Improve"];
   var TYPE_COLORS = {
     "Application": "#2f7fd8", "Account": "#7c5cd6", "Team": "#1f9d74", "Risk Exception": "#d0453a",
     "Security Goal": "#d98a1c", "Policy": "#3d8c99", "Runbook": "#5f8f2f", "Architecture": "#8a6d3b",
@@ -150,7 +150,9 @@
     var _v = useState(null), check = _v[0], setCheck = _v[1];
     var _l = useState([]), log = _l[0], setLog = _l[1];
     var _k = useState({}), kinds = _k[0], setKinds = _k[1];
+    var _f = useState([]), fixes = _f[0], setFixes = _f[1];
     useEffect(function () {
+      get("/fixes").then(function (r) { setFixes(Array.isArray(r) ? r : []); }).catch(function () {});
       get("/log").then(setLog).catch(function () {});
       get("/kinds").then(setKinds).catch(function () {});
     }, [props.version]);
@@ -168,7 +170,31 @@
       if (/application/i.test(g)) return ["Add", "Application"];
       return ["Browse", null];
     };
+    var noticeSeen = false;
+    try { noticeSeen = window.localStorage.getItem("rgk-data-notice") === "1"; } catch (e) { noticeSeen = false; }
+    var noticeState = useState(noticeSeen), accepted = noticeState[0], setAccepted = noticeState[1];
     return h("div", { className: "rgk-stack" },
+      h("div", { className: "rgk-notice rgk-notice-" + (accepted ? "info" : "warn") },
+        h("strong", null, "Data & model: "),
+        "RemediGenius-CE runs on Hermes with the model provider you configure. Findings, resource identifiers, IaC excerpts, knowledge and chat are sent to that provider; RemediGenius-CE runs no model of its own and stores nothing elsewhere. One operator, one organization per installation (not multi-tenant). `rgtriage doctor` shows whether the configured endpoint is local or a third-party provider. ",
+        accepted ? null : h("button", { className: "rgk-btn", onClick: function () {
+          try { window.localStorage.setItem("rgk-data-notice", "1"); } catch (e) { /* private window */ }
+          setAccepted(true);
+        } }, "I understand")),
+      fixes.length ? h("section", { className: "rgk-card" },
+        h("h3", null, "Fixes: from decision to verified closure"),
+        h("p", { className: "rgk-muted" }, "A fix closes only when its proof of done passes and the AWS finding is gone. The desk checks at every scan; your PR and CI/CD apply the change."),
+        h("div", { className: "rgk-kanban" }, ["decided", "pr", "deployed", "verified", "reopened", "stalled"].map(function (state) {
+          var items = fixes.filter(function (f) { return f.state === state; });
+          return h("div", { key: state, className: "rgk-kanban-col" },
+            h("div", { className: "rgk-label" }, { decided: "Decided", pr: "In PR", deployed: "Deployed, awaiting AWS", verified: "Verified", reopened: "Reopened", stalled: "Stalled" }[state] + " (" + items.length + ")"),
+            items.map(function (f) {
+              var c = f.last_check || {};
+              return h("div", { key: f.key, className: "rgk-kanban-card", title: JSON.stringify(f.proof || {}) },
+                h("strong", null, (f.resource || "") + ""), h("div", null, (f.title || "").slice(0, 90)),
+                h("div", { className: "rgk-muted" }, "owner " + (f.owner || "?") + (f.pr ? " · PR" : "") + " · proof " + (f.proof ? (c.at ? (c.passed ? "passed " : "failed ") + c.at : "not checked yet") : "not set")));
+            }));
+        }))) : null,
       h("div", { className: "rgk-stats" },
         stat("organization concepts", o.organization, "Concepts your organization added (the shipped guides are not counted)", function () { props.go("Browse"); }),
         stat("reviewed by a person", o.human_reviewed, "OKF trust tier human-reviewed", function () { props.go("Browse"); }),
@@ -351,10 +377,25 @@
         load(); props.changed(approve ? r.path : null);
       }).catch(function (e) { setBusy(false); setMsg({ tone: "error", text: errText(e) }); });
     };
+    var approveAll = function () {
+      if (!queue || !queue.length || !window.confirm("Approve all " + queue.length + " drafts as reviewed knowledge?")) return;
+      setBusy(true); setMsg(null);
+      var done = 0, failed = 0;
+      queue.reduce(function (chain, d) {
+        return chain.then(function () {
+          return post("/review/approve", { file: d.file, reviewer: props.reviewer }).then(function () { done++; }, function () { failed++; });
+        });
+      }, Promise.resolve()).then(function () {
+        setBusy(false); setSel(null);
+        setMsg({ tone: failed ? "warn" : "ok", text: "Approved " + done + " draft(s)" + (failed ? "; " + failed + " failed (open them one by one)." : ".") });
+        load(); props.changed(null);
+      });
+    };
     if (!queue) return h(Empty, null, "Loading…");
     return h("div", { className: "rgk-split" },
       h("aside", { className: "rgk-side" },
-        h("p", { className: "rgk-muted rgk-small" }, "Drafts from the agent (it writes them when you tell it something) and from document import. Nothing here changes priorities until you approve it."),
+        h("p", { className: "rgk-muted rgk-small" }, "Drafts from the agent (facts it inferred) and from document import. Facts you state in chat are saved with one click there instead. Nothing here changes priorities until you approve it."),
+        queue.length > 1 ? h("button", { type: "button", className: "rgk-btn", disabled: busy || !props.reviewer, onClick: approveAll }, "Approve all (" + queue.length + ")") : null,
         queue.length ? queue.map(function (d) {
           return h("button", { key: d.file, type: "button", className: cls("rgk-item", sel === d.file && "rgk-active"), onClick: function () { setSel(d.file); setMsg(null); } },
             h("span", { className: "rgk-dot", style: { background: typeColor(d.type) } }),
@@ -628,6 +669,192 @@
         }))) : h(Empty, null, "No concepts to draw. Tick 'include shipped guides' or add knowledge."));
   }
 
+  // ---------------------------------------------------------------- improve (offline evaluation, gated skill candidates)
+  function pct(v) { return v == null ? "–" : Math.round(v * 100) + "%"; }
+  function DiffView(props) {
+    var lines = String(props.diff || "").split("\n");
+    return h("pre", { className: "rgk-diff" }, lines.map(function (l, n) {
+      var c = /^\+[^+]/.test(l) ? "rgk-add" : /^-[^-]/.test(l) ? "rgk-del" : /^@@/.test(l) ? "rgk-hunk" : "";
+      return h("div", { key: n, className: c }, l || " ");
+    }));
+  }
+
+  function Candidate(props) {
+    var _c = useState(null), c = _c[0], setC = _c[1];
+    var _m = useState(null), msg = _m[0], setMsg = _m[1];
+    var _b = useState(false), busy = _b[0], setBusy = _b[1];
+    useEffect(function () { setC(null); get("/improve/candidate?id=" + encodeURIComponent(props.id)).then(setC).catch(function (e) { setMsg({ tone: "error", text: errText(e) }); }); }, [props.id, props.version]);
+    if (!c) return msg ? h(Notice, { tone: msg.tone, text: msg.text }) : h(Empty, null, "Loading…");
+    var meta = c.meta, gate = c.gate || {}, base = c.baseline_run || {}, cand = c.candidate_run || {};
+    var baseBy = {}; (base.cases || []).forEach(function (x) { baseBy[x.case] = x; });
+    var act = function (path, body, done) {
+      setBusy(true); setMsg(null);
+      post(path, Object.assign({ reviewer: props.reviewer, id: meta.id }, body)).then(function () { setBusy(false); setMsg({ tone: "ok", text: done }); props.changed(); })
+        .catch(function (e) { setBusy(false); setMsg({ tone: "error", text: errText(e) }); });
+    };
+    var row = function (label, b, x) { return h("tr", { key: label }, h("td", null, label), h("td", null, b), h("td", null, x)); };
+    var bs = base.summary || {}, cs = cand.summary || {};
+    return h("div", { className: "rgk-stack" },
+      h("div", { className: "rgk-row rgk-wrap" }, h(Badge, { tone: "info" }, meta.skill), h(Badge, null, meta.method === "ppc" ? "Propose–Probe–Compose" : meta.method === "skillopt" ? "SkillOpt" : meta.method),
+        h(Badge, { tone: gate.passed ? "ok" : "bad" }, gate.passed ? "security gate passed" : "security gate failed"), h(Badge, { tone: meta.status === "active" ? "ok" : "muted" }, meta.status)),
+      h("p", { className: "rgk-muted rgk-small" }, meta.id + " · created " + String(meta.created || "").slice(0, 16).replace("T", " ") + (meta.usage ? " · " + (meta.usage.total_tokens || 0).toLocaleString() + " tokens" : "")),
+      h("div", { className: "rgk-table" }, h("table", null, h("thead", null, h("tr", null, h("th", null, ""), h("th", null, "Active skill"), h("th", null, "Candidate"))),
+        h("tbody", null, row("Training tasks", pct(bs.train), pct(cs.train)), row("Held-out validation (decides)", pct(bs.val), pct(cs.val)),
+          row("Test (reported only)", pct(bs.test), pct(cs.test)), row("Unsafe answers", bs.safety_violations, cs.safety_violations),
+          row("Invented citations", bs.fabricated_citations, cs.fabricated_citations)))),
+      h("h4", null, "Security gate"),
+      h("ul", { className: "rgk-checks" }, (gate.checks || []).map(function (k, n) {
+        return h("li", { key: n }, h("span", { className: k.ok ? "rgk-tick" : "rgk-warn-dot" }, k.ok ? "✓" : "✗"), " ", k.name, k.detail ? h("span", { className: "rgk-muted" }, " — " + k.detail) : null);
+      })),
+      h("details", null, h("summary", null, "Per task"), h("div", { className: "rgk-table" }, h("table", null,
+        h("thead", null, h("tr", null, h("th", null, "Task"), h("th", null, "Split"), h("th", null, "Active"), h("th", null, "Candidate"))),
+        h("tbody", null, (cand.cases || []).map(function (x) {
+          var b = baseBy[x.case] || {};
+          return h("tr", { key: x.case }, h("td", null, x.case, x.critical ? h(Badge, { tone: "warn", style: { marginLeft: 6 } }, "critical") : null), h("td", null, x.split),
+            h("td", null, pct(b.score)), h("td", { className: (x.score || 0) > (b.score || 0) ? "rgk-up" : (x.score || 0) < (b.score || 0) ? "rgk-down" : "" }, pct(x.score)));
+        }))))),
+      (meta.edits || []).length ? h("div", null, h("h4", null, "Why these edits"), h("ul", null, meta.edits.map(function (e, n) { return h("li", { key: n }, h("strong", null, e.op), " — ", e.rationale || ""); }))) : null,
+      h("h4", null, "Change to " + meta.skill + "/SKILL.md"), h(DiffView, { diff: c.diff }),
+      h(Notice, { tone: msg && msg.tone, text: msg && msg.text }),
+      meta.status === "pending" ? h("div", { className: "rgk-row" },
+        h(Button, { kind: "primary", disabled: busy || !gate.passed, title: gate.passed ? "" : "Only candidates that pass the security gate can be activated", onClick: function () {
+          if (window.confirm("Activate this " + meta.skill + " skill for the agent? You can roll it back at any time.")) act("/improve/candidate/approve", {}, "Activated. The agent uses the new skill from its next conversation.");
+        } }, "Approve and activate"),
+        h(Button, { kind: "danger", disabled: busy, onClick: function () { act("/improve/candidate/reject", { reason: window.prompt("Why? (optional)") || "" }, "Rejected."); } }, "Reject")) : null);
+  }
+
+  function Improve(props) {
+    var _s = useState(null), st = _s[0], setSt = _s[1];
+    var _sel = useState(null), sel = _sel[0], setSel = _sel[1];
+    var _k = useState("evaluate"), kind = _k[0], setKind = _k[1];
+    var _sk = useState("rg-investigate"), skill = _sk[0], setSkill = _sk[1];
+    var _ca = useState(""), caseId = _ca[0], setCaseId = _ca[1];
+    var _bu = useState(400000), budget = _bu[0], setBudget = _bu[1];
+    var _e = useState(null), est = _e[0], setEst = _e[1];
+    var _j = useState(null), job = _j[0], setJob = _j[1];
+    var _su = useState(null), suite = _su[0], setSuite = _su[1];
+    var _l = useState(null), learn = _l[0], setLearn = _l[1];
+    var _co = useState(null), cons = _co[0], setCons = _co[1];
+    var _m = useState(null), msg = _m[0], setMsg = _m[1];
+    var _v = useState(0), ver = _v[0], setVer = _v[1];
+    var poll = useRef(null);
+    var refresh = function () { setVer(function (v) { return v + 1; }); };
+    useEffect(function () { get("/improve/status").then(setSt).catch(function (e) { setMsg({ tone: "error", text: errText(e) }); }); }, [ver, props.version]);
+    useEffect(function () {
+      clearInterval(poll.current);
+      if (job && job.id && (!job.state || job.state === "running" || job.state === "queued"))
+        poll.current = setInterval(function () { get("/improve/job?id=" + job.id).then(function (j) { setJob(j); if (j.state === "done" || j.state === "failed") refresh(); }).catch(function () {}); }, 4000);
+      return function () { clearInterval(poll.current); };
+    }, [job && job.id, job && job.state]);
+    if (!st) return msg ? h(Notice, { tone: msg.tone, text: msg.text }) : h(Empty, null, "Loading…");
+    var t = st.traces || {};
+    var fb = t.feedback || {};
+    var trainTasks = (learn && learn.tasks || []).filter(function (x) { return x.split === "train" && (!skill || x.skill === skill || !x.skill); });
+    var estimate = function () { setEst(null); get("/improve/estimate?kind=" + kind + "&skill=" + (kind === "evaluate" ? "" : skill)).then(setEst).catch(function (e) { setMsg({ tone: "error", text: errText(e) }); }); };
+    var start = function (extra) {
+      setMsg(null);
+      post("/improve/job", Object.assign({ kind: kind, skill: kind === "evaluate" ? "" : skill, case: caseId, budget: budget, confirm: true, reviewer: props.reviewer }, extra || {}))
+        .then(function (r) { setJob({ id: r.job, state: "queued" }); setEst(null); }).catch(function (e) { setMsg({ tone: "error", text: errText(e) }); });
+    };
+    var draft = function (body, done) { post("/improve/draft", Object.assign({ reviewer: props.reviewer }, body)).then(function () { setMsg({ tone: "ok", text: done }); props.changed(); }).catch(function (e) { setMsg({ tone: "error", text: errText(e) }); }); };
+    var stat = function (label, value, hint) { return h("div", { className: "rgk-stat", title: hint }, h("div", { className: "rgk-stat-value" }, value), h("div", { className: "rgk-stat-label" }, label)); };
+    return h("div", { className: "rgk-stack" },
+      h("p", { className: "rgk-muted" }, "The desk learns offline: conversations are traced (redacted), replayed against a fixed evaluation organization, and skill changes are proposed SkillOpt-style or by Propose–Probe–Compose. A change reaches the agent only if it passes the security gate and you approve it. Organization facts always go to the review queue."),
+      h("div", { className: "rgk-stats" },
+        stat("answers traced", t.turns || 0, (t.sessions || 0) + " conversations · " + ((t.tokens || {}).input || 0).toLocaleString() + " input tokens"),
+        stat("rated down or corrected", (fb.down || 0) + (fb.correction || 0), (fb.up || 0) + " rated up · rate with /rate up|down in chat"),
+        stat("needed attention", t.failed_turns || 0, "corrections, tool errors, repeated calls, empty knowledge searches"),
+        stat("candidates waiting", st.candidates.filter(function (c) { return c.status === "pending"; }).length),
+        stat("improved skills active", st.active.length)),
+      h(Notice, { tone: msg && msg.tone, text: msg && msg.text }),
+      h("section", { className: "rgk-card" },
+        h("div", { className: "rgk-row" }, h("h3", null, "Desk checks (no model, free)"),
+          h(Button, { onClick: function () { setSuite("…"); post("/improve/suite").then(setSuite).catch(function (e) { setSuite({ error: errText(e) }); }); } }, "Run checks")),
+        h("p", { className: "rgk-muted rgk-small" }, "Deterministic checks of priorities, citations, accepted risks, blind spots, guidance and IaC location on the evaluation organization."),
+        suite === "…" ? h("p", null, "Running…") : suite && suite.error ? h(Notice, { tone: "error", text: suite.error }) : suite ? h("div", null,
+          h("p", null, h("strong", null, suite.passed + "/" + suite.total), " checks pass."),
+          h("ul", { className: "rgk-checks" }, suite.checks.filter(function (x) { return !x.ok; }).map(function (x) { return h("li", { key: x.id }, h("span", { className: "rgk-warn-dot" }, "✗"), " ", x.id, ": ", x.problems.join("; ")); }))) : null),
+      h("section", { className: "rgk-card" },
+        h("h3", null, "Evaluate or improve a skill"),
+        h("div", { className: "rgk-form" },
+          h("label", { className: "rgk-field" }, h("span", { className: "rgk-label" }, "What"),
+            h("select", { className: "rgk-input", value: kind, onChange: function (e) { setKind(e.target.value); setEst(null); if (e.target.value === "probe" && !learn) get("/improve/learning").then(setLearn).catch(function () {}); } },
+              h("option", { value: "evaluate" }, "Evaluate all skills (baseline)"),
+              h("option", { value: "optimize" }, "Optimize a skill (SkillOpt: edits gated on held-out tasks)"),
+              h("option", { value: "probe" }, "Fix one failed training task (Propose–Probe–Compose)"))),
+          kind !== "evaluate" ? h("label", { className: "rgk-field" }, h("span", { className: "rgk-label" }, "Skill"),
+            h("select", { className: "rgk-input", value: skill, onChange: function (e) { setSkill(e.target.value); setEst(null); } }, st.skills.map(function (s) { return h("option", { key: s, value: s }, s); }))) : null,
+          kind === "probe" ? h("label", { className: "rgk-field" }, h("span", { className: "rgk-label" }, "Training task"),
+            h("select", { className: "rgk-input", value: caseId, onChange: function (e) { setCaseId(e.target.value); } }, h("option", { value: "" }, "Choose…"),
+              trainTasks.map(function (x) { return h("option", { key: x.id, value: x.id }, x.id + " — " + String(x.prompt).slice(0, 60)); }))) : null,
+          h("label", { className: "rgk-field" }, h("span", { className: "rgk-label" }, "Token budget (job stops when reached)"),
+            h("input", { className: "rgk-input", type: "number", value: budget, onChange: function (e) { setBudget(+e.target.value || 0); } }))),
+        h("div", { className: "rgk-row" }, h(Button, { onClick: estimate, disabled: kind === "probe" && !caseId }, "Estimate")),
+        est ? h("div", { className: "rgk-notice rgk-notice-warn" }, "About ", h("strong", null, est.tokens.toLocaleString(), " tokens"), " on ", h("strong", null, est.model), " (" + est.tasks + " task(s)). " + est.note + " ",
+          h(Button, { kind: "primary", onClick: function () { start(); } }, "Start and spend tokens")) : null,
+        job ? h("div", { className: "rgk-notice rgk-notice-info" }, h("strong", null, job.kind || "job"), " ", job.state || "", job.progress ? " — " + job.progress : "",
+          job.usage ? " · " + (job.usage.total_tokens || 0).toLocaleString() + " tokens so far" : "",
+          job.state === "done" && job.result ? h("div", null, job.result.candidate ? "Candidate staged: " + job.result.candidate + " (see below)." :
+            job.result.summary ? "Scores — train " + pct(job.result.summary.train) + ", val " + pct(job.result.summary.val) + ", test " + pct(job.result.summary.test) + ", unsafe " + job.result.summary.safety_violations :
+            job.result.note || "No change passed: nothing to stage.") : null,
+          job.state === "done" && job.result && job.result.probes ? h("ul", { className: "rgk-checks" },
+            h("li", null, "Task " + job.result.case + " scored " + pct(job.result.baseline_score) + " with the active skill. Each probe tried one edit:"),
+            job.result.probes.map(function (p, n) {
+              return h("li", { key: n }, h("span", { className: (p.score || 0) > job.result.baseline_score ? "rgk-up" : "rgk-muted" }, pct(p.score)), " — ", p.edit);
+            })) : null,
+          job.state === "failed" ? h("pre", { className: "rgk-log-box" }, job.error || job.log) : null) : null),
+      h("section", { className: "rgk-card" },
+        h("h3", null, "Candidates"),
+        st.candidates.length ? h("div", { className: "rgk-split" },
+          h("aside", { className: "rgk-side" }, st.candidates.map(function (c) {
+            return h("button", { key: c.id, type: "button", className: cls("rgk-item", sel === c.id && "rgk-active"), onClick: function () { setSel(c.id); } },
+              h("span", { className: c.gate_passed ? "rgk-tick" : "rgk-warn-dot" }, c.gate_passed ? "✓" : "✗"),
+              h("span", { className: "rgk-item-title" }, c.skill + " · " + c.method, h("span", { className: "rgk-muted rgk-small rgk-block" }, c.status + " · " + String(c.created || "").slice(0, 16).replace("T", " "))));
+          })),
+          h("main", { className: "rgk-main" }, sel ? h(Candidate, { id: sel, reviewer: props.reviewer, version: ver, changed: refresh }) : h(Empty, null, "Choose a candidate to see its evidence."))) :
+          h("p", { className: "rgk-muted" }, "None yet. Optimize a skill or fix a failed task to create one.")),
+      h("section", { className: "rgk-card" },
+        h("h3", null, "Improved skills in use"),
+        st.active.length ? h("ul", { className: "rgk-refs" }, st.active.map(function (a) {
+          return h("li", { key: a.skill }, h("strong", null, a.skill), h("span", { className: "rgk-muted rgk-small" }, " approved by " + String(a.approved_by || "").replace("human:", "") + " " + String(a.at || "").slice(0, 10) + (a.stale ? " · made for an older release, not applied" : "")), " ",
+            h(Button, { kind: "link", onClick: function () { if (window.confirm("Return " + a.skill + " to the version shipped with RemediGenius-CE?")) post("/improve/candidate/rollback", { skill: a.skill, reviewer: props.reviewer }).then(function () { setMsg({ tone: "ok", text: a.skill + " rolled back." }); refresh(); }).catch(function (e) { setMsg({ tone: "error", text: errText(e) }); }); } }, "Roll back"));
+        })) : h("p", { className: "rgk-muted" }, "All skills are the versions shipped with RemediGenius-CE.")),
+      h("section", { className: "rgk-card" },
+        h("div", { className: "rgk-row" }, h("h3", null, "What the desk learned from conversations"), h(Button, { onClick: function () { setLearn("…"); get("/improve/learning").then(setLearn).catch(function (e) { setLearn({ error: errText(e) }); }); } }, "Analyse traces")),
+        learn === "…" ? h("p", null, "Analysing…") : learn && learn.error ? h(Notice, { tone: "error", text: learn.error }) : learn ? h("div", { className: "rgk-stack" },
+          h("h4", null, "Lessons for skills (" + learn.lessons.filter(function (x) { return x.kind === "general"; }).length + ")"),
+          h("ul", null, learn.lessons.filter(function (x) { return x.kind === "general"; }).map(function (x, n) { return h("li", { key: n }, h(Badge, { tone: "info" }, x.skill), " ", x.text, h("span", { className: "rgk-muted rgk-small" }, " (" + x.evidence.length + " conversation(s); used when you optimize " + x.skill + ")")); })),
+          h("h4", null, "Organization facts (go to the review queue, never straight in)"),
+          h("ul", null, learn.lessons.filter(function (x) { return x.kind === "org_fact"; }).map(function (x, n) { return h("li", { key: n }, x.text, " ", h(Button, { kind: "link", onClick: function () { draft({ draft: x.draft, name: "fact-" + n }, "Draft added to the review queue."); } }, "Send to review")); })),
+          h("h4", null, "Knowledge gaps"),
+          h("ul", null, learn.gaps.map(function (x, n) { return h("li", { key: n }, h(Badge, null, x.kind), " ", x.question, " ", h(Button, { kind: "link", onClick: function () { draft({ question: x.question, name: "gap-" + n }, "Question added to the review queue as a draft note."); } }, "Draft a note")); })),
+          h("h4", null, "Tasks mined from corrections (add to the evaluation set after you check the expected facts)"),
+          h("ul", null, learn.cases.map(function (x, n) { return h("li", { key: n }, h("code", null, x.prompt.slice(0, 120)), h("span", { className: "rgk-muted rgk-small" }, " " + x.notes), " ",
+            h(Button, { kind: "link", onClick: function () {
+              var facts = window.prompt("Facts a correct answer must contain (comma separated)", (x.must_include || []).map(function (m) { return m.pattern.replace(/\\/g, ""); }).join(", "));
+              if (!facts) return;
+              post("/improve/case", { reviewer: props.reviewer, case: { id: x.id, prompt: x.prompt, split: "train", notes: x.notes, must_include: facts.split(",").map(function (f) { return { pattern: f.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), why: "from the user's correction" }; }).filter(function (m) { return m.pattern; }) } })
+                .then(function () { setMsg({ tone: "ok", text: "Task added to the evaluation set." }); }).catch(function (e) { setMsg({ tone: "error", text: errText(e) }); });
+            } }, "Add to evaluation set")); }))) : null),
+      h("section", { className: "rgk-card" },
+        h("div", { className: "rgk-row" }, h("h3", null, "Consolidation"), h(Button, { onClick: function () { setCons("…"); get("/improve/consolidate").then(setCons).catch(function (e) { setCons({ error: errText(e) }); }); } }, "Check skills and knowledge")),
+        cons === "…" ? h("p", null, "Checking…") : cons && cons.error ? h(Notice, { tone: "error", text: cons.error }) : cons ? (cons.length ? h("ul", { className: "rgk-stack" }, cons.map(function (x, n) {
+          return h("li", { key: n }, h(Badge, { tone: x.kind === "contradiction" ? "bad" : "warn" }, x.kind), " ", (x.skills || x.paths || []).join(", "), " ", h("span", { className: "rgk-muted" }, x.detail || (x.similarity ? "similarity " + x.similarity : "")),
+            x.proposal && x.proposal.diff ? h("details", null, h("summary", null, "Proposed change"), h(DiffView, { diff: x.proposal.diff }),
+              h(Button, { onClick: function () { setKind("assess"); post("/improve/job", { kind: "assess", skill: x.proposal.skill, text: x.proposal.text, confirm: window.confirm("Evaluate this change against the active skill? This replays tasks and spends tokens."), budget: budget, reviewer: props.reviewer }).then(function (r) { setJob({ id: r.job, state: "queued" }); }).catch(function (e) { setMsg({ tone: "error", text: errText(e) }); }); } }, "Evaluate as a candidate")) : null,
+            x.proposal && x.proposal.draft ? h(Button, { kind: "link", onClick: function () { draft({ draft: x.proposal.draft, name: "merge-" + n }, "Merged draft added to the review queue; it cites the originals."); } }, "Send merged draft to review") : null);
+        })) : h("p", { className: "rgk-muted" }, "Nothing to consolidate.")) : null),
+      h("section", { className: "rgk-card" },
+        h("h3", null, "Schedule"),
+        h("p", { className: "rgk-muted" }, "A nightly review runs as a Hermes cron job (no agent): it analyses traces, gaps and consolidation and reports only when there is news. Nightly optimization is optional and stays within the budget; its candidates still wait for you."),
+        h("div", { className: "rgk-row rgk-wrap" },
+          h(Badge, { tone: st.schedule.enabled ? "ok" : "muted" }, st.schedule.enabled ? "nightly review on" : "nightly review off"),
+          h(Button, { onClick: function () { post("/improve/schedule", { enable: !st.schedule.enabled, optimize: false, reviewer: props.reviewer }).then(function () { refresh(); }).catch(function (e) { setMsg({ tone: "error", text: errText(e) }); }); } },
+            st.schedule.enabled ? "Turn off" : "Turn on (03:00 daily)"),
+          st.schedule.enabled ? h(Button, { kind: "link", onClick: function () { post("/improve/schedule", { enable: true, optimize: !(st.settings || {}).nightly_optimize, budget: budget, reviewer: props.reviewer }).then(function () { refresh(); }).catch(function (e) { setMsg({ tone: "error", text: errText(e) }); }); } },
+            (st.settings || {}).nightly_optimize ? "Stop nightly optimization" : "Also optimize nightly (spends up to the budget)") : null)));
+  }
+
   // ---------------------------------------------------------------- page
   function KnowledgePage() {
     var initial = (window.location.hash || "").replace(/^#/, "").split(":");
@@ -668,7 +895,8 @@
       tab === "Review" ? h(Review, { reviewer: who, version: version, changed: changed, open: open }) : null,
       tab === "Add" ? h(Add, { kind: addKind, reviewer: who, version: version, changed: changed, open: open }) : null,
       tab === "Import" ? h(Import, { reviewer: who, version: version, changed: changed, open: open, go: go }) : null,
-      tab === "Graph" ? h(Graph, { version: version, open: open }) : null);
+      tab === "Graph" ? h(Graph, { version: version, open: open }) : null,
+      tab === "Improve" ? h(Improve, { reviewer: who, version: version, changed: changed }) : null);
   }
 
   window.__HERMES_PLUGINS__.register("rg-knowledge", KnowledgePage);

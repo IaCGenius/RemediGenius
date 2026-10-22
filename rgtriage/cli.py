@@ -17,13 +17,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
 import webbrowser
 from datetime import datetime, timezone
+from pathlib import Path
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from . import __version__, accounts, aws, collect, config, digest, iac, knowledge, okf, playbooks, prioritize, store
+from . import __version__, accounts, aws, collect, config, digest, fixes, iac, knowledge, okf, playbooks, prioritize, store
 
 PRIORITY_ORDER = ("P1", "P2", "P3", "P4")
 
@@ -103,6 +106,8 @@ def cmd_doctor(args):
             _out(f"\nIaC {path}: {idx['resources']} resources {idx['by_tool']}, {idx['state_ids']} state ids")
         except FileNotFoundError as exc:
             advice.append(str(exc))
+    _out("\n" + digest.SCOPE_NOTE)
+    _out(model_line())
     if advice:
         _out("\nRecommendations:")
         for a in advice:
@@ -116,6 +121,11 @@ def run_scan(sources=None, progress=None) -> dict:
     except Exception as exc:  # onboarding must never stop the configured accounts from being scanned
         onboarding = {"mode": "unknown", "admin": {}, "notes": [f"account discovery failed: {type(exc).__name__}: {exc}"[:240]]}
     findings, coverage = collect.collect(profile, sources, progress, skip=accounts.skip_pairs(onboarding))
+    footprint = _footprints(profile)
+    try:
+        fix_records = fixes.advance({"findings": findings, "coverage": coverage}, profile)
+    except Exception as exc:  # fix tracking must never stop a scan
+        fix_records = [{"state": "error", "title": f"fix tracking failed: {type(exc).__name__}: {exc}"[:200]}]
     try:
         knowledge.ensure()
         known = knowledge.effective()
@@ -126,7 +136,7 @@ def run_scan(sources=None, progress=None) -> dict:
         "version": __version__, "scanned_at": collect.now_iso(),
         "profile": {"name": profile["name"], "accounts": [{"name": a["name"], "account_id": a.get("account_id"),
                     "criticality": a["criticality"]} for a in profile["accounts"]], "goals": [g.get("text") for g in profile["goals"]]},
-        "findings": findings, "coverage": coverage, "onboarding": onboarding,
+        "findings": findings, "coverage": coverage, "onboarding": onboarding, "footprint": footprint, "fixes": fix_records,
     }
     store.save_onboarding(onboarding, profile)
     store.mark_changes(scan)
@@ -139,6 +149,46 @@ def run_scan(sources=None, progress=None) -> dict:
     store.save_scan(scan)
     write_outputs(scan)
     return scan
+
+
+FOOTPRINT_MAX_AGE = 24 * 3600
+
+
+def _footprints(profile: dict) -> dict:
+    """Enabled regions and resources outside the scan scope, per account, refreshed daily (lists and counts only)."""
+    path = config.home() / "footprint.json"
+    cached, out = store._read(path, {}), {}
+    for account in profile["accounts"]:
+        key = str(account.get("account_id") or account["name"])
+        entry = cached.get(key) or {}
+        try:
+            fresh = (datetime.now(timezone.utc) - datetime.fromisoformat(entry["checked_at"].replace("Z", "+00:00"))
+                     ).total_seconds() < FOOTPRINT_MAX_AGE and entry.get("scanned_regions") == sorted(account["regions"])
+        except (KeyError, ValueError, AttributeError):
+            fresh = False
+        if not fresh:
+            try:
+                entry = collect.footprint(aws.session_for(account), account)
+            except Exception as exc:  # discovery is best effort; the board says it could not look
+                entry = {"error": f"{type(exc).__name__}: {exc}"[:200], "checked_at": collect.now_iso()}
+        out[key] = {**entry, "account": account["name"]}
+    store._write(path, out)
+    return out
+
+
+def model_line() -> str:
+    """Where the conversation goes: the model endpoint configured in Hermes (#10)."""
+    import re as _re
+    url = os.environ.get("REMEDIGENIUS_MODEL_BASE_URL") or os.environ.get("OPENAI_BASE_URL") or ""
+    model = os.environ.get("REMEDIGENIUS_MODEL_NAME") or ""
+    if not url:
+        return ("Model: configured in Hermes (not visible to the desk). Findings, identifiers, IaC excerpts, knowledge and "
+                "chat are sent to that provider; RemediGenius-CE runs no model of its own.")
+    host = _re.sub(r"^https?://", "", url).split("/")[0].split(":")[0]
+    local = host in ("localhost", "127.0.0.1", "::1") or host.endswith(".local") or \
+        _re.match(r"^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)", host) is not None
+    where = "local endpoint (inference stays on your network)" if local else "third-party provider (data leaves your network)"
+    return f"Model: {model or 'configured model'} at {host}: {where}."
 
 
 def write_outputs(scan: dict) -> None:
@@ -208,6 +258,8 @@ def cmd_show(args):
     _out(f"# {f['title']}")
     _out(f"Ref {f['key']} · {f['priority']} (score {f['score']}) · {f['product']} severity {f['severity']} · {f['category']}")
     _out(f"Account {f['account']} · region {f['region']} · first seen {f.get('first_seen')} · last seen {f.get('last_seen')}")
+    _out(f"Evidence basis: stored scan from {scan.get('scanned_at')} UTC; the title and severity are the source's or the "
+         "desk's classification, not live AWS state. Verify the claim with a live read before concluding.")
     if f.get("control_id") or f.get("type"):
         _out(f"Control/type: {f.get('control_id') or ''} {f.get('type') or ''}".strip())
     r = f["resource"]
@@ -217,11 +269,24 @@ def cmd_show(args):
     _out("\nWhy this priority:")
     for reason in f["reasons"]:
         _out(f"  - {reason}")
+    if f["context"].get("exposure"):
+        _out("AWS Security Hub exposure analysis (AWS's conclusion; traits, related resources and attack path as AWS "
+             "reported them): " + json.dumps(f["context"]["exposure"], default=str)[:3000])
     for key in ("actor", "access", "packages", "image", "standards"):
         if f["context"].get(key):
             _out(f"{key.capitalize()}: {json.dumps(f['context'][key], default=str)}")
     if f.get("related"):
         _out("Related findings on the same resource: " + ", ".join(f["related"]))
+    key = prioritize.group_key(f)
+    siblings = [m for m in scan["findings"] if m["key"] != f["key"] and prioritize.group_key(m) == key]
+    if siblings:  # one issue, several resources: each has its own ref, priority and decision
+        _out("Same issue on other resources (show their ref for that resource):")
+        for m in sorted(siblings, key=lambda m: -m["score"])[:10]:
+            decision = (m.get("decision") or {}).get("status") or ("accepted_risk" if m.get("accepted") else "")
+            _out(f"  - {m['resource'].get('name') or m['resource'].get('id')} ({m['account']}/{m['region']}) ref {m['key']} "
+                 f"{m['priority']}" + (f" · decision {decision}" if decision else ""))
+        if len(siblings) > 10:
+            _out(f"  ... {len(siblings) - 10} more (`list all=true`)")
     if f.get("owner"):
         _out(f"Owner: {f['owner']['title']} (knowledge {f['owner']['path']})")
     if f.get("decision"):
@@ -238,6 +303,8 @@ def cmd_show(args):
         practices = []
     for p in practices:
         _out(f"Security practice: {p.title} — {p.path}  (`rgtriage knowledge show {p.path}`)")
+    from .improve import hints
+    _out(hints.line(f, practices))
 
 
 def cmd_fix(args):
@@ -249,6 +316,11 @@ def cmd_fix(args):
          f"resource {f['resource'].get('type')} `{f['resource'].get('id')}` · account {f['account']} / {f['region']}")
     if f["remediation"].get("url"):
         _out(f"AWS remediation doc: {f['remediation']['url']}")
+    try:
+        from .improve import hints
+        _out(hints.line(f, knowledge.practices_for(f.get("control_id") or "", knowledge.bundle().concepts())))
+    except Exception:  # guidance is a hint; never block the fix context on it
+        pass
     _out("\n## Where it is defined in code")
     if not paths:
         _out("No IaC paths configured. Pass --iac PATH (repeatable) or add iac_paths to triage.yaml.")
@@ -294,8 +366,20 @@ def cmd_decide(args):
     if args.issue:
         issue = next((i for i in scan["issues"] if f["key"] in i["finding_keys"]), None)
         keys = issue["finding_keys"] if issue else keys
+    fix = None
+    if args.status == "fixing" or args.proof or args.pr or args.owner:
+        previous = (store.load_decisions().get(f["key"]) or {}).get("fix") or {}
+        proof = json.loads(args.proof) if args.proof else previous.get("proof")
+        if proof and not ({"service", "operation", "expect"} <= set(proof) and isinstance(proof["expect"], dict)):
+            sys.exit('proof needs {"service", "operation", "parameters", "expect": {"Field.Path": value}}')
+        fix = {**previous, "state": previous.get("state", "decided"), "owner": args.owner or previous.get("owner")
+               or (f.get("owner") or {}).get("title", ""), "pr": args.pr or previous.get("pr"), "proof": proof,
+               "source": f["source"], "account": f["account"], "region": f["region"], "title": f["title"][:160],
+               "resource": f["resource"].get("name") or f["resource"].get("id")}
+        if args.pr and fix["state"] in ("decided", "stalled"):
+            fix["state"] = "pr"
     for key in keys:
-        decision = store.save_decision(key, args.status, args.reason, args.by)
+        decision = store.save_decision(key, args.status, args.reason, args.by, fix=fix)
     for item in scan["findings"]:
         if item["key"] in keys:
             item["decision"] = decision
@@ -305,6 +389,26 @@ def cmd_decide(args):
     store.write_latest(scan)
     write_outputs(scan)
     _out(f"Recorded {args.status} for {len(keys)} finding(s): {args.reason}")
+    if fix:
+        _out(f"Fix record: {fix['state']} · owner {fix['owner'] or 'not set'} · PR {fix['pr'] or 'not linked'} · proof of done "
+             + (f"{fix['proof']['service']} {fix['proof']['operation']} expects {json.dumps(fix['proof']['expect'])}"
+                if fix.get("proof") else "NOT SET (closure cannot be verified; add proof)"))
+
+
+def cmd_fixes(args):
+    """Fix records and their state (decided, pr, deployed, verified, reopened, stalled)."""
+    scan = _latest_or_exit()
+    records = scan.get("fixes") or []
+    if args.json:
+        return _json(records)
+    if not records:
+        return _out("No fix records. A record starts when the user decides to fix a finding (decide status=fixing).")
+    _out(fixes.board_line(records))
+    for r in records:
+        check = r.get("last_check") or {}
+        _out(f"- {r.get('state')}: {r.get('title', '')[:90]} on {r.get('resource')} · ref {r.get('key')} · owner "
+             f"{r.get('owner') or '?'} · PR {r.get('pr') or '-'} · last proof check "
+             f"{check.get('at', 'never')} {'passed' if check.get('passed') else ('failed ' + json.dumps(check.get('observed') or check.get('error'), default=str)[:120] if check else '')}")
 
 
 def cmd_report(args):
@@ -338,29 +442,85 @@ def cmd_watch(args):
     _out(f"Now: {digest.summary_line(scan)}. Ask the security desk: \"triage {urgent[0]['key']}\"")
 
 
+# Reads that would put credentials into the conversation.
+AWS_REFUSED = {"AssumeRole", "AssumeRoleWithSAML", "AssumeRoleWithWebIdentity", "GetSessionToken", "GetFederationToken"}
+MORE_PAGES = ("NextToken", "nextToken", "Marker", "NextMarker", "NextPageToken", "nextPageToken")
+
+
+def _aws_account(known: list[dict], wanted: str | None) -> dict:
+    """The account an AWS read runs in. With several readable accounts the caller must name one: a silent default
+    would attribute another account's configuration to the resource in question."""
+    if wanted:
+        account = next((a for a in known if wanted in (a["name"], a.get("account_id"))), None)
+        if not account:
+            sys.exit(f"Unknown account {wanted}. Readable accounts: "
+                     + ", ".join(f"{a['name']} ({a.get('account_id') or '?'})" for a in known))
+        return account
+    if len(known) > 1:
+        sys.exit("Several accounts are readable; pass account=<name or id> (use the finding's account): "
+                 + ", ".join(f"{a['name']} ({a.get('account_id') or '?'})" for a in known))
+    return known[0]
+
+
+def evidence_header(service: str, op: str, params: dict, account: dict, region: str, observed: str,
+                    result: dict | None, truncated: bool, recorded: bool = False) -> str:
+    """One line that travels with every AWS read: what was asked, where, when, and whether the answer is complete."""
+    import hashlib
+    eid = hashlib.sha256(json.dumps([service, op, params, account.get("account_id"), region, observed],
+                                    sort_keys=True, default=str).encode()).hexdigest()[:8]
+    pages = [k for k in MORE_PAGES if (result or {}).get(k)] + (["IsTruncated"] if (result or {}).get("IsTruncated") else [])
+    completeness = "truncated output" if truncated else (f"partial: more pages ({pages[0]})" if pages else "complete")
+    kind = "evaluation (policy simulation/check, not observed configuration)" \
+        if aws.snake_to_pascal(op) in aws.EVALUATIONS else "observed"
+    where = f"account {account['name']} ({account.get('account_id') or '?'}) · region {region}"
+    return (f"Evidence e-{eid} · {service}.{op} · {where} · {'recorded fixture' if recorded else 'observed ' + observed}"
+            f" · {completeness} · {kind}")
+
+
 def cmd_aws(args):
     profile = config.load()
     known = profile["accounts"] + store.discovered_accounts(profile)
-    account = next((a for a in known if args.account in (None, a["name"], a.get("account_id"))), None)
-    if not account:
-        sys.exit(f"Unknown account {args.account}")
+    account = _aws_account(known, args.account)
     region = args.region or account["regions"][0]
     op = args.operation.replace("-", "_")
-    if not aws.is_read_operation(aws.snake_to_pascal(op)):
-        sys.exit(f"Refused: {op} is not a read-only operation (allowed prefixes: describe/get/list/batch_get/lookup/search).")
+    name = aws.snake_to_pascal(op)
+    if name in AWS_REFUSED:
+        sys.exit(f"Refused: {op} returns credentials; the desk never handles credentials.")
+    if not aws.is_read_operation(name):
+        sys.exit(f"Refused: {op} is not a read-only operation (allowed prefixes: describe/get/list/batch_get/lookup/search, "
+                 "plus the IAM policy simulator and Access Analyzer policy checks).")
     params = json.loads(args.params) if args.params else {}
+    observed = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    recorded = os.environ.get("RGTRIAGE_EVAL_AWS")
+    if recorded:  # offline evaluation: answer from the fixture's recorded responses; never reach AWS
+        keyed = [re.split(r"[:/]", v)[-1] for v in params.values() if isinstance(v, str)][:1]  # RoleName or ARN tail
+        candidates = [Path(recorded) / f"{args.service}.{op}.{k}.json" for k in keyed] + [Path(recorded) / f"{args.service}.{op}.json"]
+        path = next((c for c in candidates if c.is_file()), None)
+        if not path:
+            return _out(f"No recorded response for {args.service} {op} in this evaluation fixture (treat as not available).")
+        text = path.read_text(encoding="utf-8")
+        try:
+            result = json.loads(text)
+        except ValueError:
+            result = None
+        if isinstance(result, dict) and result.get("Error"):  # a recorded AWS error, e.g. AccessDenied
+            sys.exit(f"AWS error: {result['Error']}")
+        truncated = len(text) > args.max_chars
+        return _out(evidence_header(args.service, op, params, account, region, observed, result if isinstance(result, dict) else None,
+                                    truncated, recorded=True) + "\n" + text[:args.max_chars])
     try:
         client = aws.client(aws.session_for(account, region), args.service, region)
         result = getattr(client, op)(**params)
     except AttributeError:
         sys.exit(f"{args.service} has no operation {op}")
     except (ClientError, BotoCoreError, aws.WriteBlocked) as exc:
-        sys.exit(f"AWS error: {exc}")
+        sys.exit(f"AWS error ({args.service}.{op} · account {account['name']} · region {region}): {exc}")
     result.pop("ResponseMetadata", None)
     text = json.dumps(result, indent=1, default=str)
-    if len(text) > args.max_chars:
+    truncated = len(text) > args.max_chars
+    if truncated:
         text = text[:args.max_chars] + f"\n... truncated ({len(text)} chars; narrow the query or raise --max-chars)"
-    _out(text)
+    _out(evidence_header(args.service, op, params, account, region, observed, result, truncated) + "\n" + text)
 
 
 def cmd_validate(args):
@@ -639,6 +799,97 @@ def cmd_knowledge_edit(args):
     _json(result)
 
 
+def _improve_file(raw: str) -> Path:
+    """Files the improvement commands may read: the improvement folder and approved/shipped skill folders."""
+    path = Path(raw).expanduser()
+    if path.is_symlink():
+        sys.exit("refusing a symbolic link")
+    resolved = path.resolve()
+    roots = [Path(p) for p in os.environ.get("RGTRIAGE_IMPROVE_DIR", "").split(os.pathsep) if p]
+    roots += [Path("/opt/data/rg-improve"), config.home() / "rg-improve"]
+    if any(r.resolve() in resolved.parents or r.resolve() == resolved for r in roots if r.exists()):
+        return resolved
+    if "skills" in resolved.parts and "profiles" in resolved.parts:
+        return resolved
+    sys.exit(f"{raw} is not in the improvement folder or a profile's skills folder")
+
+
+def _grade_run(run_dir: Path, cases: dict | None = None):
+    from .improve import evals, grade
+    cases = cases or evals.load_cases()
+    meta = evals.ensure(cases["fixture"])
+    by_id = {t["id"]: t for t in evals.tasks(meta, cases)}
+    paths, refs = evals.known_paths(meta["home"]), evals.known_refs(meta["home"])
+    grades = []
+    for f in sorted((run_dir / "cases").glob("*.json")):
+        item = json.loads(f.read_text(encoding="utf-8"))
+        task = by_id.get(item.get("case"))
+        if task:
+            grades.append(grade.grade(task, item.get("answer", ""), item.get("trajectory"), paths, refs))
+    return grades
+
+
+def cmd_improve(args):
+    """Offline improvement: evaluation, grading, the security gate, trace analysis and consolidation. Never calls a model."""
+    from .improve import consolidate, evals, gate, hints, traces
+    action = args.action
+    if action == "suite":
+        result = evals.suite()
+        if args.json:
+            return _json(result)
+        _out(f"Deterministic desk checks: {result['passed']}/{result['total']} passed (fixture {result['fixture']})")
+        for r in result["checks"]:
+            _out(f"  {'ok  ' if r['ok'] else 'FAIL'} {r['id']}" + ("" if r["ok"] else f": {'; '.join(r['problems'])}"))
+        return
+    if action == "tasks":
+        cases = evals.load_cases()
+        meta = evals.ensure(cases["fixture"])
+        return _json({"fixture": meta["name"], "tasks": [{k: t.get(k) for k in ("id", "split", "critical", "tags", "prompt", "skill")}
+                                                       for t in evals.tasks(meta, cases)]})
+    if action == "exec":
+        meta = evals.ensure(evals.load_cases()["fixture"])
+        rest = [a for a in args.rest if a != "--"]
+        result = evals.exec_tool(meta, rest)
+        if result["rc"]:
+            sys.exit(result["stderr"][-1500:] or f"exit {result['rc']}")
+        return _out(result["stdout"])
+    if action == "grade-run":
+        grades = _grade_run(_improve_file(args.run))
+        return _json({"summary": gate.summarize(grades), "grades": grades})
+    if action == "gate":
+        baseline = _grade_run(_improve_file(args.baseline))
+        candidate = _grade_run(_improve_file(args.candidate))
+        text = _improve_file(args.skill_file).read_text(encoding="utf-8")
+        base = _improve_file(args.base_skill_file).read_text(encoding="utf-8") if args.base_skill_file else ""
+        suite = evals.suite()
+        okf_errors = sum(i["level"] == "error" for i in knowledge.bundle().validate())
+        return _json(gate.decide(baseline, candidate, text, base, suite=suite, okf_errors=okf_errors))
+    if action == "lint":
+        text = _improve_file(args.skill_file).read_text(encoding="utf-8")
+        base = _improve_file(args.base_skill_file).read_text(encoding="utf-8") if args.base_skill_file else ""
+        return _json(gate.lint(text, base))
+    if action == "hint":
+        f = _ref_or_exit(_latest_or_exit(), args.rest[0] if args.rest else "")
+        practices = knowledge.practices_for(f.get("control_id") or "", knowledge.bundle().concepts())
+        return _json(hints.guidance(f, practices))
+    records = traces.load(args.days)
+    if action == "traces":
+        return _json(traces.summary(records))
+    if action == "failures":
+        return _json(traces.failures(records))
+    if action == "lessons":
+        return _json(traces.lessons(records))
+    if action == "gaps":
+        return _json(traces.gaps(records))
+    if action == "cases-mined":
+        return _json(traces.case_candidates(records))
+    if action == "consolidate":
+        skills_dir = _improve_file(args.skills_dir) if args.skills_dir else Path(__file__).resolve().parents[1] / "profiles/remedigenius/skills"
+        items = (consolidate.skills_report(skills_dir) if skills_dir.is_dir() else []) + consolidate.knowledge_report()
+        return _json(items)
+    sys.exit(f"unknown improve action {action}")
+
+
 def cmd_playbook(args):
     if not args.name:
         _out("\n".join(playbooks.names()))
@@ -679,7 +930,11 @@ def main(argv=None):
     p = sub.add_parser("decide", help="record an operator decision")
     p.add_argument("ref"); p.add_argument("status", choices=store.DECISION_STATUSES); p.add_argument("--reason", required=True)
     p.add_argument("--by", default="operator"); p.add_argument("--issue", action="store_true", help="apply to every finding in the issue")
+    p.add_argument("--proof", help='fix record: proof of done, JSON {"service","operation","parameters","expect":{"Path": value}}')
+    p.add_argument("--pr", help="fix record: pull request link"); p.add_argument("--owner", help="fix record: owner")
     p.set_defaults(func=cmd_decide)
+    p = sub.add_parser("fixes", help="fix records from decision to verified closure"); p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_fixes)
     p = sub.add_parser("report", help="write the HTML report"); p.add_argument("--open", action="store_true"); p.set_defaults(func=cmd_report)
     p = sub.add_parser("watch", help="scan; print only new urgent findings (empty output = nothing new)")
     p.add_argument("--min-priority", default="P2", choices=PRIORITY_ORDER); p.set_defaults(func=cmd_watch)
@@ -726,6 +981,14 @@ def main(argv=None):
     p.add_argument("--reason"); p.add_argument("--name", help="import: original file name")
     p.add_argument("--sha256"); p.add_argument("--converter"); p.add_argument("--title")
     p.set_defaults(func=cmd_knowledge_edit)
+    p = sub.add_parser("improve", help="offline improvement: evaluation, grading, gate, traces, consolidation (no model calls)")
+    p.add_argument("action", choices=["suite", "tasks", "exec", "grade-run", "gate", "lint", "hint", "traces", "failures",
+                                      "lessons", "gaps", "cases-mined", "consolidate"])
+    p.add_argument("rest", nargs="*", help="exec: rgtriage arguments after --; hint: finding ref")
+    p.add_argument("--run"); p.add_argument("--baseline"); p.add_argument("--candidate")
+    p.add_argument("--skill-file"); p.add_argument("--base-skill-file"); p.add_argument("--skills-dir")
+    p.add_argument("--days", type=int, default=30); p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_improve)
 
     args = parser.parse_args(argv)
     try:

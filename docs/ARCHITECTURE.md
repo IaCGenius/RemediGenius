@@ -36,11 +36,12 @@ flowchart TB
 
 | Piece | What it does |
 | --- | --- |
-| `rg_triage` tool | `digest`, `scan`, `list`, `show`, `fix`, `aws` (one read-only call), `validate`, `decide`, `doctor`, `onboarding`, `playbook`, `report`, `knowledge` (read-only views) |
+| `rg_triage` tool | `digest`, `scan`, `list`, `show`, `fix`, `aws` (one read-only call or policy evaluation, prefixed with an Evidence line: account, region, time, complete or partial), `validate`, `decide`, `doctor`, `onboarding`, `playbook`, `report`, `knowledge` (read-only views) |
 | Session-start hook | puts the current board in front of the agent on the first turn; starts a background refresh when the scan is stale |
 | Guards | blocks file writes outside the proposals folder; blocks reads of credential stores, keys, `.env` and Terraform state; routes every `decide` through Hermes's approval prompt |
 | `/triage` | the board without a model call (interactive chat and gateways) |
-| Skills | `rg-triage` (briefing, priorities, decisions), `rg-investigate` (threat triage), `rg-iac-fix` (code location, diff, validation), `rg-onboard` (accounts, context, schedules), `rg-knowledge` (read, cite and draft knowledge) |
+| Skills | chosen by what the user wants: `rg-triage` (briefing, priorities, decisions, explaining and verifying findings or any configuration question), `rg-investigate` (suspicious activity: actors, timelines, compromise), `rg-iac-fix` (fixes, when asked), `rg-onboard` (accounts, access, sources), `rg-knowledge` (read, cite and draft knowledge). SOUL holds one evidence method for all of them; six evidence guides in the knowledge bundle say which reads decide each kind of question |
+| Improvement | traces from Hermes hooks; offline evaluation, SkillOpt-style optimization and Propose–Probe–Compose in the Hermes container; grading and the security gate in the desk; candidates activated only after approval ([IMPROVEMENT.md](IMPROVEMENT.md)) |
 | Knowledge tab | Hermes dashboard plugin `rg-knowledge`: overview and gaps, browse, review queue, Add form, document import with optional AI drafting, graph. Its backend holds no AWS credentials and changes the bundle only through the desk's `knowledge-edit` command |
 
 The Hermes toolsets enabled are `skills`, `clarify`, `file` (repository reading plus writes to proposals) and

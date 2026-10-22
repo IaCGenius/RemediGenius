@@ -36,6 +36,46 @@ explained, with the code change that fixes them.
   tab (Hermes dashboard plugin) has overview and gaps, browse, review, a guided Add form, document import (PDF, Word,
   PowerPoint, Excel through markitdown, installed on first use) with optional AI drafting that shows the token
   estimate first, and a graph view. See [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md).
+- **Trust and closure (issues #4–#10):**
+  - Evidence: answers cite evidence ids for observed facts; the desk flags cited ids it never returned. When evidence
+    does not settle a question the agent says "not confirmed" (and what would confirm it) or asks you. Desk-derived
+    signals are labelled ("path not verified", "desk heuristic").
+  - Coverage: every board starts with what was inspected (accounts, regions of enabled, sources) and lists regions
+    with resources outside the scan scope; scope can be confirmed once and recorded.
+  - Current AWS signals: Security Hub exposure findings (OCSF, `GetFindingsV2`) with AWS's traits, attack path and
+    remediation; AWS Critical/High exposures and GuardDuty attack sequences are never ranked lower than AWS rates them;
+    Access Analyzer internal access. boto3 ≥ 1.42. Capability matrix: [docs/AWS-CAPABILITIES.md](docs/AWS-CAPABILITIES.md).
+  - Could vs did: configuration answers what could happen, logs what did; beyond the evidence the agent names the
+    boundary and hands off (new guide "Beyond the desk's evidence" with Athena / CloudTrail Lake queries).
+  - Fix records: deciding to fix starts a record with owner, PR and a proof of done; the desk advances it at every scan
+    (in PR → deployed → verified, reopened, stalled) and shows it on the board and in a Fixes view.
+  - Business context: the board shows "N of 5 basics set"; the agent prefills account, application, owner, IaC and
+    policy suggestions from tags, Organizations and CODEOWNERS; facts you state in chat become active with one click;
+    batch approve in Review.
+  - Data flow: the installer and the dashboard show where data goes, once; `doctor` says whether the model endpoint is
+    local or third-party ([docs/DATA-FLOW.md](docs/DATA-FLOW.md)).
+- **Answers from live evidence:** a finding is a lead, not proof. Every AWS security question (explain or verify a
+  finding, or a question without one, such as "which roles can be assumed from outside?") follows one method: scope,
+  the smallest read that decides it, stop when supported, and an answer split into observed, inferred and gaps.
+  Six evidence guides (identity and trust, effective permissions, network exposure, data protection, detection and
+  history, vulnerabilities) say which reads decide a question and what they cannot show. Skills are assigned by what
+  the user wants: explaining an exposure no longer starts a fix.
+- **IAM evidence:** the IAM policy simulator (including SCPs) and Access Analyzer policy checks are allowed as
+  evaluations; the agent reads policy documents, never infers permissions from names. Every AWS read starts with an
+  Evidence line (account, region, time, complete or partial). With several readable accounts the read must name one.
+  Reads that return credentials are refused. Access Analyzer GitHub OIDC findings are classified from the role's
+  actual trust policy (none, wildcard, one repository with any branch or pull request, pinned) instead of the
+  analyzer's condition summary.
+- **Continuous improvement, gated and human-approved:** redacted execution traces from Hermes hooks with `/rate`
+  and correction detection; an offline evaluation organization (17 deterministic desk checks, 16 agent tasks with
+  train/validation/test splits and critical tasks); SkillOpt-style skill optimization and Harness²-style
+  Propose–Probe–Compose replayed with read-only tools on your configured model; lessons split into skill lessons and
+  organization facts (review queue only); knowledge-gap discovery; skill and knowledge consolidation; `Guidance:`
+  lines that point findings to the right skill and practice; a deterministic security gate (safety lint, protected
+  regions, strict held-out improvement, no critical regression, desk checks, OKF validity) before a person approves; an
+  Improve tab with the candidate queue, diffs, rollback and a nightly Hermes cron review. See
+  [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md). The shipped `rg-investigate` skill already includes one improvement learned
+  this way (cite the finding ref, playbook and knowledge a conclusion relies on), gated and reviewed.
 - **Alerts:** a `security-watch` Hermes cron job reports only new P1/P2 findings, with no model calls.
 - **Durable state:** the Hermes home and desk state are checkpointed to S3 (Spot) or a local folder (workstation) every
   2 minutes, after scans and decisions, on stop and on Spot interruption notices. Restore is verified, and lineage

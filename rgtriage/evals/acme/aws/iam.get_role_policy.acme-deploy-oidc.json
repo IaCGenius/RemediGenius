@@ -1,0 +1,5 @@
+{"RoleName": "acme-deploy-oidc", "PolicyName": "TerraformReadOnlyPolicy",
+ "PolicyDocument": {"Version": "2012-10-17", "Statement": [
+   {"Sid": "ReadState", "Effect": "Allow", "Action": ["s3:GetObject", "s3:ListBucket"], "Resource": ["arn:aws:s3:::acme-tf-state", "arn:aws:s3:::acme-tf-state/*"]},
+   {"Sid": "WriteState", "Effect": "Allow", "Action": ["s3:PutObject", "s3:DeleteObject"], "Resource": "arn:aws:s3:::acme-tf-state/*"},
+   {"Sid": "Deploy", "Effect": "Allow", "Action": ["iam:PassRole", "lambda:UpdateFunctionCode"], "Resource": "*"}]}}

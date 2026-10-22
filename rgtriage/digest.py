@@ -10,6 +10,10 @@ from .accounts import summary_lines
 from .knowledge import board_lines
 from .prioritize import is_open
 
+SCOPE_NOTE = ("What this covers: the desk ranks what your AWS security services report, in the accounts, regions and "
+              "sources listed under Coverage, and checks live configuration when you ask. It has no detectors of its own: "
+              "a quiet board means nothing was reported there, not that nothing is wrong.")
+
 PRIORITY_HEADINGS = {"P1": "P1 — act now", "P2": "P2 — fix this week", "P3": "P3 — backlog", "P4": "P4 — monitor"}
 
 
@@ -33,6 +37,32 @@ def summary_line(scan: dict) -> str:
     counts = Counter(i["priority"] for i in open_issues)
     return (f"{counts.get('P1', 0)} P1 · {counts.get('P2', 0)} P2 · {counts.get('P3', 0)} P3 · {counts.get('P4', 0)} P4 "
             f"open issues from {len(scan['findings'])} findings")
+
+
+def coverage_headline(scan: dict) -> str:
+    """One line that says what was looked at and what was not (#5): never only 'quiet'."""
+    cov = [c for c in scan["coverage"] if c["region"] != "-"]
+    accounts = {c.get("account_id") or c["account"] for c in scan["coverage"]}
+    sources_ok = {c["source"] for c in cov if c["status"] == "ok"}
+    sources_all = {c["source"] for c in cov}
+    enabled = set()
+    unscanned = []
+    for fp in (scan.get("footprint") or {}).values():
+        enabled |= set(fp.get("enabled_regions") or [])
+        for region, found in (fp.get("unscanned_with_resources") or {}).items():
+            what = ", ".join(f"{n} {label}" for label, n in found.items())
+            unscanned.append(f"{region} ({what}{'+' if any(n >= 50 for n in found.values()) else ''}) in {fp.get('account')}")
+    regions = {c["region"] for c in cov}
+    onb = scan.get("onboarding") or {}
+    text = (f"Inspected: {len(accounts)} account(s) · {len(regions)}"
+            + (f" of {len(enabled)} enabled" if enabled else "") + f" region(s) · {len(sources_ok)} of {len(sources_all)} sources read")
+    if unscanned:
+        text += f". Not inspected, resources found: {'; '.join(unscanned[:4])}{' …' if len(unscanned) > 4 else ''}"
+    if onb.get("findings_only"):
+        text += f". Findings only (no live inspection): {len(onb['findings_only'])} account(s)"
+    if onb.get("not_covered"):
+        text += f". Not covered: {len(onb['not_covered'])} account(s)"
+    return text + "."
 
 
 def coverage_gaps(scan: dict) -> list[str]:
@@ -60,6 +90,7 @@ def markdown(scan: dict, limit: int = 5, include_low: bool = False) -> str:
         f"# Security attention board — {profile.get('name', 'AWS')}",
         f"Scanned {_when(scan['scanned_at'])} UTC · accounts: {', '.join(accounts)} · regions: {', '.join(regions)}",
         f"**{summary_line(scan)}**",
+        coverage_headline(scan),
     ]
     if ch.get("previous_scan"):
         gone = ch.get("no_longer_active_count", len(ch.get("no_longer_active", [])))
@@ -94,8 +125,12 @@ def markdown(scan: dict, limit: int = 5, include_low: bool = False) -> str:
     closed = len(scan["issues"]) - len(open_issues)
     if closed:
         lines.append(f"\n{closed} issues hidden by operator decisions (accepted risk / suppressed / resolved).")
+    from .fixes import board_line
+    if board_line(scan.get("fixes") or []):
+        lines.append("\n" + board_line(scan.get("fixes") or []) + "  (`rgtriage fixes`)")
     gaps = coverage_gaps(scan)
     lines.append("\n## Coverage")
+    lines.append(SCOPE_NOTE)
     ok = [c for c in scan["coverage"] if c["status"] == "ok"]
     lines.append(f"Read OK: {', '.join(sorted({c['source'] for c in ok})) or 'nothing'}.")
     lines.extend(summary_lines(scan.get("onboarding") or {}))

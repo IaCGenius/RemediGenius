@@ -55,6 +55,17 @@ resource "aws_iam_role_policy_attachment" "audit_read" {
   role       = aws_iam_role.audit.name
   policy_arn = "arn:aws:iam::aws:policy/${each.value}"
 }
+# Policy evaluations: the IAM simulator and Access Analyzer policy checks return a verdict and change nothing.
+# They answer "can this principal do X?" from AWS's own evaluation (including SCPs) instead of the model's reading.
+resource "aws_iam_role_policy" "audit_evaluate" {
+  role = aws_iam_role.audit.name
+  policy = jsonencode({ Version = "2012-10-17", Statement = [{
+    Sid = "EvaluatePoliciesWithoutChanges", Effect = "Allow", Resource = "*",
+    Action = ["iam:SimulatePrincipalPolicy", "iam:SimulateCustomPolicy", "iam:GetContextKeysForPrincipalPolicy",
+      "iam:GetContextKeysForCustomPolicy", "access-analyzer:CheckNoPublicAccess", "access-analyzer:CheckAccessNotGranted",
+    "access-analyzer:CheckNoNewAccess", "access-analyzer:ValidatePolicy"]
+  }] })
+}
 resource "aws_iam_role_policy" "audit_exclusions" {
   role = aws_iam_role.audit.name
   policy = jsonencode({ Version = "2012-10-17", Statement = [{

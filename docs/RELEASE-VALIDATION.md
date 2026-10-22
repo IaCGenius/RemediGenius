@@ -93,6 +93,48 @@ dependencies (install now isolated and verified by an import test); a pip cache 
 checkpoint 100 MB (`.cache` excluded, pip runs without a cache); the release `dist/` ignore rule hid the tab's bundle
 from git; snapshot names could sort out of order within one second.
 
+## Continuous improvement (validated 2026-10-22)
+
+| Check | Result |
+| --- | --- |
+| Unit tests (`test_improve.py`, scripted model) | redaction (plugin and desk copies identical), trace hooks, `/rate` and correction detection; lessons vs organization facts; gap discovery; mined tasks; 17 deterministic desk checks; read-only fixture replay with recorded AWS; grader (facts, citations, invented citations, honesty, safety, tool use); lint rules and protected regions; gate decisions; SkillOpt staging, approval, restart re-apply and rollback; unsafe candidate never staged; budget stop; Propose–Probe–Compose keeps only edits that helped and refuses held-out tasks; stale approvals not applied; tool-call markup; consolidation; context hints; socket allow-list |
+| Live baseline, `deepseek-v4.1-flash` (local runner, desk CLI) | 14 tasks, 85% overall, 0 unsafe answers, about 380,000 tokens; found harness issues (empty replies, step limit) and real skill gaps (no runbook citation in investigations, an invented exception path) |
+| Live SkillOpt on `rg-investigate` (local) | held-out validation 94.5% → 100%, no critical regression, 0 unsafe; 2 general edits accepted (cite the sources a conclusion relies on), 3 rejected; gate 8/8; about 900,000 tokens |
+| AWS Spot, Improve tab (Playwright) | desk checks 17/17; a chat with a correction and `/rate down` produced traces (skills, tool calls, tokens, feedback), an organization-fact draft, a knowledge gap and a mined task; **Optimize** started from the tab through Hermes's plugin model access staged a candidate (training 87% → 93%, validation 94% → 100%, gate 8/8); the candidate view showed scores, gate checks, reasons and the diff; **Approve and activate** made the agent use it (its next investigation of a real finding cited the refs, playbook and practice); **Roll back** restored the shipped skill byte for byte; history records optimized → activated → rolled back with the reviewer |
+| AWS Spot, Propose–Probe–Compose | two single-hypothesis probes on a training task neither improved (0.67 → 0.67, 0.67); nothing composed or staged (88,000 tokens) |
+| AWS Spot, budget and schedule | a 400,000-token budget stopped an optimization mid-epoch as designed; the nightly review was created as a Hermes cron job from the tab, its script reported news in 3 s without a model, and turning it off removed the job |
+| AWS Spot, consolidation | found the two duplicate payment runbook references and the duplicate Payments Team / Payments Engineering concepts, each with a merged draft |
+
+Shipped from this run: the `rg-investigate` improvement (cite the finding ref, playbook and knowledge a conclusion relies on;
+name operator commands and the playbook under "Do now"), after it passed the gate locally and on Spot and was reviewed.
+
+Defects found and fixed during these runs: the desk socket refused `improve` (a test now checks every command the tab
+uses); the replay harness recorded empty replies and accepted a provider's tool-call markup as an answer; one noisy
+replay could block a good candidate (regressed critical tasks are now replayed once more); the tab's token estimate was
+three times too low; the cron removal parsed the wrong line; a proposed draft path was counted as an invented citation.
+
+## Answers from live evidence and IAM reads (validated 2026-10-22)
+
+| Check | Result |
+| --- | --- |
+| Unit tests | 162 passed, 1 skipped: trust-policy classifier (none / wildcard / one repository / pinned), missing analyzer detail, policy evaluations allowed, credential-returning reads refused, account scoping, Evidence line, same-issue siblings in `show` |
+| Desk checks | 19/19, including guidance by intent (explain → rg-triage, fix → rg-iac-fix) and the evidence guide per domain |
+| Offline agent tasks (`deepseek-v4.1-flash`, Acme fixture) | all 21 tasks once: 0.85 overall; the evaluation found a missed accepted-risk check, a guessed guide path and a loose grading pattern, all fixed. The 10 affected tasks re-run: 1.00. Repeats: OIDC verification 3/3, OIDC permissions (policy document, not name) 3/3, accepted risk 3/3 after `show` listed the same issue on other resources, SCP question 1.0 / 0.8 / 0.8 (correct simulator verdict; the unread SCP text was not always named) |
+| AWS Spot, live account, through the dashboard chat | rescan reclassified a GitHub OIDC role from HIGH "without a repository condition" to MEDIUM "any branch, tag, environment or pull request of one repository", matching its trust policy. Verification answered from one `iam get_role` read with the Evidence line, no invented change timeline. "Is it read-only?" read the inline policy and used the IAM simulator (organization decision included). "Which roles can be assumed from outside?" listed every role, matched the Access Analyzer findings and found an unconditional cross-account trust. An explanation-only request on open SSH checked attachments (none), said "reachable on paper", and proposed no fix |
+
+## Trust and closure (issues #4–#10, validated 2026-10-22, `deepseek-v4.1-flash-1017`)
+
+| Check | Result |
+| --- | --- |
+| Unit tests | 176 passed, 1 skipped: exposure findings (OCSF parsing, AWS severity floor, not-enabled reporting, old boto3), attack sequences, labelled desk-derived signals, unsupported evidence ids flagged, coverage headline, fix-record lifecycle (decided → PR → deployed → verified → reopened, stalled; unknown when the source was not read), proof reads refuse writes, business-context basics, one-click `remember`, `decide` fix fields, local vs third-party model endpoint |
+| Desk checks | 19/19 |
+| Terraform | `terraform validate` passes with the new `data_notice` output |
+| AWS Spot, live account | board headline: "Inspected: 1 account · 1 of 17 enabled region(s) · 6 of 8 sources read. Not inspected, resources found: one region (1 VPC). Not covered: 3 account(s)." Security Hub exposure analysis reported as not enabled (blind spot), not silence |
+| Live chat | "Is my environment secure?" → not as it stands, with the coverage limits quoted. "Was data exfiltrated?" → not established, evidence ids on every observed fact, the logging boundary named, the hypothesis labelled, one question to the user. "Where does my data go?" → third-party provider, from `doctor`, with what is sent |
+
+Not validated live: AWS Security Hub exposure findings (the test account does not have the current Security Hub enabled;
+parsing is tested with a documented-shape fixture), a full fix-record cycle through a real PR and deployment.
+
 ## Not covered by this release's validation
 
 - Discovery of a *different* account whose read role works (exercised by unit tests; this validation had no second

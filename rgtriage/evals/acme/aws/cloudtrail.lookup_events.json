@@ -1,0 +1,6 @@
+{"Events": [
+ {"EventName": "GetObject", "EventTime": "2026-10-21T02:12:04Z", "Username": "app-role", "AccessKeyId": "ASIAEXAMPLEAPP0001",
+  "CloudTrailEvent": "{\"sourceIPAddress\": \"203.0.113.77\", \"userAgent\": \"aws-cli/2.15\", \"requestParameters\": {\"bucketName\": \"acme-payments-exports\"}}"},
+ {"EventName": "ListBuckets", "EventTime": "2026-10-21T02:10:41Z", "Username": "app-role", "AccessKeyId": "ASIAEXAMPLEAPP0001",
+  "CloudTrailEvent": "{\"sourceIPAddress\": \"203.0.113.77\", \"userAgent\": \"aws-cli/2.15\"}"}
+]}

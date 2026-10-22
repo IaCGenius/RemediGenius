@@ -18,7 +18,7 @@ CRITICALITY_POINTS = {
 }
 
 DEFAULT_DETAIL_LIMITS = {"CRITICAL": 1000, "HIGH": 1000, "MEDIUM": 300, "LOW": 100, "INFORMATIONAL": 0}
-ALL_SOURCES = ("securityhub", "guardduty", "inspector", "accessanalyzer", "config", "cloudwatch", "health")
+ALL_SOURCES = ("securityhub", "securityhub-exposure", "guardduty", "inspector", "accessanalyzer", "config", "cloudwatch", "health")
 
 EXAMPLE = """\
 # RemediGenius triage profile. Edit, then run: rgtriage doctor && rgtriage scan
@@ -58,7 +58,7 @@ environment_tag_keys: [env, environment, Environment, stage]
 iac_paths: []
 #  - C:/work/my-infra
 
-sources: [securityhub, guardduty, inspector, accessanalyzer, config, cloudwatch, health]
+sources: [securityhub, securityhub-exposure, guardduty, inspector, accessanalyzer, config, cloudwatch, health]
 max_findings_per_source: 500
 
 # Other accounts in your AWS Organization are found automatically at every scan: each one where the
@@ -97,6 +97,8 @@ def normalize(data: dict) -> dict:
     data.setdefault("environment_tag_keys", ["env", "environment", "Environment", "stage"])
     data.setdefault("iac_paths", [])
     data.setdefault("sources", list(ALL_SOURCES))
+    if "securityhub" in data["sources"] and "securityhub-exposure" not in data["sources"]:
+        data["sources"].insert(data["sources"].index("securityhub") + 1, "securityhub-exposure")  # added in 0.3
     data.setdefault("max_findings_per_source", 500)
     data.setdefault("max_stored_findings", 20000)
     data.setdefault("rollup_limit", 25)
