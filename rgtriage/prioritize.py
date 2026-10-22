@@ -106,7 +106,9 @@ def score_finding(finding: dict, profile: dict, now: datetime | None = None, kno
         score += points
         reasons.append(f"{why} ({'+' if points >= 0 else ''}{points})")
 
-    if signals.get("active_threat"):
+    if signals.get("attack_sequence"):
+        add(25, "GuardDuty correlated several steps of one attack (attack sequence)")
+    elif signals.get("active_threat"):
         if any(finding["type"].startswith(t) or t in finding["type"] for t in HIGH_SIGNAL_THREATS):
             add(20, "threat detection of possible compromise, exfiltration or impact")
         else:
@@ -116,8 +118,11 @@ def score_finding(finding: dict, profile: dict, now: datetime | None = None, kno
         add(40 if count > 100 else 25 if count > 10 else 15, f"root credentials are being used ({count} API calls)")
     elif signals.get("identity_risk"):
         add(10, "identity/credential takeover risk")
-    if signals.get("public_exposure"):
-        add(15, "resource is reachable or readable from outside the account")
+    if signals.get("aws_exposure"):
+        add(10, "AWS Security Hub exposure analysis correlated this risk (see its traits and attack path)")
+    elif signals.get("public_exposure"):
+        # A rule or policy that allows outside access; the desk did not trace a network path (#4: say what is known).
+        add(15, "configuration allows access from outside the account (path not verified)")
     if signals.get("exploit_available"):
         add(12, "a public exploit exists for this vulnerability")
     if (signals.get("epss") or 0) >= 0.1:
@@ -130,7 +135,7 @@ def score_finding(finding: dict, profile: dict, now: datetime | None = None, kno
     if signals.get("fix_available"):
         add(3, "a vendor fix is available")
     if signals.get("correlated"):
-        add(10, f"toxic combination on the same resource: {signals['correlated']}")
+        add(10, f"toxic combination on the same resource: {signals['correlated']} (desk heuristic)")
 
     criticality, why, app = business_context(finding, profile, knowledge)
     points = CRITICALITY_POINTS.get(criticality, 0)
@@ -160,6 +165,13 @@ def score_finding(finding: dict, profile: dict, now: datetime | None = None, kno
                        f"{finding['expired_exception']['expires']}: back in the queue until it is renewed or fixed")
 
     score = max(0, min(100, score))
+    # AWS's own correlated conclusions set a floor: the desk adds context, it never quietly ranks them lower.
+    floor = 70 if signals.get("attack_sequence") or (signals.get("aws_exposure") and finding["severity"] == "CRITICAL") \
+        else 50 if signals.get("aws_exposure") and finding["severity"] == "HIGH" else 0
+    if score < floor and not finding.get("decision"):
+        reasons.append(f"kept at {_priority(floor)} or above: AWS rates this {finding['severity']}"
+                       + (" (attack sequence)" if signals.get("attack_sequence") else " exposure"))
+        score = floor
     finding["score"] = score
     finding["priority"] = _priority(score)
     finding["criticality"] = criticality

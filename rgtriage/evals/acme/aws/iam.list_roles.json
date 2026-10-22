@@ -1,0 +1,16 @@
+{"Roles": [
+ {"RoleName": "app-role", "Arn": "arn:aws:iam::111122223333:role/app-role", "CreateDate": "2025-06-01T10:00:00Z",
+  "AssumeRolePolicyDocument": {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Service": "ec2.amazonaws.com"}, "Action": "sts:AssumeRole"}]}},
+ {"RoleName": "acme-deploy-oidc", "Arn": "arn:aws:iam::111122223333:role/acme-deploy-oidc", "CreateDate": "2025-11-02T09:14:00Z",
+  "AssumeRolePolicyDocument": {"Version": "2012-10-17", "Statement": [{"Effect": "Allow",
+    "Principal": {"Federated": "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"},
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {"StringEquals": {"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"},
+                  "StringLike": {"token.actions.githubusercontent.com:sub": "repo:acme/platform-infra:*"}}}]}},
+ {"RoleName": "vendor-reporting", "Arn": "arn:aws:iam::111122223333:role/vendor-reporting", "CreateDate": "2024-03-12T08:00:00Z",
+  "AssumeRolePolicyDocument": {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::999988887777:root"},
+    "Action": "sts:AssumeRole", "Condition": {"StringEquals": {"sts:ExternalId": "acme-7731"}}}]}},
+ {"RoleName": "acme-admin", "Arn": "arn:aws:iam::111122223333:role/acme-admin", "CreateDate": "2024-01-05T08:00:00Z",
+  "AssumeRolePolicyDocument": {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::111122223333:root"},
+    "Action": "sts:AssumeRole", "Condition": {"Bool": {"aws:MultiFactorAuthPresent": "true"}}}]}}],
+ "IsTruncated": false}

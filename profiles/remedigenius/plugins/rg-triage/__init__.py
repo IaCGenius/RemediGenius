@@ -141,7 +141,7 @@ def _refresh_in_background() -> bool:
 # ------------------------------------------------------------------ tool
 
 ACTIONS = ("digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "onboarding", "playbook", "report",
-           "knowledge")
+           "knowledge", "remember", "fixes")
 KNOWLEDGE_VIEWS = ("overview", "search", "show", "for", "gaps", "review", "validate")
 
 
@@ -175,6 +175,11 @@ def handle(params: dict, **_kwargs) -> str:
             args += [p["status"], "--reason", p["reason"], "--by", "hermes-on-behalf-of-user"]
             if p.get("issue"):
                 args.append("--issue")
+            if p.get("proof"):
+                args += ["--proof", json.dumps(p["proof"])]
+            for key in ("pr", "owner"):
+                if p.get(key):
+                    args += [f"--{key}", str(p[key])]
     elif action == "aws":
         if not p.get("service") or not p.get("operation"):
             return "aws needs service and operation (a read-only SDK operation, e.g. ec2 describe_security_groups)"
@@ -200,6 +205,21 @@ def handle(params: dict, **_kwargs) -> str:
         if view in ("search", "show", "for") and not arg:
             return f"knowledge view={view} needs {'query' if view == 'search' else 'path' if view == 'show' else 'ref'}"
         args = ["knowledge", view] + ([arg] if arg else []) + (["--limit", str(p.get("limit", 8))] if view == "search" else [])
+    elif action == "fixes":
+        args = ["fixes"]
+    elif action == "remember":
+        # A fact the user stated, drafted under proposals/knowledge/, made active after the user's one click (approval).
+        try:
+            draft = Path(str(p.get("path") or "")).expanduser().resolve()
+        except (OSError, ValueError):
+            draft = None
+        review = _proposals_dir() / "knowledge"
+        if not draft or review not in draft.parents or not draft.is_file() or draft.suffix != ".md":
+            return f"remember needs path: a draft .md you wrote under {review}"
+        out = _run(["knowledge-edit", "save", "--file", str(draft), "--by", "human:operator-in-chat", "--verify"])
+        if "failed" not in out[:80]:
+            draft.unlink(missing_ok=True)
+        return out
     return _run(args)
 
 
@@ -210,7 +230,9 @@ SCHEMA = {
         "scan = re-collect Security Hub, GuardDuty, Inspector, Access Analyzer, Config, CloudWatch alarms, Health "
         "for all onboarded accounts and re-prioritize. list = filter the queue. show = one finding with why-this-priority, "
         "actor and context. fix = locate the IaC (Terraform/CloudFormation/CDK) that deployed the resource plus the "
-        "remediation playbook. aws = ONE read-only AWS API call (describe/get/list/lookup) for investigation. "
+        "remediation playbook. aws = ONE read-only AWS API call (describe/get/list/lookup/search, plus iam simulate_* and "
+        "accessanalyzer check_*/validate_policy evaluations) as live evidence; pass account and region; the output starts "
+        "with an Evidence line (account, time, complete or partial). "
         "validate = terraform init/validate/fmt of a module copy with your proposed .tf files overlaid (no plan/apply). "
         "decide = record the user's decision (acknowledged, investigating, fixing, accepted_risk, false_positive, "
         "suppressed, resolved) with their reason. doctor = access/coverage check. onboarding = which AWS accounts are "
@@ -218,7 +240,10 @@ SCHEMA = {
         "playbook = remediation guides. knowledge = the desk's knowledge base (OKF): view=overview (index, what changes "
         "priorities, gaps), search (query), show (path), for (ref: concepts relevant to a finding), gaps, review (drafts "
         "waiting for a person), validate. Draft new knowledge as files under the proposals folder's knowledge/ subfolder. "
-        "report = write the HTML report. Never changes AWS resources or code."),
+        "report = write the HTML report. fixes = fix records (decided, pr, deployed, verified, reopened, stalled). "
+        "decide status=fixing may carry proof (the read-only call and expected values that prove the fix), pr and owner. "
+        "remember = make a knowledge draft you wrote under proposals/knowledge/ active, for a fact the USER stated; the "
+        "user approves it with one click. Never changes AWS resources or code."),
     "parameters": {
         "type": "object",
         "properties": {
@@ -227,7 +252,7 @@ SCHEMA = {
             "priority": {"type": "string", "description": "P1, P2, P3, P4 or comma list"},
             "source": {"type": "string", "description": "securityhub, guardduty, inspector, accessanalyzer, config, cloudwatch, health"},
             "category": {"type": "string", "enum": ["threat", "vulnerability", "exposure", "posture", "operational", "health", "data"]},
-            "account": {"type": "string"},
+            "account": {"type": "string", "description": "account name or 12-digit id; required for aws when several accounts are readable"},
             "issues": {"type": "boolean", "description": "list grouped issues instead of individual findings"},
             "all": {"type": "boolean"},
             "limit": {"type": "integer", "minimum": 1, "maximum": 200},
@@ -247,6 +272,9 @@ SCHEMA = {
             "path": {"type": "string", "description": "knowledge concept path, e.g. applications/payments.md"},
             "module": {"type": "string", "description": "validate: Terraform module folder"},
             "files": {"type": "array", "items": {"type": "string"}, "description": "validate: proposed .tf files (path or path=target-name)"},
+            "proof": {"type": "object", "description": "decide fixing: proof of done {service, operation, parameters, expect: {\"Field.Path\": value}}"},
+            "pr": {"type": "string", "description": "decide fixing: pull request link"},
+            "owner": {"type": "string", "description": "decide fixing: owner (team or person)"},
         },
         "required": ["action"],
         "additionalProperties": False,
@@ -315,6 +343,10 @@ def on_pre_tool_call(tool_name: str = "", args: dict | None = None, **_kwargs):
                 "The security desk does not read credential stores, keys, .env files or Terraform state, and does not "
                 "search the whole home folder or drive. Read the IaC repository folder the user named instead.")}
         return None
+    if tool_name == "rg_triage" and (args or {}).get("action") == "remember":
+        a = args or {}
+        return {"action": "approve", "rule_key": "rg_triage:remember",
+                "message": f"Save this fact you stated as reviewed knowledge (active now, undo in the Knowledge tab): {a.get('path')}"}
     if tool_name == "rg_triage" and (args or {}).get("action") == "decide":
         # Triage decisions belong to the human: route them through Hermes's approval prompt.
         a = args or {}
@@ -369,7 +401,8 @@ _REF = re.compile(r"(?<![0-9a-f])([0-9a-f]{12})(?![0-9a-f])")
 _PATH = re.compile(r"(?<![\w/.-])/?((?:[a-z0-9_-]+/)+[a-z0-9_.-]+\.md)\b")
 _CORRECTION = re.compile(r"^\s*(no\b[,.!]?|nope\b|wrong\b|incorrect\b|actually\b|not quite\b)|\b(that'?s|that is|this is|you'?re|you are)"
                          r" (wrong|not right|incorrect|not true|not correct|mistaken)\b", re.I)
-_TRACE = {"turns": {}, "skills": {}, "last": None, "lock": threading.Lock(), "pruned": ""}
+_TRACE = {"turns": {}, "skills": {}, "last": None, "lock": threading.Lock(), "pruned": "", "evidence": {}}
+_EVIDENCE = re.compile(r"\be-[0-9a-f]{8}\b")
 
 
 def _redact(text, limit=None) -> str:
@@ -440,6 +473,8 @@ def on_post_tool_call(tool_name: str = "", args: dict | None = None, result=None
         turn = _turn(session_id, turn_id)
         if tool_name in ("skill_view", "skill_load") and args.get("name"):
             turn["skills"].append(str(args["name"]))
+        with _TRACE["lock"]:
+            _TRACE["evidence"].setdefault(str(session_id or ""), set()).update(_EVIDENCE.findall(str(result or "")))
         turn["tools"].append({"name": tool_name, "args": _redact_obj(args, 300), "status": status or "ok",
                               "ms": int(duration_ms or 0), "error": _redact(error_message, 300) if error_message else "",
                               "result": _redact(result if isinstance(result, str) else json.dumps(result, default=str), 1200)})
@@ -482,10 +517,14 @@ def on_post_llm_call(session_id=None, turn_id=None, user_message=None, assistant
             _write_trace({"type": "feedback", "at": at, "session_id": previous[0], "turn_id": previous[1],
                           "rating": "correction", "comment": _redact(user, 600)})
         refs = sorted(set(_REF.findall(answer)) | {str(t["args"].get("ref")) for t in turn["tools"] if t["args"].get("ref")})
+        with _TRACE["lock"]:
+            seen = set(_TRACE["evidence"].get(key[0], set()))
+        unsupported = sorted(set(_EVIDENCE.findall(answer)) - seen)  # cited evidence the desk never returned (#4)
         _write_trace({"type": "turn", "id": f"{key[0]}:{key[1]}", "at": at, "session_id": key[0], "turn_id": key[1],
                       "model": model, "platform": platform, "user": user, "answer": answer,
                       "skills": list(dict.fromkeys(turn["skills"] + skills)), "tools": turn["tools"][:40], "refs": refs[:30],
-                      "citations": sorted(set(_PATH.findall(answer)))[:30], "tokens": turn["tokens"]})
+                      "citations": sorted(set(_PATH.findall(answer)))[:30], "tokens": turn["tokens"],
+                      **({"unsupported_evidence": unsupported[:20]} if unsupported else {})})
     except Exception:
         pass
     return None

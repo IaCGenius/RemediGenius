@@ -10,14 +10,27 @@ generated: {by: remedigenius-ce/0.3.0, at: "2026-10-21T00:00:00Z"}
 ---
 
 Use `rg_triage action=aws` (one read-only call) for AWS evidence and `rg_triage action=knowledge` for what the
-organization has told the desk. Add `account` and `region` from the finding.
+organization has told the desk. Add `account` and `region` from the finding. Each AWS read starts with an `Evidence`
+line (account, region, time, complete or partial); quote it when it matters.
+
+A finding is a lead, not proof: its title and severity are a classification made at scan time. Verify the claim with
+the smallest live read that decides it. One guide per evidence domain says which reads decide a question, what they
+cannot show and when to stop:
+
+- [Identity and trust](/remedigenius/guides/evidence-identity-and-trust.md): who can assume a role (OIDC, SAML, external accounts)
+- [Effective permissions](/remedigenius/guides/evidence-effective-permissions.md): what a principal can do; the IAM simulator and SCPs
+- [Network exposure](/remedigenius/guides/evidence-network-exposure.md): rule, attachment and public path
+- [Data protection](/remedigenius/guides/evidence-data-protection.md): public access blocks, policies, sharing, encryption
+- [Detection and history](/remedigenius/guides/evidence-detection-and-history.md): CloudTrail, Config, GuardDuty and their limits
+- [Vulnerabilities](/remedigenius/guides/evidence-vulnerabilities.md): package, fix, exploitability, reachability
 
 | Question | Where to look |
 |---|---|
 | Who did it, from where? | `cloudtrail lookup_events` with `LookupAttributes` on AccessKeyId, Username or ResourceName (management events, 90 days)[^cloudtrail] |
 | What changed, and when? | `config get_resource_config_history` (needs AWS Config recording in that region)[^config] |
 | Is it reachable from the internet? | `ec2 describe_security_groups`, `ec2 describe_instances` (public IP), `s3 get_bucket_policy_status`, `s3 get_public_access_block`, Access Analyzer findings |
-| What can this identity do? | `iam get_role`, `iam list_attached_role_policies`, `iam get_policy_version`, `iam list_access_keys`, `iam get_access_key_last_used` |
+| What can this identity do? | policy documents (`iam get_role_policy`, `iam get_policy_version`), never policy names; `iam simulate_principal_policy` for can-X-do-Y (includes SCPs) |
+| Who can assume this role? | `iam get_role` → `AssumeRolePolicyDocument` (principal and every condition) |
 | Is it still happening? | the finding's last_seen; for GuardDuty `guardduty get_findings`; for alarms `cloudwatch describe_alarm_history` |
 | Is it managed by IaC? | `rg_triage action=fix` (Terraform, CloudFormation and CDK index) |
 | Who owns it, how critical is it? | resource tags, then Application, Account and Team concepts (`rg_triage action=knowledge`) |

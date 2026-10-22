@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
@@ -143,7 +144,8 @@ def start_desk(args):
            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "1g",
            "-v", f"{VOLUMES['creds']}:/creds:ro", "-v", f"{VOLUMES['desk']}:/data/rgtriage",
            "-v", f"{VOLUMES['hermes']}:/opt/data:ro", "-v", f"{VOLUMES['socket']}:/run/rgtriage",
-           "-v", f"{host_path(args.data / 'durable')}:/durable", "-e", f"AWS_DEFAULT_REGION={args.region}"]
+           "-v", f"{host_path(args.data / 'durable')}:/durable", "-e", f"AWS_DEFAULT_REGION={args.region}",
+           "-e", f"REMEDIGENIUS_MODEL_NAME={args.model_name or ''}", "-e", f"REMEDIGENIUS_MODEL_BASE_URL={args.model_base_url or ''}"]
     if args.iac:
         run += ["-v", f"{host_path(Path(args.iac))}:/data/iac:ro"]
     docker(*run, DESK_IMAGE, "serve", "--socket", SOCKET, "--durable", "/durable", "--home", "hermes=/opt/data",
@@ -289,8 +291,23 @@ def start_hermes(args):
 
 # ---------------------------------------------------------------- commands
 
+DATA_NOTICE = ("RemediGenius-CE runs on Hermes with the model provider you configure. Findings, resource identifiers, IaC excerpts, knowledge and chat are sent to that provider; RemediGenius-CE runs no model of its own and stores nothing elsewhere. One operator, one organization per installation (not multi-tenant). Details: docs/DATA-FLOW.md")
+
+
+def data_notice(args) -> None:
+    """Shown before the first start; the operator's acknowledgement is recorded once (#10)."""
+    ack = args.data / "data-notice-accepted"
+    if ack.exists():
+        return
+    print("\n" + DATA_NOTICE + "\n")
+    if sys.stdin.isatty() and input("Type yes to continue: ").strip().lower() != "yes":
+        sys.exit("Not started.")
+    ack.write_text(datetime.now(timezone.utc).isoformat() + "\n", encoding="utf-8")
+
+
 def cmd_start(args):
     args.data.mkdir(parents=True, exist_ok=True)
+    data_notice(args)
     (args.data / "durable").mkdir(exist_ok=True)
     print("Building the desk image ...")
     build_desk_image()

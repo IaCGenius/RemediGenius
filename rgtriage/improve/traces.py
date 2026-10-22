@@ -79,6 +79,8 @@ def failure_reasons(turn: dict) -> list[str]:
             reasons.append("rated down" + (f": {fb['comment']}" if fb.get("comment") else ""))
         elif fb["rating"] == "correction":
             reasons.append(f"user corrected: {fb.get('comment')}")
+    if turn.get("unsupported_evidence"):
+        reasons.append("cited evidence ids the desk never returned: " + ", ".join(turn["unsupported_evidence"][:5]))
     tools = turn.get("tools") or []
     for t in tools:
         if t.get("status") not in (None, "ok", "success") or t.get("error"):

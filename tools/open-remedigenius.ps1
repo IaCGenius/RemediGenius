@@ -4,8 +4,12 @@ param(
     [string]$Name = 'remedigenius-ce',
     [int]$LocalPort = 9125,
     [switch]$ShowLogin,
-    [switch]$WithLogin
+    [switch]$WithLogin,
+    # Community Hermes WebUI (MIT, https://github.com/nesquena/hermes-webui), same login; not maintained by RemediGenius.
+    [switch]$WebUI
 )
+if ($WebUI -and -not $PSBoundParameters.ContainsKey('LocalPort')) { $LocalPort = 9126 }
+$remotePort = if ($WebUI) { 8787 } else { 9120 }
 $ErrorActionPreference = 'Stop'
 $instanceId = & aws autoscaling describe-auto-scaling-groups --region $Region --auto-scaling-group-names $Name --query 'AutoScalingGroups[0].Instances[?LifecycleState==`InService`].InstanceId | [0]' --output text
 if ($LASTEXITCODE -ne 0 -or $instanceId -eq 'None') { throw 'No RemediGenius-CE instance is running. Start the stack and wait for SSM.' }
@@ -17,7 +21,11 @@ if ($ShowLogin -or $WithLogin) {
     if ($LASTEXITCODE -ne 0) { throw 'Could not retrieve the dashboard login through SSM.' }
     if (-not $WithLogin) { return }
 }
-Write-Host "RemediGenius-CE: http://127.0.0.1:$LocalPort/chat?profile=remedigenius"
-Write-Host 'Keep this tunnel open. Use -WithLogin to show the login and open the tunnel together; -ShowLogin shows only the login.'
-& aws ssm start-session --region $Region --target $instanceId --document-name AWS-StartPortForwardingSession --parameters "portNumber=9120,localPortNumber=$LocalPort"
+if ($WebUI) {
+    Write-Host "Hermes WebUI (community project, MIT, github.com/nesquena/hermes-webui): http://127.0.0.1:$LocalPort/  (same password)"
+} else {
+    Write-Host "RemediGenius-CE: http://127.0.0.1:$LocalPort/chat?profile=remedigenius"
+}
+Write-Host 'Keep this tunnel open. -WithLogin shows the login and opens the tunnel; -ShowLogin shows only the login; -WebUI opens the WebUI instead of the dashboard.'
+& aws ssm start-session --region $Region --target $instanceId --document-name AWS-StartPortForwardingSession --parameters "portNumber=$remotePort,localPortNumber=$LocalPort"
 

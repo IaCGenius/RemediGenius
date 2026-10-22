@@ -85,6 +85,11 @@ variable "scan_interval_hours" {
     error_message = "Choose a whole number of hours from 1 to 168."
   }
 }
+variable "webui" {
+  type        = bool
+  default     = true
+  description = "Also run the community Hermes WebUI (MIT, github.com/nesquena/hermes-webui, pinned) behind the same SSM tunnel and login."
+}
 variable "watch_deliver" {
   type        = string
   default     = "local"
@@ -201,7 +206,7 @@ locals {
     archive_key         = aws_s3_object.source.key, archive_sha256 = filesha256(var.source_zip),
     model_secret        = var.model_secret_arn, model_name = var.model_name, model_base_url = var.model_base_url,
     scan_interval_hours = var.scan_interval_hours, watch_deliver = var.watch_deliver,
-    container_memory_mb = var.container_memory_mb,
+    container_memory_mb = var.container_memory_mb, webui = var.webui,
     image               = "nousresearch/hermes-agent:stable@sha256:444b42594e7f467425872fc35e077a227d377f0fe0726bc818706d62175fad8b"
   }
 }
@@ -267,6 +272,11 @@ resource "aws_autoscaling_group" "host" {
     }
   }
   depends_on = [aws_iam_role_policy.host, aws_iam_role_policy_attachment.ssm, aws_s3_bucket_public_access_block.data, aws_s3_bucket_versioning.data]
+}
+
+output "data_notice" {
+  description = "Read before first use."
+  value       = "RemediGenius-CE runs on Hermes with the model provider you configure. Findings, resource identifiers, IaC excerpts, knowledge and chat are sent to that provider; RemediGenius-CE runs no model of its own and stores nothing elsewhere. One operator, one organization per installation (not multi-tenant). Details: docs/DATA-FLOW.md. Model endpoint: ${var.model_base_url == "" ? "set in the dashboard" : var.model_base_url}"
 }
 
 output "bucket" {

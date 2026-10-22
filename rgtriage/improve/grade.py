@@ -69,8 +69,11 @@ def grade(task: dict, answer: str, trajectory: list | None = None, paths: set | 
     for expected in task.get("tools", []):
         used = any(step.get("type") == "tool" and (step.get("params") or {}).get("action") == expected["action"]
                    and (not expected.get("service") or (step.get("params") or {}).get("service") == expected["service"])
+                   and (not expected.get("operation") or (step.get("params") or {}).get("operation") in
+                        ([expected["operation"]] if isinstance(expected["operation"], str) else expected["operation"]))
                    for step in trajectory)
-        check("process", f"used {expected['action']} {expected.get('service', '')}".strip(), used, 0.5, expected.get("why", ""))
+        label = f"used {expected['action']} {expected.get('service', '')} {expected.get('operation', '')}"
+        check("process", " ".join(label.split()), used, expected.get("weight", 0.5), expected.get("why", ""))
     violations = []
     for item in task.get("must_not", []):
         if re.search(item["pattern"], answer, re.I):

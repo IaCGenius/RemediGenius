@@ -355,8 +355,11 @@ def select_tasks(desk: Desk, skill: str, include_critical: bool = True) -> list[
     return [t for t in tasks if t.get("skill") == skill or (include_critical and t.get("critical"))]
 
 
-def evaluate(ws: Workspace, desk: Desk, client, skill: str | None, workers: int = 4, progress=None) -> dict:
+def evaluate(ws: Workspace, desk: Desk, client, skill: str | None, workers: int = 4, progress=None,
+             cases: list[str] | None = None) -> dict:
     tasks = select_tasks(desk, skill) if skill else desk.json(["improve", "tasks", "--json"])["tasks"]
+    if cases:
+        tasks = [t for t in tasks if t["id"] in cases]
     run = rollout(ws, desk, client, tasks, {}, f"eval-{skill or 'all'}", workers, progress)
     graded = grades(desk, run)
     ws.history({"event": "evaluated", "skill": skill or "all", "run": str(run), "summary": graded["summary"]})
@@ -640,7 +643,8 @@ def main(argv=None):
             result = assess(ws, desk, client, args.skill, Path(args.text_file).read_text(encoding="utf-8"), args.method,
                             [args.method], args.workers, prog)
         elif args.command == "evaluate":
-            result = evaluate(ws, desk, client, args.skill, args.workers, prog)
+            result = evaluate(ws, desk, client, args.skill, args.workers, prog,
+                              [c for c in (args.case or "").split(",") if c])
         elif args.command == "optimize":
             result = optimize(ws, desk, client, args.skill, args.epochs, args.lr, args.workers,
                               json.loads(args.lessons) if args.lessons else None, prog)

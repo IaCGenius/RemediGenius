@@ -10,7 +10,8 @@ generated: {by: remedigenius-ce/0.3.0, at: "2026-10-21T00:00:00Z"}
 
 1. **Collect (read-only).** Security Hub, GuardDuty, Inspector, IAM Access Analyzer, AWS Config, CloudWatch alarms and
    AWS Health, for every onboarded account and region. Every AWS call passes a guard that allows only
-   describe/get/list/lookup/search operations.
+   describe/get/list/lookup/search operations, plus the IAM policy simulator and Access Analyzer policy checks
+   (evaluations that change nothing).
 2. **Score.** Each finding starts from its source severity, then signals move it: active threat, root use, public
    exposure, public exploit, EPSS, detection gap, fleet size, toxic combinations on one resource, business criticality,
    goals. Every adjustment is written into the finding's reasons.

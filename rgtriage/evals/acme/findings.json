@@ -71,5 +71,15 @@
   "title": "EC2.53 EC2 security groups should not allow ingress from 0.0.0.0/0 to remote server administration ports",
   "resource": {"type": "AwsEc2SecurityGroup", "id": "arn:aws:ec2:us-east-1:444455556666:security-group/sg-0sandbox",
                "name": "sg-0sandbox", "tags": {}},
-  "signals": {"public_exposure": true}, "context": {}}
+  "signals": {"public_exposure": true}, "context": {}},
+ {"alias": "oidc-repo", "source": "accessanalyzer", "native_id": "arn:aws:access-analyzer:us-east-1:111122223333:finding/aa2",
+  "product": "IAM Access Analyzer", "account": "111122223333", "region": "us-east-1", "severity": "HIGH", "category": "exposure",
+  "type": "ExternalAccess",
+  "title": "AwsIamRole acme-deploy-oidc trusts GitHub OIDC without a repository (sub) condition: any GitHub workflow could assume it",
+  "resource": {"type": "AwsIamRole", "id": "arn:aws:iam::111122223333:role/acme-deploy-oidc", "name": "acme-deploy-oidc", "tags": {}},
+  "first_seen": "2026-10-21T08:00:00Z", "last_seen": "2026-10-21T08:00:00Z",
+  "signals": {"identity_risk": true},
+  "context": {"access": {"principal": {"Federated": "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"},
+              "condition": {}, "actions": ["sts:AssumeRoleWithWebIdentity"],
+              "analyzer": {"name": "account-external-access", "analyzed_at": "2026-10-21T08:00:00Z", "updated_at": "2026-10-21T08:00:00Z", "detail_retrieved": true}}}}
 ]

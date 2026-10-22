@@ -642,12 +642,17 @@ def board_lines(scan: dict) -> list[str]:
     if not k:
         return []
     line = (f"Knowledge: {k.get('organization', 0)} organization concepts ({k.get('human_reviewed', 0)} reviewed) · "
-            f"used in {k.get('used_in', 0)} findings")
+            f"business context applied to {k.get('used_in', 0)} of {k.get('findings', 0) or '?'} findings")
     if k.get("review_queue"):
         line += f" · {k['review_queue']} draft(s) to review"
     if k.get("stale"):
         line += f" · {len(k['stale'])} stale"
     lines = [line]
+    basics = k.get("basics") or {}
+    if basics and sum(basics.values()) < len(basics):
+        missing = ", ".join(name.replace("_", " ") for name, done in basics.items() if not done)
+        lines.append(f"Business context: {sum(basics.values())} of {len(basics)} basics set (missing: {missing}). "
+                     "Ranking uses generic defaults until then; say \"set up business context\" to do it in about ten minutes.")
     if k.get("gaps"):
         lines.append(f"Knowledge gap: {k['gaps'][0]}")
     return lines
@@ -656,6 +661,11 @@ def board_lines(scan: dict) -> list[str]:
 def scan_summary(scan: dict, eff: dict, b: okf.Bundle | None = None) -> dict:
     data = summary(b)
     data["used_in"] = sum(1 for f in scan.get("findings", []) if f.get("knowledge"))
+    data["findings"] = len(scan.get("findings", []))
+    types = data.get("by_type") or {}
+    data["basics"] = {"account_criticality": bool(eff["accounts"]), "critical_applications": bool(eff["applications"]),
+                      "owners": bool(types.get("Team")), "IaC_location": bool(config.load().get("iac_paths")),
+                      "a_policy": bool(types.get("Policy"))}
     data["gaps"] = gaps(scan, b)[:3]
     data["applied"] = {"applications": len(eff["applications"]), "accounts": len(eff["accounts"]),
                        "exceptions": len(eff["exceptions"]), "goals": len(eff["goals"])}

@@ -150,7 +150,9 @@
     var _v = useState(null), check = _v[0], setCheck = _v[1];
     var _l = useState([]), log = _l[0], setLog = _l[1];
     var _k = useState({}), kinds = _k[0], setKinds = _k[1];
+    var _f = useState([]), fixes = _f[0], setFixes = _f[1];
     useEffect(function () {
+      get("/fixes").then(function (r) { setFixes(Array.isArray(r) ? r : []); }).catch(function () {});
       get("/log").then(setLog).catch(function () {});
       get("/kinds").then(setKinds).catch(function () {});
     }, [props.version]);
@@ -168,7 +170,31 @@
       if (/application/i.test(g)) return ["Add", "Application"];
       return ["Browse", null];
     };
+    var noticeSeen = false;
+    try { noticeSeen = window.localStorage.getItem("rgk-data-notice") === "1"; } catch (e) { noticeSeen = false; }
+    var noticeState = useState(noticeSeen), accepted = noticeState[0], setAccepted = noticeState[1];
     return h("div", { className: "rgk-stack" },
+      h("div", { className: "rgk-notice rgk-notice-" + (accepted ? "info" : "warn") },
+        h("strong", null, "Data & model: "),
+        "RemediGenius-CE runs on Hermes with the model provider you configure. Findings, resource identifiers, IaC excerpts, knowledge and chat are sent to that provider; RemediGenius-CE runs no model of its own and stores nothing elsewhere. One operator, one organization per installation (not multi-tenant). `rgtriage doctor` shows whether the configured endpoint is local or a third-party provider. ",
+        accepted ? null : h("button", { className: "rgk-btn", onClick: function () {
+          try { window.localStorage.setItem("rgk-data-notice", "1"); } catch (e) { /* private window */ }
+          setAccepted(true);
+        } }, "I understand")),
+      fixes.length ? h("section", { className: "rgk-card" },
+        h("h3", null, "Fixes: from decision to verified closure"),
+        h("p", { className: "rgk-muted" }, "A fix closes only when its proof of done passes and the AWS finding is gone. The desk checks at every scan; your PR and CI/CD apply the change."),
+        h("div", { className: "rgk-kanban" }, ["decided", "pr", "deployed", "verified", "reopened", "stalled"].map(function (state) {
+          var items = fixes.filter(function (f) { return f.state === state; });
+          return h("div", { key: state, className: "rgk-kanban-col" },
+            h("div", { className: "rgk-label" }, { decided: "Decided", pr: "In PR", deployed: "Deployed, awaiting AWS", verified: "Verified", reopened: "Reopened", stalled: "Stalled" }[state] + " (" + items.length + ")"),
+            items.map(function (f) {
+              var c = f.last_check || {};
+              return h("div", { key: f.key, className: "rgk-kanban-card", title: JSON.stringify(f.proof || {}) },
+                h("strong", null, (f.resource || "") + ""), h("div", null, (f.title || "").slice(0, 90)),
+                h("div", { className: "rgk-muted" }, "owner " + (f.owner || "?") + (f.pr ? " · PR" : "") + " · proof " + (f.proof ? (c.at ? (c.passed ? "passed " : "failed ") + c.at : "not checked yet") : "not set")));
+            }));
+        }))) : null,
       h("div", { className: "rgk-stats" },
         stat("organization concepts", o.organization, "Concepts your organization added (the shipped guides are not counted)", function () { props.go("Browse"); }),
         stat("reviewed by a person", o.human_reviewed, "OKF trust tier human-reviewed", function () { props.go("Browse"); }),
@@ -351,10 +377,25 @@
         load(); props.changed(approve ? r.path : null);
       }).catch(function (e) { setBusy(false); setMsg({ tone: "error", text: errText(e) }); });
     };
+    var approveAll = function () {
+      if (!queue || !queue.length || !window.confirm("Approve all " + queue.length + " drafts as reviewed knowledge?")) return;
+      setBusy(true); setMsg(null);
+      var done = 0, failed = 0;
+      queue.reduce(function (chain, d) {
+        return chain.then(function () {
+          return post("/review/approve", { file: d.file, reviewer: props.reviewer }).then(function () { done++; }, function () { failed++; });
+        });
+      }, Promise.resolve()).then(function () {
+        setBusy(false); setSel(null);
+        setMsg({ tone: failed ? "warn" : "ok", text: "Approved " + done + " draft(s)" + (failed ? "; " + failed + " failed (open them one by one)." : ".") });
+        load(); props.changed(null);
+      });
+    };
     if (!queue) return h(Empty, null, "Loading…");
     return h("div", { className: "rgk-split" },
       h("aside", { className: "rgk-side" },
-        h("p", { className: "rgk-muted rgk-small" }, "Drafts from the agent (it writes them when you tell it something) and from document import. Nothing here changes priorities until you approve it."),
+        h("p", { className: "rgk-muted rgk-small" }, "Drafts from the agent (facts it inferred) and from document import. Facts you state in chat are saved with one click there instead. Nothing here changes priorities until you approve it."),
+        queue.length > 1 ? h("button", { type: "button", className: "rgk-btn", disabled: busy || !props.reviewer, onClick: approveAll }, "Approve all (" + queue.length + ")") : null,
         queue.length ? queue.map(function (d) {
           return h("button", { key: d.file, type: "button", className: cls("rgk-item", sel === d.file && "rgk-active"), onClick: function () { setSel(d.file); setMsg(null); } },
             h("span", { className: "rgk-dot", style: { background: typeColor(d.type) } }),

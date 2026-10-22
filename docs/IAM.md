@@ -6,11 +6,14 @@ The Hermes agent never holds AWS credentials.
 ## Read-only enforcement (all deployments)
 
 1. **Code:** every boto3 session the desk creates carries a `before-call` hook that refuses any operation that is not
-   Describe/Get/List/BatchGet/Lookup/Search, and also refuses reads that return secrets or data (`GetSecretValue`,
+   Describe/Get/List/BatchGet/Lookup/Search or a policy evaluation (IAM `SimulatePrincipalPolicy`/`SimulateCustomPolicy`,
+   Access Analyzer `CheckNoPublicAccess`/`CheckAccessNotGranted`/`CheckNoNewAccess`/`ValidatePolicy`, which return a
+   verdict and change nothing), and also refuses reads that return secrets or data (`GetSecretValue`,
    `GetParameter*`, `GetObject`, `Decrypt`, DynamoDB item reads, log event reads, `GetFunction`, …). This applies even
    when the underlying credentials could write.
-2. **IAM:** the deployments read through a role with `SecurityAudit` + `ViewOnlyAccess` and an explicit deny on
-   credential and data reads.
+2. **IAM:** the deployments read through a role with `SecurityAudit` + `ViewOnlyAccess`, an allow for the policy
+   evaluations above (`EvaluatePoliciesWithoutChanges`) and an explicit deny on credential and data reads. The agent's
+   AWS reads also refuse calls that return credentials (`AssumeRole*`, `GetSessionToken`, `GetFederationToken`).
 3. **Agent surface:** the agent can only send the desk a fixed list of triage commands over a Unix socket. It has no
    shell, cannot read credential files, and can write only to its proposals folder.
 
@@ -19,7 +22,7 @@ The Hermes agent never holds AWS credentials.
 | Identity | Permissions | Used by |
 | --- | --- | --- |
 | Instance role `<name>` | SSM core; its bucket (`state/` read/write, `source/` read); the model secret, plus `kms:Decrypt` on that secret's customer-managed key via Secrets Manager only; `sts:AssumeRole` on the audit role, plus `RemediGeniusReadOnly` in any account of its own organization (`aws:ResourceOrgID` = `${aws:PrincipalOrgID}`; nothing when not in an organization) or explicit `member_role_arns` | the host bootstrap and desk service (state, secret, role assumption) |
-| Audit role `<name>-audit` | `SecurityAudit`, `ViewOnlyAccess`, explicit deny on credential/data reads | every AWS read in this account |
+| Audit role `<name>-audit` | `SecurityAudit`, `ViewOnlyAccess`, policy evaluations (IAM simulator, Access Analyzer checks), explicit deny on credential/data reads | every AWS read in this account |
 | Member read role `RemediGeniusReadOnly` ([template](../deploy/aws-single/member-read-role.yaml), deploy as a StackSet) | same as the audit role; trusts only the desk identity (`TrustedPrincipalArn`) within your organization | AWS reads in member accounts; see [MULTI-ACCOUNT.md](MULTI-ACCOUNT.md) |
 | Hermes container | none. IMDSv2 hop limit 1 and the egress firewall block instance metadata | — |
 

@@ -6,15 +6,19 @@ right ones first, understand them, and get the code change that fixes them.**
 RemediGenius-CE is a security desk that runs on the open-source [Hermes agent](https://github.com/NousResearch/hermes-agent).
 Once an AWS account is connected, it:
 
-1. **Collects** findings, alerts and events from Security Hub, GuardDuty, Inspector, IAM Access Analyzer,
-   AWS Config, CloudWatch alarms and AWS Health. Collection is read-only and deterministic.
+1. **Collects** findings, alerts and events from Security Hub (including its exposure findings and attack paths),
+   GuardDuty, Inspector, IAM Access Analyzer, AWS Config, CloudWatch alarms and AWS Health. Collection is read-only and
+   deterministic, and every board says what was inspected and what was not.
 2. **Prioritizes** them P1–P4 with a written reason for every point of the score, using severity, exploitability,
    exposure, active threats, "toxic combinations" on one resource, and your business context.
 3. **Brings them to you.** Every chat opens with the attention board, and an optional schedule alerts you to new P1/P2 items.
    In an AWS Organization it finds the other accounts by itself and says which ones it cannot read yet, and why.
-4. **Investigates** with bounded read-only AWS calls (CloudTrail, IAM, EC2, S3 …) and says what it could not see.
+4. **Answers from live evidence.** A finding is a lead, not proof: the agent checks it with read-only calls, cites
+   the evidence for every observed fact, keeps what configuration *could* allow apart from what logs show *did*
+   happen, and says "not confirmed" or asks you rather than guess.
 5. **Proposes the fix in your IaC.** It finds the Terraform, CloudFormation or CDK that deployed the resource,
-   writes a minimal diff in your repository's style and runs `terraform validate` on a scratch copy. You apply it.
+   writes a minimal diff in your repository's style and runs `terraform validate` on a scratch copy. You apply it
+   through your own PR and CI/CD; the desk tracks the fix until a proof-of-done read passes and the AWS finding is gone.
 6. **Knows your organization.** One [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format)
    bundle holds who owns what, how critical it is, accepted risks, policies and runbooks, next to shipped guides on
    where to find evidence. Reviewed concepts change priorities, with a citation in every finding. The dashboard
@@ -24,6 +28,10 @@ Once an AWS account is connected, it:
    the desk replays a fixed evaluation organization, proposes skill improvements (SkillOpt-style bounded edits,
    Harness²-style Propose–Probe–Compose), and a security gate plus your approval decide what the agent uses. See
    [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md).
+
+**What it is not.** It has no detectors of its own: a quiet board means your AWS services reported nothing where the
+desk looked. It uses the model provider you configure, and findings, identifiers, IaC excerpts, knowledge and chat go
+to that provider ([what leaves your environment](docs/DATA-FLOW.md)). One operator, one organization per installation.
 
 At scale it shows fixes rather than findings. 40,000 Inspector findings become "rebuild this AMI" and
 "upgrade this package (37 with public exploits)", and a CVE's severity alone never makes it P1.

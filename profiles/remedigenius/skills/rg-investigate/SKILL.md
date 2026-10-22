@@ -1,12 +1,18 @@
 ---
 name: rg-investigate
-description: Investigate a GuardDuty threat, security alarm or suspicious event with bounded read-only AWS calls (CloudTrail, IAM, EC2, S3) and conclude expected vs suspicious.
+description: Investigate suspicious activity - GuardDuty threats, security alarms, unexpected API calls, credential or role misuse - with read-only AWS evidence (CloudTrail, IAM, EC2, S3) and conclude expected vs compromise, with actors and a timeline. Not for checking whether a configuration finding is accurate (rg-triage) or writing fixes (rg-iac-fix).
 license: Apache-2.0
 ---
 # Investigate a threat or alert
 
 Goal: decide **expected activity vs. possible compromise** fast, with evidence, and tell the user
-what to do next. Budget: about 3–6 read calls. Stop when the answer is clear.
+what to do next. Use when the question is about *activity*: who did it, was it expected, is it still happening.
+A question about how something is *configured* ("who can assume this role?") belongs to `rg-triage`.
+
+Stop when the verdict is supported or the missing evidence is named. Most cases need 2–5 AWS reads; read more only
+for a contradiction, a new indicator or a broader request, and say why. Pass the finding's `account` and `region` on
+every read; IAM, STS and Organizations events are in us-east-1. Evidence guide:
+`remedigenius/guides/evidence-detection-and-history.md`.
 
 ## Steps
 1. `rg_triage action=show ref=<ref>` — read actor (principal, access key, IP, ASN, country, API),
@@ -16,22 +22,29 @@ what to do next. Budget: about 3–6 read calls. Stop when the answer is clear.
      parameters={"LookupAttributes":[{"AttributeKey":"AccessKeyId","AttributeValue":"<key>"}],"MaxResults":50}`
    - By user name (root shows as `root`): `AttributeKey: Username`.
    - On a resource: `AttributeKey: ResourceName`, value = bucket/instance id.
-   - IAM context: `iam get_user`, `iam list_access_keys`, `iam get_access_key_last_used`.
+   - IAM context: `iam get_user`, `iam list_access_keys`, `iam get_access_key_last_used`; what the principal could
+     do comes from policy documents or `iam simulate_principal_policy`, never from policy names.
    - EC2 context: `ec2 describe_instances`, `ec2 describe_security_groups`.
    - Full GuardDuty record: `guardduty get_findings` with DetectorId and FindingIds from the native id
      (`arn:...:detector/<DetectorId>/finding/<FindingId>`).
 3. Read CloudTrail fields that decide the case: `userAgent` (Terraform? console browser? aws-cli? SDK
    in a script?), `sourceIPAddress` (matches the user's other activity?), `sessionCredentialFromConsole`,
    `mfaAuthenticated`, error codes, time pattern.
-4. Conclude in this shape:
+4. Keep **could** (what configuration allows) apart from **did** (what logs show). Exfiltration, lateral movement
+   and "before the history" questions usually end at an evidence boundary: say "not established", name it, and give
+   the next step from `remedigenius/guides/beyond-the-desk.md` (an Athena or CloudTrail Lake query for the operator to
+   run, S3 data events, flow logs, Detective, AWS Security Incident Response for an active incident). Attack-path
+   reasoning is a hypothesis unless a read or an AWS exposure finding supports it.
+5. Conclude in this shape:
    ```
    Verdict: likely expected | suspicious | compromise indicators | can't tell yet
-   Evidence: 3 bullets with times, IPs, user agents, APIs
+   Evidence: 3 bullets with times, IPs, user agents, APIs (observed, quoted from the reads)
+   Inferred: your reasoning, labelled as such; no timeline or intent that no read showed
    Gaps: what you could not see (e.g. S3 data events are not in lookup_events; 90-day limit)
    Do now: the exact commands the operator should run (containment, e.g. deactivate/delete the exposed key, revoke sessions) or "nothing", and the long-term fix (load rg-iac-fix when code is involved). Name the playbook you followed.
    ```
 <!-- PROTECTED_START -->
-5. If only the user can confirm ("was this you running terraform at 14:02 UTC?"), ask once. Propose
+6. If only the user can confirm ("was this you running terraform at 14:02 UTC?"), ask once. Propose
    the decision (`false_positive` + reason if expected; `investigating` otherwise) and record it with
    `decide` only after the user confirms. Never record decisions in unattended/scheduled runs.
 <!-- PROTECTED_END -->

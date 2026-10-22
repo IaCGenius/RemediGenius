@@ -227,10 +227,11 @@ def suite(name: str | None = None) -> dict:
             problems.append(f"board lacks {check['board']!r}")
         if "board_not" in check and check["board_not"].lower() in board.lower():
             problems.append(f"board says {check['board_not']!r}")
-        if "skill" in check or "practice" in check:
+        if {"skill", "practice", "fix_skill", "evidence"} & set(check):
             g = hints.guidance(f, knowledge.practices_for(f.get("control_id") or "", concepts))
-            if "skill" in check and g["skill"] != check["skill"]:
-                problems.append(f"guidance skill {g['skill']}, expected {check['skill']}")
+            for key in ("skill", "fix_skill", "evidence"):
+                if key in check and g.get(key) != check[key]:
+                    problems.append(f"guidance {key} {g.get(key)}, expected {check[key]}")
             if "practice" in check and check["practice"] not in g["practices"]:
                 problems.append(f"guidance practices {g['practices']}, expected {check['practice']}")
         if "fix" in check:

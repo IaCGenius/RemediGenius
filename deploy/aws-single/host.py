@@ -31,7 +31,13 @@ VENV = Path('/opt/rgtriage/venv')
 CODE = Path('/opt/rgtriage/src')          # readable copy of the rgtriage package for uid 10000
 PACKAGE = Path('/opt/remedigenius/package')
 LOGIN = HERMES_HOME / 'remedigenius-login.json'
+API_KEY = HERMES_HOME / '.remedigenius-api-key'
 CONTAINER = 'remedigenius'
+WEBUI_CONTAINER = 'remedigenius-webui'
+# Community Hermes WebUI (MIT, https://github.com/nesquena/hermes-webui), pinned; not maintained by RemediGenius.
+WEBUI_IMAGE = 'ghcr.io/nesquena/hermes-webui:0.52.492@sha256:e507cafa7b112de9abd58348423ded28a8182539e6ebb5f95be603f20aff52e6'
+SUBNET = '172.29.242.0/24'
+API_PORT = 8642
 PROFILE = 'remedigenius'
 PACKAGES = ['boto3==1.42.89', 'PyYAML==6.0.2']
 TERRAFORM = ('1.12.2', '1eaed12ca41fcfe094da3d76a7e9aa0639ad3409c43be0103ee9f5a1ff4b7437')
@@ -173,6 +179,9 @@ def network():
             'com.docker.network.bridge.name=br-remedigenius', CONTAINER)
     subprocess.run(['iptables', '-N', 'REMEDIGENIUS'], stderr=subprocess.DEVNULL)
     run('iptables', '-F', 'REMEDIGENIUS')
+    # Container to container on this network only: the WebUI reaches the Hermes API server; replies come back.
+    run('iptables', '-A', 'REMEDIGENIUS', '-s', SUBNET, '-d', SUBNET, '-m', 'conntrack', '--ctstate', 'ESTABLISHED,RELATED', '-j', 'ACCEPT')
+    run('iptables', '-A', 'REMEDIGENIUS', '-s', SUBNET, '-d', SUBNET, '-p', 'tcp', '--dport', str(API_PORT), '-j', 'ACCEPT')
     for line in Path('/etc/resolv.conf').read_text().splitlines():
         fields = line.split()
         if len(fields) >= 2 and fields[0] == 'nameserver' and ':' not in fields[1]:
@@ -267,7 +276,9 @@ def sync_profile(source: Path, hermes_home: Path):
 def units(cfg: dict) -> dict:
     env = (f'Environment=RGTRIAGE_HOME={DESK.as_posix()}\nEnvironment=PYTHONPATH={CODE.as_posix()}\n'
            f'Environment=HOME={DESK.as_posix()}/.home\nEnvironment=AWS_DEFAULT_REGION={cfg["region"]}\n'
-           f'Environment=AWS_STS_REGIONAL_ENDPOINTS=regional\nEnvironment=TF_PLUGIN_CACHE_DIR={DESK.as_posix()}/.home/plugins\n')
+           f'Environment=AWS_STS_REGIONAL_ENDPOINTS=regional\nEnvironment=TF_PLUGIN_CACHE_DIR={DESK.as_posix()}/.home/plugins\n'
+           f'Environment=REMEDIGENIUS_MODEL_NAME={cfg.get("model_name") or ""}\n'
+           f'Environment=REMEDIGENIUS_MODEL_BASE_URL={cfg.get("model_base_url") or ""}\n')
     harden = (f'User={UID}\nGroup={UID}\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\n'
               f'ReadWritePaths={DESK.as_posix()}\n')
     python = (VENV / 'bin/python').as_posix()
@@ -317,6 +328,25 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 ''',
+        # Community Hermes WebUI (MIT, github.com/nesquena/hermes-webui): its code comes from the pinned WebUI image and
+        # runs with the pinned Hermes image's own Python (the documented "manual launch"), so every Hermes module it reads
+        # (skills, kanban, cron) matches the agent. Chat goes through the Hermes gateway of the remedigenius profile, so
+        # skills, plugin guards and approvals stay in the Hermes container.
+        'remedigenius-webui.service': f'''[Unit]
+Description=Hermes WebUI (community project, MIT, pinned) for RemediGenius-CE, gateway mode
+After=remedigenius-hermes.service
+Requires=docker.service
+[Service]
+ExecStartPre=-/usr/bin/docker rm -f {WEBUI_CONTAINER}
+ExecStartPre=-/usr/bin/docker volume rm -f {WEBUI_CONTAINER}-src
+ExecStartPre=/usr/bin/docker run --rm --entrypoint sh -v {WEBUI_CONTAINER}-src:/webui {WEBUI_IMAGE} -c "cp -a /apptoo/. /webui/ && chmod -R a+rX,go-w /webui"
+ExecStart=/usr/bin/docker run --rm --name {WEBUI_CONTAINER} --network {CONTAINER} --user {UID}:{UID} --entrypoint /opt/hermes/.venv/bin/python --env-file /run/remedigenius/webui.env -e HOME=/opt/data -e HERMES_HOME=/opt/data -e HERMES_WEBUI_STATE_DIR=/opt/data/webui -e HERMES_WEBUI_HOST=0.0.0.0 -e HERMES_WEBUI_PORT=8787 -e HERMES_WEBUI_SKIP_ONBOARDING=1 -e HERMES_WEBUI_CHAT_BACKEND=gateway -e HERMES_WEBUI_GATEWAY_BASE_URL=http://{CONTAINER}:{API_PORT}/p/{PROFILE} -e HERMES_API_URL=http://{CONTAINER}:{API_PORT} -e HERMES_WEBUI_AGENT_DIR=/opt/hermes -e AWS_EC2_METADATA_DISABLED=true -w /webui -v {HERMES_HOME.as_posix()}:/opt/data -v {WEBUI_CONTAINER}-src:/webui:ro -p 127.0.0.1:8787:8787 --memory 1024m --pids-limit 512 {cfg['image']} /webui/server.py
+ExecStop=/usr/bin/docker stop -t 20 {WEBUI_CONTAINER}
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+''',
     }
 
 
@@ -326,11 +356,18 @@ def hermes_env(cfg, model_key):
         LOGIN.chmod(0o600)
         os.chown(LOGIN, UID, UID)
     login = json.loads(LOGIN.read_text())
+    if not API_KEY.exists():  # Hermes API server key, used only by the WebUI on the private network
+        API_KEY.write_text(secrets.token_urlsafe(32))
+        API_KEY.chmod(0o600)
+        os.chown(API_KEY, UID, UID)
+    api_key = API_KEY.read_text().strip()
     values = {'HERMES_DASHBOARD': '1', 'HERMES_DASHBOARD_PORT': '9120',
               'HERMES_DASHBOARD_BASIC_AUTH_USERNAME': login['username'],
               'HERMES_DASHBOARD_BASIC_AUTH_PASSWORD': login['password'],
               'HERMES_DASHBOARD_BASIC_AUTH_SECRET': login['secret'],
               'AWS_EC2_METADATA_DISABLED': 'true', 'HERMES_TUI_TOOLSETS': 'skills,clarify,file,rg_triage'}
+    if cfg.get('webui', True):
+        values.update({'API_SERVER_ENABLED': 'true', 'API_SERVER_HOST': '0.0.0.0', 'API_SERVER_PORT': str(API_PORT)})
     if model_key:
         values['MODEL_API_KEY'] = model_key
     if any('\n' in v or '\r' in v for v in values.values()):
@@ -340,6 +377,22 @@ def hermes_env(cfg, model_key):
     path = runtime / 'hermes.env'
     path.write_text(''.join(f'{k}={v}\n' for k, v in values.items()))
     path.chmod(0o600)
+    webui = {'HERMES_WEBUI_PASSWORD': login['password'], 'HERMES_WEBUI_GATEWAY_API_KEY': api_key}
+    (runtime / 'webui.env').write_text(''.join(f'{k}={v}\n' for k, v in webui.items()))
+    (runtime / 'webui.env').chmod(0o600)
+
+
+def set_api_key() -> None:
+    """The API server key lives in the Hermes .env files (they win over the container environment):
+    the root one for the shared gateway, the profile one for /p/remedigenius/ requests."""
+    key = API_KEY.read_text().strip()
+    for env in (HERMES_HOME / '.env', HERMES_HOME / 'profiles' / PROFILE / '.env'):
+        if not env.parent.exists():
+            continue
+        lines = [l for l in (env.read_text().splitlines() if env.exists() else []) if not l.startswith('API_SERVER_KEY=')]
+        env.write_text('\n'.join(lines + [f'API_SERVER_KEY={key}']) + '\n')
+        env.chmod(0o600)
+        os.chown(env, UID, UID)
 
 
 def in_container(*args, check=True, **kw):
@@ -419,9 +472,15 @@ def main():
                         '--name', PROFILE, '--yes'], check=True)
     sync_profile(SOURCE, HERMES_HOME)
     seed_model_key()
+    if cfg.get('webui', True):
+        set_api_key()
     enable_knowledge_tab()
     in_container('hermes', 'profile', 'use', PROFILE)
     run('docker', 'restart', CONTAINER)
+    if cfg.get('webui', True):
+        run('systemctl', 'enable', '--now', 'remedigenius-webui.service')
+    else:
+        subprocess.run(['systemctl', 'disable', '--now', 'remedigenius-webui.service'], capture_output=True)
     if cfg.get('watch_deliver'):
         for _ in range(30):
             jobs = in_container('hermes', '-p', PROFILE, 'cron', 'list', check=False, capture_output=True)
@@ -432,7 +491,8 @@ def main():
             in_container('hermes', '-p', PROFILE, 'cron', 'create', f"every {int(cfg.get('scan_interval_hours', 6))}h",
                          '--name', 'security-watch', '--no-agent', '--script', 'rgtriage-watch.py',
                          '--deliver', cfg['watch_deliver'])
-    print('RemediGenius-CE ready. Dashboard: tools/open-remedigenius (SSM tunnel); login in /data/hermes/remedigenius-login.json.')
+    print('RemediGenius-CE ready. Dashboard: tools/open-remedigenius (SSM tunnel); WebUI: add --webui; '
+          'login in /data/hermes/remedigenius-login.json.')
 
 
 if __name__ == '__main__':

@@ -16,7 +16,10 @@ checks:
   - {id: board-blind-spot, board: "GuardDuty is not enabled in this region", why: coverage gaps are never clean}
   - {id: board-not-clean, board_not: "no findings in eu-west-1"}
   - {id: hint-threat, alias: exfiltration, skill: rg-investigate}
-  - {id: hint-fix, alias: payments-bucket, skill: rg-iac-fix, practice: remedigenius/practices/data-protection.md}
+  - {id: hint-explain-first, alias: payments-bucket, skill: rg-triage, practice: remedigenius/practices/data-protection.md,
+     why: explaining exposure is not a fix request}
+  - {id: hint-fix-skill, alias: payments-bucket, fix_skill: rg-iac-fix}
+  - {id: hint-evidence-identity, alias: oidc-repo, evidence: remedigenius/guides/evidence-identity-and-trust.md}
   - {id: hint-identity, alias: root-mfa, practice: remedigenius/practices/identity-and-root.md}
   - {id: iac-located, alias: payments-bucket, fix: "main.tf"}
   - {id: policy-in-fix, alias: open-ssh, fix: "policies/no-ssh-from-internet.md"}
@@ -205,3 +208,72 @@ tasks:
       - {pattern: "revok|deactivat|disable the key|session", why: containment the operator runs}
       - {pattern: "CloudTrail", why: where the evidence is}
     must_cite_any: ["runbooks/leaked-credentials.md", "remedigenius/playbooks/threat-response.md"]
+
+  # AWS evidence: verify claims with live reads, read policy contents not names, separate observed from inferred.
+  - id: oidc-verify
+    skill: rg-triage
+    split: train
+    critical: true
+    tags: [identity, evidence, regression]
+    prompt: "Is {ref:oidc-repo} real? Does acme-deploy-oidc really trust every GitHub repository?"
+    must_include:
+      - {pattern: 'acme/platform-infra', why: the repository condition read from the live trust policy}
+      - {pattern: 'pull[_ ]request|any branch|branches|wildcard|:\*', why: the remaining wildcard risk}
+      - {pattern: "does not|doesn't|not (every|all|any)|only|restricted|scoped|limited", why: the headline does not match the live policy}
+    tools: [{action: aws, service: iam, operation: get_role, weight: 1.0, why: the trust policy is the evidence}]
+    must_not:
+      - {pattern: '(condition|policy) (was|has been) (most likely |probably |likely )?(added|changed|tightened|updated) (after|since)',
+         why: no evidence establishes when the policy changed}
+    must_cite_any: ["{ref:oidc-repo}"]
+
+  - id: oidc-permissions
+    skill: rg-triage
+    split: val
+    critical: true
+    tags: [identity, permissions, evidence]
+    prompt: "What can a GitHub workflow do in acme-prod with the acme-deploy-oidc role? Is it read-only?"
+    must_include:
+      - {pattern: 'PassRole|PutObject|DeleteObject|UpdateFunctionCode', why: the inline policy grants writes despite its name}
+      - {pattern: "not (purely |strictly |actually )?read[- ]only|isn't read[- ]only|write", why: the name is not the permission}
+    tools: [{action: aws, service: iam, operation: get_role_policy, weight: 1.0, why: read the policy document, not its name}]
+    must_not:
+      - {pattern: '\b(it|the role) is (a )?read[- ]only\b', why: the policy grants writes}
+
+  - id: scp-delete
+    skill: rg-triage
+    split: train
+    tags: [identity, organizations, evidence]
+    prompt: "Could the acme-deploy-oidc role delete the acme-payments-exports bucket, or would our organization's SCPs stop it?"
+    must_include:
+      - {pattern: 'simulat', why: the IAM policy simulator answers can-X-do-Y}
+      - {pattern: 'deny|denied|blocked|not allowed|cannot', why: the simulator returned explicitDeny}
+      - {pattern: 'SCP|service control|organization', why: the deny comes from the organization}
+      - {pattern: "management account|delegated|can(no|')t (read|see|list)|access ?denied|not (able|visible|readable)", why: the SCP text itself was not readable}
+    tools: [{action: aws, service: iam, operation: simulate_principal_policy, weight: 1.0, why: evaluate instead of guessing}]
+
+  - id: explain-not-fix
+    skill: rg-triage
+    split: train
+    tags: [routing, exposure]
+    prompt: "Explain why {ref:open-ssh} matters. I only want the explanation for now, not a fix."
+    must_include:
+      - {pattern: '22|SSH', why: what is exposed}
+      - {pattern: '0\.0\.0\.0/0|internet|anywhere', why: to whom}
+    must_not:
+      - {pattern: '```diff|resource "aws_|\+\s*cidr_blocks', why: the user asked for an explanation, not a fix}
+    must_cite_any: ["{ref:open-ssh}"]
+
+  - id: external-roles
+    skill: rg-triage
+    split: test
+    tags: [identity, no-finding, evidence]
+    prompt: "Which IAM roles in acme-prod can be assumed by someone outside the account?"
+    must_include:
+      - {pattern: 'vendor-reporting', why: trusted by an external account}
+      - {pattern: '999988887777', why: which external account}
+      - {pattern: 'acme-deploy-oidc', why: trusted by GitHub OIDC}
+      - {pattern: 'acme-admin[\s\S]{0,160}(same account|own account|111122223333:root|cannot|can.t)|(cannot|not)[^.\n]{0,80}acme-admin',
+         why: acme-admin trusts its own account}
+    tools: [{action: aws, service: iam, operation: list_roles, why: answer from live roles, not only findings}]
+    must_not:
+      - {pattern: 'acme-admin[^|\n]{0,60}(can be assumed|is assumable) (from|by) (outside|an external|another account)', why: acme-admin trusts its own account}
