@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -418,19 +419,74 @@ def collect_inspector(session, account, region, opts):
 
 # ---------------------------------------------------------------- IAM Access Analyzer
 
+GITHUB_OIDC = "token.actions.githubusercontent.com"
+
+
+def github_oidc_scope(trust_policy: dict) -> dict:
+    """Read a role trust policy and say which GitHub workflows can assume it.
+
+    scope: none (no subject condition), broad (wildcard owner or repository), repository (one repository, any
+    branch, tag, environment or pull request), pinned (specific refs or environments), unknown (no GitHub statement).
+    """
+    subjects, audiences, restricting = [], [], []
+    statements = trust_policy.get("Statement") or []
+    statements = statements if isinstance(statements, list) else [statements]
+    github = [s for s in statements if s.get("Effect") == "Allow"
+              and GITHUB_OIDC in json.dumps((s.get("Principal") or {}).get("Federated", ""))]
+    if not github:
+        return {"scope": "unknown", "subjects": [], "audiences": []}
+    for statement in github:
+        for operator, keys in (statement.get("Condition") or {}).items():
+            for key, value in (keys or {}).items():
+                values = value if isinstance(value, list) else [value]
+                if key == f"{GITHUB_OIDC}:sub":
+                    subjects += [str(v) for v in values]
+                elif key == f"{GITHUB_OIDC}:aud":
+                    audiences += [str(v) for v in values]
+                elif key.startswith(f"{GITHUB_OIDC}:") and key.rsplit(":", 1)[-1] in (
+                        "repository", "repository_owner", "repository_id", "job_workflow_ref", "environment", "ref"):
+                    restricting.append(f"{key.rsplit(':', 1)[-1]}={','.join(map(str, values))}")
+    if not subjects and not restricting:
+        scope = "none"
+    elif any(re.fullmatch(r"\*|repo:\*.*|repo:[^/:]*\*[^/:]*/.*|repo:[^/:]+/\*.*", s) for s in subjects):
+        scope = "broad"
+    elif any("*" in s for s in subjects):
+        scope = "repository"
+    else:
+        scope = "pinned"
+    return {"scope": scope, "subjects": subjects, "audiences": audiences, "other_conditions": restricting}
+
+
 def classify_external_access(rtype: str, name: str, detail: dict, public: bool) -> tuple[str, str, bool]:
-    """Severity by who is trusted: identity-provider trust is usually intended; missing OIDC conditions are not."""
+    """Severity by who is trusted: identity-provider trust is usually intended; missing OIDC conditions are not.
+
+    For GitHub OIDC the role's own trust policy decides (detail["trust_policy"], read with iam:GetRole); the
+    Access Analyzer condition summary alone is not evidence that a subject condition is missing.
+    """
     label = rtype or "Resource"
     if public:
         return "CRITICAL", f"{label} {name} is publicly accessible", True
+    if not detail:
+        return ("MEDIUM", f"{label} {name} is accessible from outside the zone of trust "
+                "(Access Analyzer detail not retrieved; verify who is trusted)", False)
     principal = detail.get("principal") or {}
     federated = str(principal.get("Federated", ""))
-    condition = json.dumps(detail.get("condition") or {})
-    if "token.actions.githubusercontent.com" in federated:
-        if ":sub" not in condition:
-            return ("HIGH", f"{label} {name} trusts GitHub OIDC without a repository (sub) condition: "
-                    "any GitHub workflow could assume it", True)
-        return "LOW", f"{label} {name} trusts GitHub OIDC (repository-scoped)", False
+    if GITHUB_OIDC in federated:
+        trust = detail.get("trust_policy")
+        if not trust:
+            return ("MEDIUM", f"{label} {name} trusts GitHub OIDC; repository restriction not confirmed "
+                    "(trust policy not read; verify with iam get_role)", False)
+        scope = github_oidc_scope(trust)
+        subjects = ", ".join(scope["subjects"][:3])
+        if scope["scope"] == "none":
+            return ("HIGH", f"{label} {name} trusts GitHub OIDC without a repository (sub) condition in its trust "
+                    "policy: any GitHub workflow could assume it", True)
+        if scope["scope"] == "broad":
+            return "HIGH", f"{label} {name} trusts GitHub OIDC with a wildcard repository condition ({subjects})", True
+        if scope["scope"] == "repository":
+            return ("MEDIUM", f"{label} {name} trusts GitHub OIDC for any branch, tag, environment or pull request "
+                    f"of {subjects}", False)
+        return "LOW", f"{label} {name} trusts GitHub OIDC (pinned: {subjects or 'repository conditions'})", False
     if "cognito-identity" in federated:
         if "unauth" in name.lower():
             return "MEDIUM", f"{label} {name} can be assumed by unauthenticated Cognito identities", False
@@ -442,6 +498,19 @@ def classify_external_access(rtype: str, name: str, detail: dict, public: bool) 
     if accounts:
         return "MEDIUM", f"{label} {name} is trusted by external account {accounts}", False
     return "HIGH", f"{label} {name} is shared outside the zone of trust", False
+
+
+def _role_trust(session, region: str, role_name: str) -> dict:
+    """The role's current trust policy, read directly: the evidence for who can assume it."""
+    try:
+        role = aws.client(session, "iam", region).get_role(RoleName=role_name)["Role"]
+    except (ClientError, BotoCoreError, KeyError):
+        return {}
+    trust = role.get("AssumeRolePolicyDocument") or {}
+    if isinstance(trust, str):
+        trust = json.loads(unquote(trust))
+    return {"trust_policy": trust, "trust_scope": github_oidc_scope(trust),
+            "trust_read_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 
 def collect_accessanalyzer(session, account, region, opts):
@@ -459,13 +528,15 @@ def collect_accessanalyzer(session, account, region, opts):
             rtype = RESOURCE_TYPE_MAP.get(f.get("resourceType", ""), f.get("resourceType", ""))
             kind = f.get("findingType", "ExternalAccess")
             detail = {}
-            if external and len(findings) < 50:
+            if external and len(findings) < int(opts.get("detail_limit", 200)):
                 try:
                     full = aa.get_finding(analyzerArn=analyzer["arn"], id=f["id"])["finding"]
                     detail = {"is_public": full.get("isPublic"), "principal": full.get("principal"),
                               "actions": (full.get("action") or [])[:8], "condition": full.get("condition")}
                 except (ClientError, KeyError):
                     detail = {}
+                if GITHUB_OIDC in json.dumps((detail.get("principal") or {}).get("Federated", ""))                         and f.get("resourceType") == "AWS::IAM::Role":
+                    detail.update(_role_trust(session, region, resource_name(f.get("resource", ""))))
             public = bool(detail.get("is_public"))
             if kind == "ExternalAccess":
                 sev, title, public = classify_external_access(rtype, resource_name(f.get("resource", "")), detail, public)
@@ -480,7 +551,11 @@ def collect_accessanalyzer(session, account, region, opts):
                              "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-findings-remediate.html"},
             )
             finding["resource"] = {"type": rtype, "id": f.get("resource", ""), "name": resource_name(f.get("resource", "")), "tags": {}}
-            finding["context"]["access"] = {k: v for k, v in detail.items() if v}
+            # Keep empty values the decision depends on: an empty Access Analyzer condition is itself evidence.
+            access = {k: v for k, v in detail.items() if v or k in ("condition", "principal")}
+            access["analyzer"] = {"name": analyzer["name"], "analyzed_at": str(f.get("analyzedAt", "")),
+                                  "updated_at": str(f.get("updatedAt", "")), "detail_retrieved": bool(detail)}
+            finding["context"]["access"] = access
             if public:
                 finding["signals"]["public_exposure"] = True
             findings.append(finding)

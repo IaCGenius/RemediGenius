@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import webbrowser
 from datetime import datetime, timezone
@@ -210,6 +211,8 @@ def cmd_show(args):
     _out(f"# {f['title']}")
     _out(f"Ref {f['key']} · {f['priority']} (score {f['score']}) · {f['product']} severity {f['severity']} · {f['category']}")
     _out(f"Account {f['account']} · region {f['region']} · first seen {f.get('first_seen')} · last seen {f.get('last_seen')}")
+    _out(f"Evidence basis: stored scan from {scan.get('scanned_at')} UTC; the title and severity are the source's or the "
+         "desk's classification, not live AWS state. Verify the claim with a live read before concluding.")
     if f.get("control_id") or f.get("type"):
         _out(f"Control/type: {f.get('control_id') or ''} {f.get('type') or ''}".strip())
     r = f["resource"]
@@ -224,6 +227,16 @@ def cmd_show(args):
             _out(f"{key.capitalize()}: {json.dumps(f['context'][key], default=str)}")
     if f.get("related"):
         _out("Related findings on the same resource: " + ", ".join(f["related"]))
+    key = prioritize.group_key(f)
+    siblings = [m for m in scan["findings"] if m["key"] != f["key"] and prioritize.group_key(m) == key]
+    if siblings:  # one issue, several resources: each has its own ref, priority and decision
+        _out("Same issue on other resources (show their ref for that resource):")
+        for m in sorted(siblings, key=lambda m: -m["score"])[:10]:
+            decision = (m.get("decision") or {}).get("status") or ("accepted_risk" if m.get("accepted") else "")
+            _out(f"  - {m['resource'].get('name') or m['resource'].get('id')} ({m['account']}/{m['region']}) ref {m['key']} "
+                 f"{m['priority']}" + (f" · decision {decision}" if decision else ""))
+        if len(siblings) > 10:
+            _out(f"  ... {len(siblings) - 10} more (`list all=true`)")
     if f.get("owner"):
         _out(f"Owner: {f['owner']['title']} (knowledge {f['owner']['path']})")
     if f.get("decision"):
@@ -347,35 +360,85 @@ def cmd_watch(args):
     _out(f"Now: {digest.summary_line(scan)}. Ask the security desk: \"triage {urgent[0]['key']}\"")
 
 
+# Reads that would put credentials into the conversation.
+AWS_REFUSED = {"AssumeRole", "AssumeRoleWithSAML", "AssumeRoleWithWebIdentity", "GetSessionToken", "GetFederationToken"}
+MORE_PAGES = ("NextToken", "nextToken", "Marker", "NextMarker", "NextPageToken", "nextPageToken")
+
+
+def _aws_account(known: list[dict], wanted: str | None) -> dict:
+    """The account an AWS read runs in. With several readable accounts the caller must name one: a silent default
+    would attribute another account's configuration to the resource in question."""
+    if wanted:
+        account = next((a for a in known if wanted in (a["name"], a.get("account_id"))), None)
+        if not account:
+            sys.exit(f"Unknown account {wanted}. Readable accounts: "
+                     + ", ".join(f"{a['name']} ({a.get('account_id') or '?'})" for a in known))
+        return account
+    if len(known) > 1:
+        sys.exit("Several accounts are readable; pass account=<name or id> (use the finding's account): "
+                 + ", ".join(f"{a['name']} ({a.get('account_id') or '?'})" for a in known))
+    return known[0]
+
+
+def evidence_header(service: str, op: str, params: dict, account: dict, region: str, observed: str,
+                    result: dict | None, truncated: bool, recorded: bool = False) -> str:
+    """One line that travels with every AWS read: what was asked, where, when, and whether the answer is complete."""
+    import hashlib
+    eid = hashlib.sha256(json.dumps([service, op, params, account.get("account_id"), region, observed],
+                                    sort_keys=True, default=str).encode()).hexdigest()[:8]
+    pages = [k for k in MORE_PAGES if (result or {}).get(k)] + (["IsTruncated"] if (result or {}).get("IsTruncated") else [])
+    completeness = "truncated output" if truncated else (f"partial: more pages ({pages[0]})" if pages else "complete")
+    kind = "evaluation (policy simulation/check, not observed configuration)" \
+        if aws.snake_to_pascal(op) in aws.EVALUATIONS else "observed"
+    where = f"account {account['name']} ({account.get('account_id') or '?'}) · region {region}"
+    return (f"Evidence e-{eid} · {service}.{op} · {where} · {'recorded fixture' if recorded else 'observed ' + observed}"
+            f" · {completeness} · {kind}")
+
+
 def cmd_aws(args):
     profile = config.load()
     known = profile["accounts"] + store.discovered_accounts(profile)
-    account = next((a for a in known if args.account in (None, a["name"], a.get("account_id"))), None)
-    if not account:
-        sys.exit(f"Unknown account {args.account}")
+    account = _aws_account(known, args.account)
     region = args.region or account["regions"][0]
     op = args.operation.replace("-", "_")
-    if not aws.is_read_operation(aws.snake_to_pascal(op)):
-        sys.exit(f"Refused: {op} is not a read-only operation (allowed prefixes: describe/get/list/batch_get/lookup/search).")
+    name = aws.snake_to_pascal(op)
+    if name in AWS_REFUSED:
+        sys.exit(f"Refused: {op} returns credentials; the desk never handles credentials.")
+    if not aws.is_read_operation(name):
+        sys.exit(f"Refused: {op} is not a read-only operation (allowed prefixes: describe/get/list/batch_get/lookup/search, "
+                 "plus the IAM policy simulator and Access Analyzer policy checks).")
     params = json.loads(args.params) if args.params else {}
+    observed = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     recorded = os.environ.get("RGTRIAGE_EVAL_AWS")
     if recorded:  # offline evaluation: answer from the fixture's recorded responses; never reach AWS
-        path = Path(recorded) / f"{args.service}.{op}.json"
-        text = path.read_text(encoding="utf-8") if path.is_file() else \
-            f"No recorded response for {args.service} {op} in this evaluation fixture (treat as not available)."
-        return _out(text[:args.max_chars])
+        keyed = [re.split(r"[:/]", v)[-1] for v in params.values() if isinstance(v, str)][:1]  # RoleName or ARN tail
+        candidates = [Path(recorded) / f"{args.service}.{op}.{k}.json" for k in keyed] + [Path(recorded) / f"{args.service}.{op}.json"]
+        path = next((c for c in candidates if c.is_file()), None)
+        if not path:
+            return _out(f"No recorded response for {args.service} {op} in this evaluation fixture (treat as not available).")
+        text = path.read_text(encoding="utf-8")
+        try:
+            result = json.loads(text)
+        except ValueError:
+            result = None
+        if isinstance(result, dict) and result.get("Error"):  # a recorded AWS error, e.g. AccessDenied
+            sys.exit(f"AWS error: {result['Error']}")
+        truncated = len(text) > args.max_chars
+        return _out(evidence_header(args.service, op, params, account, region, observed, result if isinstance(result, dict) else None,
+                                    truncated, recorded=True) + "\n" + text[:args.max_chars])
     try:
         client = aws.client(aws.session_for(account, region), args.service, region)
         result = getattr(client, op)(**params)
     except AttributeError:
         sys.exit(f"{args.service} has no operation {op}")
     except (ClientError, BotoCoreError, aws.WriteBlocked) as exc:
-        sys.exit(f"AWS error: {exc}")
+        sys.exit(f"AWS error ({args.service}.{op} · account {account['name']} · region {region}): {exc}")
     result.pop("ResponseMetadata", None)
     text = json.dumps(result, indent=1, default=str)
-    if len(text) > args.max_chars:
+    truncated = len(text) > args.max_chars
+    if truncated:
         text = text[:args.max_chars] + f"\n... truncated ({len(text)} chars; narrow the query or raise --max-chars)"
-    _out(text)
+    _out(evidence_header(args.service, op, params, account, region, observed, result, truncated) + "\n" + text)
 
 
 def cmd_validate(args):

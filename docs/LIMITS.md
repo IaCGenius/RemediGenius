@@ -22,6 +22,11 @@ reaches your model provider, for every change you make to your cloud, and for AW
   only applied after a person approves them. See [KNOWLEDGE.md](KNOWLEDGE.md).
 - **Investigations are bounded.** CloudTrail `LookupEvents` covers 90 days of management events per region. S3/Lambda
   data events are not visible through it; the agent says so.
+- **Evidence has known gaps.** Service control and resource control policy texts are readable only from the management
+  or a delegated administrator account; from a member account the IAM simulator's verdict is the evidence. Network
+  reachability is assembled from security groups, routes, NACLs and load balancers (Reachability Analyzer is not run).
+  Whether data is sensitive comes from Macie findings, tags or knowledge; the desk never reads object contents.
+  Each AWS read says its account, time and whether it was complete; the agent labels what it inferred.
 - **Decisions are local triage records.** They do not archive or suppress findings in AWS.
 - **Single operator.** The dashboard has one login and is reachable only on localhost (workstation) or through SSM
   (Spot). It is not a multi-user or multi-tenant service.

@@ -125,9 +125,22 @@ def test_deterministic_desk_suite_passes(home):
 
 
 def test_fixture_tool_replay_uses_recorded_aws_and_refuses_changes(fixture_meta):
-    out = evals.exec_tool(fixture_meta, ["aws", "cloudtrail", "lookup_events", "--params", "{}"])
+    unscoped = evals.exec_tool(fixture_meta, ["aws", "cloudtrail", "lookup_events", "--params", "{}"])
+    assert "Several accounts are readable" in unscoped["stdout"] + unscoped.get("stderr", "") and "203.0.113.77" not in unscoped["stdout"]
+    out = evals.exec_tool(fixture_meta, ["aws", "cloudtrail", "lookup_events", "--params", "{}", "--account", "acme-prod"])
     assert "203.0.113.77" in out["stdout"]
-    missing = evals.exec_tool(fixture_meta, ["aws", "iam", "list_users", "--params", "{}"])
+    assert out["stdout"].startswith("Evidence e-") and "account acme-prod (111122223333)" in out["stdout"]
+    role = evals.exec_tool(fixture_meta, ["aws", "iam", "get_role", "--params", '{"RoleName": "acme-deploy-oidc"}',
+                                          "--account", "111122223333"])["stdout"]
+    assert "repo:acme/platform-infra:*" in role and "recorded fixture" in role.splitlines()[0]  # never live AWS
+    sim = evals.exec_tool(fixture_meta, ["aws", "iam", "simulate_principal_policy", "--account", "acme-prod", "--params",
+                                         '{"PolicySourceArn": "arn:aws:iam::111122223333:role/acme-deploy-oidc", "ActionNames": ["s3:DeleteBucket"]}'])
+    assert "explicitDeny" in sim["stdout"] and "evaluation (policy simulation" in sim["stdout"]
+    denied = evals.exec_tool(fixture_meta, ["aws", "organizations", "list_policies", "--account", "acme-prod", "--params", '{"Filter": "SERVICE_CONTROL_POLICY"}'])
+    assert "AccessDenied" in denied["stdout"] + denied.get("stderr", "")
+    creds = evals.exec_tool(fixture_meta, ["aws", "sts", "assume_role", "--account", "acme-prod", "--params", "{}"])
+    assert "returns credentials" in creds["stdout"] + creds.get("stderr", "")
+    missing = evals.exec_tool(fixture_meta, ["aws", "iam", "list_users", "--params", "{}", "--account", "acme-prod"])
     assert "No recorded response" in missing["stdout"]
     assert "approves" in evals.exec_tool(fixture_meta, ["decide", "x", "resolved", "--reason", "x"])["stdout"]
     assert "not available" in evals.exec_tool(fixture_meta, ["scan"])["stdout"]
@@ -354,9 +367,11 @@ def test_context_hints_route_findings_to_the_right_skill_and_practice(fixture_me
     by = {f["key"]: f for f in scan["findings"]}
     a = fixture_meta["aliases"]
     assert hints.skill_for(by[a["exfiltration"]])[0] == "rg-investigate"
-    assert hints.skill_for(by[a["cve-exploited"]])[0] == "rg-iac-fix"
+    assert hints.skill_for(by[a["cve-exploited"]])[0] == "rg-triage"  # explaining is not a fix request
+    assert hints.guidance(by[a["cve-exploited"]])["fix_skill"] == "rg-iac-fix"
     out = evals.exec_tool(fixture_meta, ["show", a["root-mfa"]])["stdout"]
-    assert "Guidance: load skill" in out and "identity-and-root" in out
+    assert "Guidance: to explain or verify, load skill" in out and "identity-and-root" in out
+    assert "evidence guide remedigenius/guides/evidence-identity-and-trust.md" in out
 
 
 def test_improve_cli_reads_only_allowed_files(home, monkeypatch, tmp_path):
@@ -386,3 +401,11 @@ def test_provider_tool_call_markup_is_honoured_never_taken_as_the_answer(workspa
     assert [s["type"] for s in result["trajectory"]] == ["skill", "tool"]
     assert result["trajectory"][1]["params"] == {"action": "digest", "limit": 3}
     assert result["answer"] == "Root credentials are in use."
+
+
+def test_show_lists_the_same_issue_on_other_resources_with_their_decisions(fixture_meta):
+    a = fixture_meta["aliases"]
+    out = evals.exec_tool(fixture_meta, ["show", a["payments-bucket"]])["stdout"]
+    assert "Same issue on other resources" in out
+    assert f"acme-marketing-site (111122223333/us-east-1) ref {a['marketing-bucket']}" in out and "accepted_risk" in out
+    assert "Evidence basis: stored scan" in out

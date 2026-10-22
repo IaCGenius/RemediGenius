@@ -1,9 +1,12 @@
 ---
 name: rg-iac-fix
-description: Find the Terraform, CloudFormation or CDK code that deployed a resource named in a finding and propose a minimal, reviewable code change (unified diff) plus verification steps.
+description: When the user asks for a fix - find the Terraform, CloudFormation or CDK code that deployed a resource named in a finding and propose a minimal, reviewable code change (unified diff) with impact, validation and rollback. Not for explaining or verifying a finding (rg-triage).
 license: Apache-2.0
 ---
 # Propose an IaC fix for a finding
+
+Use when the user asks to fix, remediate or patch. If they only asked what a finding means or whether it is real,
+answer that (rg-triage) and offer the fix.
 
 ## Steps
 1. `rg_triage action=fix ref=<ref>` (add `iac_paths=["C:/path/to/repo"]` if the user names a repo
@@ -17,7 +20,9 @@ license: Apache-2.0
 2. Confirm the match. For **low** candidates read the file (`read_file`) and check variables /
    tfvars / naming to see whether it really produces this resource. If you cannot confirm, say
    which candidate is most likely and why, and what would confirm it (e.g. `terraform state list`).
-3. Verify the finding is still true with one read (`rg_triage action=aws ...`) when cheap.
+3. Verify the finding is still true before writing code: the decisive read from the evidence guide on the
+   `Guidance:` line (pass `account`). If live configuration no longer matches the finding, say so and do not write a
+   fix for a problem that is not there. For IAM fixes, base the change on the policy document you read, not its name.
 4. Write the change in the repo's own style: same module, naming, provider generation
    (e.g. split `aws_s3_bucket_*` resources for AWS provider v4+), variables over hard-coding.
    Prefer the smallest change that fixes the control. Present:

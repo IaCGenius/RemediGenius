@@ -36,6 +36,18 @@ explained, with the code change that fixes them.
   tab (Hermes dashboard plugin) has overview and gaps, browse, review, a guided Add form, document import (PDF, Word,
   PowerPoint, Excel through markitdown, installed on first use) with optional AI drafting that shows the token
   estimate first, and a graph view. See [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md).
+- **Answers from live evidence:** a finding is a lead, not proof. Every AWS security question (explain or verify a
+  finding, or a question without one, such as "which roles can be assumed from outside?") follows one method: scope,
+  the smallest read that decides it, stop when supported, and an answer split into observed, inferred and gaps.
+  Six evidence guides (identity and trust, effective permissions, network exposure, data protection, detection and
+  history, vulnerabilities) say which reads decide a question and what they cannot show. Skills are assigned by what
+  the user wants: explaining an exposure no longer starts a fix.
+- **IAM evidence:** the IAM policy simulator (including SCPs) and Access Analyzer policy checks are allowed as
+  evaluations; the agent reads policy documents, never infers permissions from names. Every AWS read starts with an
+  Evidence line (account, region, time, complete or partial). With several readable accounts the read must name one.
+  Reads that return credentials are refused. Access Analyzer GitHub OIDC findings are classified from the role's
+  actual trust policy (none, wildcard, one repository with any branch or pull request, pinned) instead of the
+  analyzer's condition summary.
 - **Continuous improvement, gated and human-approved:** redacted execution traces from Hermes hooks with `/rate`
   and correction detection; an offline evaluation organization (17 deterministic desk checks, 16 agent tasks with
   train/validation/test splits and critical tasks); SkillOpt-style skill optimization and Harness²-style

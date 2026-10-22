@@ -210,7 +210,9 @@ SCHEMA = {
         "scan = re-collect Security Hub, GuardDuty, Inspector, Access Analyzer, Config, CloudWatch alarms, Health "
         "for all onboarded accounts and re-prioritize. list = filter the queue. show = one finding with why-this-priority, "
         "actor and context. fix = locate the IaC (Terraform/CloudFormation/CDK) that deployed the resource plus the "
-        "remediation playbook. aws = ONE read-only AWS API call (describe/get/list/lookup) for investigation. "
+        "remediation playbook. aws = ONE read-only AWS API call (describe/get/list/lookup/search, plus iam simulate_* and "
+        "accessanalyzer check_*/validate_policy evaluations) as live evidence; pass account and region; the output starts "
+        "with an Evidence line (account, time, complete or partial). "
         "validate = terraform init/validate/fmt of a module copy with your proposed .tf files overlaid (no plan/apply). "
         "decide = record the user's decision (acknowledged, investigating, fixing, accepted_risk, false_positive, "
         "suppressed, resolved) with their reason. doctor = access/coverage check. onboarding = which AWS accounts are "
@@ -227,7 +229,7 @@ SCHEMA = {
             "priority": {"type": "string", "description": "P1, P2, P3, P4 or comma list"},
             "source": {"type": "string", "description": "securityhub, guardduty, inspector, accessanalyzer, config, cloudwatch, health"},
             "category": {"type": "string", "enum": ["threat", "vulnerability", "exposure", "posture", "operational", "health", "data"]},
-            "account": {"type": "string"},
+            "account": {"type": "string", "description": "account name or 12-digit id; required for aws when several accounts are readable"},
             "issues": {"type": "boolean", "description": "list grouped issues instead of individual findings"},
             "all": {"type": "boolean"},
             "limit": {"type": "integer", "minimum": 1, "maximum": 200},

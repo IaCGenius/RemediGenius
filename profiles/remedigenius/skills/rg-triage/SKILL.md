@@ -1,12 +1,14 @@
 ---
 name: rg-triage
-description: Brief the user on their AWS security queue (Security Hub, GuardDuty, Inspector, Access Analyzer, Config, CloudWatch alarms, Health), explain priorities, filter the queue and record decisions.
+description: Brief the user on their AWS security queue (Security Hub, GuardDuty, Inspector, Access Analyzer, Config, CloudWatch alarms, Health), explain priorities, explain and verify findings or any AWS configuration question (IAM trust and permissions, network exposure, data protection) with live read-only evidence, and record decisions. Not for suspicious-activity investigations (rg-investigate) or writing fixes (rg-iac-fix).
 license: Apache-2.0
 ---
 # Security queue triage
 
 Use for "what needs attention", "show findings", "what's new", "why is this P1", morning/daily
-briefings, and recording decisions about findings.
+briefings, recording decisions, and **"is this finding real / what does it mean / who can access X / can X do Y"**,
+with or without a finding. Hand off: suspicious activity → `rg-investigate`; "fix it" → `rg-iac-fix`; owners and
+accepted risks → `rg-knowledge`; missing accounts or sources → `rg-onboard`.
 
 ## 1. Get the board
 - `rg_triage action=digest` reads the last scan (no AWS calls). Check the "Scanned ..." time.
@@ -35,6 +37,27 @@ Next: "<one concrete suggestion>"
 - `rg_triage action=show ref=<ref>` gives why-this-priority, actor/context, related findings on the
   same resource ("toxic combination"), AWS remediation link and console link.
 - Threats/alerts → load `rg-investigate`. Fix questions → load `rg-iac-fix`.
+
+## 3a. Explain or verify (a finding or any configuration question)
+1. Scope: the resource, account and region (from the finding, or ask once if the question is ambiguous). Use the
+   finding whose resource matches the question; a grouped issue's ref may point at another resource. A resource
+   missing from the board may be accepted or resolved: `list all=true`.
+2. Read the claim: `show ref=<ref>` gives the stored classification, any decision or accepted risk, and the evidence
+   guide on its `Guidance:` line. If the risk is accepted (Risk Exception or decision), say so with its approver and
+   expiry (`knowledge view=for ref=<ref>`); live reads then only confirm nothing changed beyond the exception.
+   Load that guide (`knowledge view=show path=...`) unless you already know its reads.
+3. Verify live with the reads the guide marks as decisive, passing `account` and `region`. Usually 1–3 reads; for
+   identity questions the trust policy (`iam get_role`) or the policy documents (`iam get_role_policy`,
+   `iam get_policy_version`) decide, and `iam simulate_principal_policy` answers "can X do Y" including SCPs.
+   For a question without a finding ("which roles trust outsiders?") list first (`iam list_roles`), then read only
+   the matches.
+4. Compare: does live configuration support the finding's headline? If not, say exactly which field differs. Do not
+   explain *why* or *when* it differs unless a read shows it (no change timeline without CloudTrail or Config).
+5. Answer: one-line verdict, then **Observed** (fields quoted, `Evidence` line), **Inferred**, **Gaps**, and the
+   residual risk in plain words (e.g. `repo:org/app:*` still admits any branch and pull request workflow). Offer the
+   fix as a next step; do not write it unless asked.
+6. If the finding no longer matches reality, propose the decision (`false_positive` or `resolved` with the evidence)
+   and record it only after the user confirms.
 
 ## 4. Prioritization model (explain it when asked)
 Score = source severity points (CRITICAL 60, HIGH 45, MEDIUM 25, LOW 10) + signals:

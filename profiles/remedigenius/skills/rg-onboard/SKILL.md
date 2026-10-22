@@ -15,6 +15,10 @@ proposed copy under the proposals folder for them to move).
 - Security Hub off → no posture checks (CIS/FSBP). GuardDuty off → no threat detection.
 - Inspector off → no CVE findings. Config off → no change history (and Config.1 fails).
 - `denied` → the reading identity lacks permissions: attach AWS managed policy `SecurityAudit`.
+- `iam simulate_principal_policy` or Access Analyzer `check_*` denied → the read role predates the policy
+  evaluation permissions; redeploy the role template (Spot: `terraform apply`; members: update the StackSet).
+- An AWS read refused with "Several accounts are readable" → pass `account`; a read in the wrong account is not
+  evidence about this one.
 - Health `SubscriptionRequired` → Health API needs Business support; Health events still arrive via Security Hub.
 
 ## 2. Other AWS accounts (onboarding is automatic after one setup step)
@@ -28,7 +32,8 @@ read 4 of them fully. For the other 3 I can't investigate (CloudTrail, IAM, Conf
 When accounts are missing, give the user the exact command from `next_steps`. Do not invent values; the desk fills in
 the desk identity ARN and organization id. Tell them:
 - Run it once, with management-account (or StackSets delegated administrator) credentials, from the release folder.
-- It deploys `RemediGeniusReadOnly` (SecurityAudit + ViewOnlyAccess, denies secret/object/KMS reads) to every account,
+- It deploys `RemediGeniusReadOnly` (SecurityAudit + ViewOnlyAccess + IAM policy simulation and Access Analyzer policy
+  checks, denies secret/object/KMS reads) to every account,
   including accounts added later (auto-deployment).
 - Nothing else is needed: no restart, no Terraform or triage.yaml change. The next scan reads every account where the
   role works, and the board says "Newly onboarded". Offer to run `scan` once they say it is deployed, then run

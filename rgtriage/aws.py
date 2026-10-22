@@ -20,8 +20,14 @@ DENIED = {
     "Scan", "Query", "GetItem", "BatchGetItem", "GetLogEvents", "FilterLogEvents", "GetConsoleOutput",
     "GetConsoleScreenshot", "GetFunction", "GetLayerVersion", "GetTemplate", "GetDataKey",
 }
-# A couple of non-prefixed reads that are needed.
-ALLOWED_EXTRA = {"AssumeRole", "GetCallerIdentity"}
+# Non-prefixed reads that are needed. The IAM simulator and Access Analyzer policy checks evaluate policies
+# and return a verdict; they change nothing in the account.
+ALLOWED_EXTRA = {"AssumeRole", "GetCallerIdentity",
+                 "SimulatePrincipalPolicy", "SimulateCustomPolicy",
+                 "CheckNoPublicAccess", "CheckAccessNotGranted", "CheckNoNewAccess", "ValidatePolicy"}
+# Operations that evaluate rather than read; the desk must say they are evaluations, not observed configuration.
+EVALUATIONS = {"SimulatePrincipalPolicy", "SimulateCustomPolicy", "CheckNoPublicAccess", "CheckAccessNotGranted",
+               "CheckNoNewAccess", "ValidatePolicy"}
 
 _CONFIG = Config(retries={"max_attempts": 4, "mode": "adaptive"}, connect_timeout=10, read_timeout=30,
                  user_agent_extra="remedigenius-triage")
