@@ -1,3 +1,3 @@
 name: rg-knowledge
-version: "0.3.1"
+version: "0.3.2"
 description: RemediGenius-CE knowledge base (Open Knowledge Format). Dashboard Knowledge tab to review, add, import and explore what the security desk knows, and a /knowledge command.

@@ -3,4 +3,4 @@
 Collection is read-only and deterministic. The agent (Hermes) explains, investigates
 and drafts code changes on top of what this package records.
 """
-__version__ = "0.3.1"
+__version__ = "0.3.2"

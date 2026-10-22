@@ -156,6 +156,10 @@
       get("/log").then(setLog).catch(function () {});
       get("/kinds").then(setKinds).catch(function () {});
     }, [props.version]);
+    // Hooks run before the loading return: React needs the same hook order on every render.
+    var noticeSeen = false;
+    try { noticeSeen = window.localStorage.getItem("rgk-data-notice") === "1"; } catch (e) { noticeSeen = false; }
+    var noticeState = useState(noticeSeen), accepted = noticeState[0], setAccepted = noticeState[1];
     if (!o) return h(Empty, null, "Loading…");
     var applied = o.applied || {};
     var stat = function (label, value, hint, onClick) {
@@ -170,9 +174,6 @@
       if (/application/i.test(g)) return ["Add", "Application"];
       return ["Browse", null];
     };
-    var noticeSeen = false;
-    try { noticeSeen = window.localStorage.getItem("rgk-data-notice") === "1"; } catch (e) { noticeSeen = false; }
-    var noticeState = useState(noticeSeen), accepted = noticeState[0], setAccepted = noticeState[1];
     return h("div", { className: "rgk-stack" },
       h("div", { className: "rgk-notice rgk-notice-" + (accepted ? "info" : "warn") },
         h("strong", null, "Data & model: "),
