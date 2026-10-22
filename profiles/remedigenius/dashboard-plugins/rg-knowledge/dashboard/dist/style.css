@@ -134,3 +134,12 @@
   .rgk-split { grid-template-columns: 1fr; }
   .rgk-side { position: static; max-height: none; }
 }
+.rgk-diff { max-height: 420px; overflow: auto; background: var(--rgk-soft); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.45; }
+.rgk-diff .rgk-add { color: var(--rgk-ok); }
+.rgk-diff .rgk-del { color: var(--rgk-bad); }
+.rgk-diff .rgk-hunk { color: var(--rgk-muted); }
+.rgk-checks { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.rgk-checks li { padding: 2px 0; }
+.rgk-up { color: var(--rgk-ok); font-weight: 600; }
+.rgk-down { color: var(--rgk-bad); font-weight: 600; }
+.rgk-card h4 { margin: 10px 0 4px; font-size: 13px; }

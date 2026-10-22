@@ -346,11 +346,181 @@ def slash_triage(raw_args: str = "") -> str:
     return _run(["digest"])
 
 
+# ------------------------------------------------------------------ execution traces (for offline improvement)
+# One redacted JSON line per agent turn: skills loaded, tool calls, finding refs, citations, tokens, and user feedback.
+# Written to the Hermes home (checkpointed like conversations), read by `rgtriage improve`. RGTRIAGE_TRACES=off disables.
+
+import re  # noqa: E402
+
+_REDACT = [  # same rules as rgtriage/improve/redact.py (a test keeps them in step)
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S), "[REDACTED PRIVATE KEY]"),
+    (re.compile(r"\b(AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b"), "[REDACTED AWS KEY ID]"),
+    (re.compile(r"(?i)(aws_secret_access_key|aws_session_token|secret_?access_?key|session_?token)(\s*[=:]\s*|\"\s*:\s*\")[A-Za-z0-9/+=]{16,}"),
+     r"\1\2[REDACTED]"),
+    (re.compile(r"(?i)\b(password|passwd|pwd|api[_-]?key|secret|token)(\s*[=:]\s*)([^\s\"',;]{8,})"), r"\1\2[REDACTED]"),
+    (re.compile(r"(?i)\b(bearer\s+)[A-Za-z0-9._~+/-]{16,}"), r"\1[REDACTED]"),
+    (re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"), "[REDACTED API KEY]"),
+    (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"), "[REDACTED TOKEN]"),
+    (re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b"), "[REDACTED TOKEN]"),
+    (re.compile(r"(?i)(https?://)[^/\s:@]+:[^/\s@]+@"), r"\1[REDACTED]@"),
+    (re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"), "[REDACTED JWT]"),
+]
+_REF = re.compile(r"(?<![0-9a-f])([0-9a-f]{12})(?![0-9a-f])")
+_PATH = re.compile(r"(?<![\w/.-])/?((?:[a-z0-9_-]+/)+[a-z0-9_.-]+\.md)\b")
+_CORRECTION = re.compile(r"^\s*(no\b[,.!]?|nope\b|wrong\b|incorrect\b|actually\b|not quite\b)|\b(that'?s|that is|this is|you'?re|you are)"
+                         r" (wrong|not right|incorrect|not true|not correct|mistaken)\b", re.I)
+_TRACE = {"turns": {}, "skills": {}, "last": None, "lock": threading.Lock(), "pruned": ""}
+
+
+def _redact(text, limit=None) -> str:
+    out = "" if text is None else str(text)
+    for pattern, replacement in _REDACT:
+        out = pattern.sub(replacement, out)
+    return out[:limit] + f" …[{len(out) - limit} more characters]" if limit and len(out) > limit else out
+
+
+def _redact_obj(value, limit=600):
+    if isinstance(value, str):
+        return _redact(value, limit)
+    if isinstance(value, dict):
+        return {k: _redact_obj(v, limit) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact_obj(v, limit) for v in value[:30]]
+    return value
+
+
+def _tracing() -> bool:
+    return os.environ.get("RGTRIAGE_TRACES", "on").lower() not in ("off", "0", "false", "no")
+
+
+def _traces_dir() -> Path:
+    s = _settings()
+    if os.environ.get("RGTRIAGE_TRACES_DIR"):
+        return Path(os.environ["RGTRIAGE_TRACES_DIR"])
+    if s.get("proposals"):
+        return Path(s["proposals"]).parent / "rg-traces"
+    return Path(s["home"]) / "rg-traces"
+
+
+def _write_trace(record: dict) -> None:
+    folder = _traces_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    path = folder / f"{day}.jsonl"
+    with _TRACE["lock"]:
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, default=str) + "\n")
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+        if _TRACE["pruned"] != day:  # keep 30 days
+            _TRACE["pruned"] = day
+            cutoff = datetime.fromtimestamp(time.time() - 30 * 86400, timezone.utc).strftime("%Y-%m-%d")
+            for old in folder.glob("*.jsonl"):
+                if old.stem < cutoff:
+                    old.unlink(missing_ok=True)
+
+
+def _turn(session_id, turn_id) -> dict:
+    key = (str(session_id or ""), str(turn_id or ""))
+    with _TRACE["lock"]:
+        turn = _TRACE["turns"].get(key)
+        if turn is None:
+            turn = _TRACE["turns"][key] = {"skills": [], "tools": [], "tokens": {"input": 0, "output": 0}}
+        return turn
+
+
+def on_post_tool_call(tool_name: str = "", args: dict | None = None, result=None, session_id=None, turn_id=None,
+                      duration_ms=None, status=None, error_message=None, **_kwargs):
+    if not _tracing():
+        return None
+    try:
+        args = args if isinstance(args, dict) else {}
+        turn = _turn(session_id, turn_id)
+        if tool_name in ("skill_view", "skill_load") and args.get("name"):
+            turn["skills"].append(str(args["name"]))
+        turn["tools"].append({"name": tool_name, "args": _redact_obj(args, 300), "status": status or "ok",
+                              "ms": int(duration_ms or 0), "error": _redact(error_message, 300) if error_message else "",
+                              "result": _redact(result if isinstance(result, str) else json.dumps(result, default=str), 1200)})
+    except Exception:
+        pass  # tracing never disturbs the conversation
+    return None
+
+
+def on_skill_lifecycle(skill_name: str = "", session_id=None, action: str = "", **_kwargs):
+    if _tracing() and skill_name:
+        with _TRACE["lock"]:
+            _TRACE["skills"].setdefault(str(session_id or ""), []).append(str(skill_name))
+    return None
+
+
+def on_post_api_request(session_id=None, turn_id=None, usage=None, **_kwargs):
+    if not _tracing() or not isinstance(usage, dict):
+        return None
+    turn = _turn(session_id, turn_id)
+    turn["tokens"]["input"] += int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+    turn["tokens"]["output"] += int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
+    return None
+
+
+def on_post_llm_call(session_id=None, turn_id=None, user_message=None, assistant_response=None, model=None, platform=None,
+                     **_kwargs):
+    if not _tracing():
+        return None
+    try:
+        key = (str(session_id or ""), str(turn_id or ""))
+        with _TRACE["lock"]:
+            turn = _TRACE["turns"].pop(key, None) or {"skills": [], "tools": [], "tokens": {"input": 0, "output": 0}}
+            skills = _TRACE["skills"].pop(key[0], [])
+            previous = _TRACE["last"] if _TRACE["last"] and _TRACE["last"][0] == key[0] else None
+            _TRACE["last"] = key
+        user = _redact(user_message if isinstance(user_message, str) else json.dumps(user_message, default=str), 1500)
+        answer = _redact(assistant_response, 4000)
+        at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if previous and _CORRECTION.search(user or ""):
+            _write_trace({"type": "feedback", "at": at, "session_id": previous[0], "turn_id": previous[1],
+                          "rating": "correction", "comment": _redact(user, 600)})
+        refs = sorted(set(_REF.findall(answer)) | {str(t["args"].get("ref")) for t in turn["tools"] if t["args"].get("ref")})
+        _write_trace({"type": "turn", "id": f"{key[0]}:{key[1]}", "at": at, "session_id": key[0], "turn_id": key[1],
+                      "model": model, "platform": platform, "user": user, "answer": answer,
+                      "skills": list(dict.fromkeys(turn["skills"] + skills)), "tools": turn["tools"][:40], "refs": refs[:30],
+                      "citations": sorted(set(_PATH.findall(answer)))[:30], "tokens": turn["tokens"]})
+    except Exception:
+        pass
+    return None
+
+
+def slash_rate(raw_args: str = "") -> str:
+    """/rate up|down [what was wrong] — feedback on the desk's last answer, used to improve skills and knowledge."""
+    parts = (raw_args or "").strip().split(maxsplit=1)
+    if not parts or parts[0].lower() not in ("up", "down", "good", "bad", "+", "-"):
+        return "Usage: /rate up|down [what was wrong or what helped]"
+    last = _TRACE["last"]
+    if not last:
+        return "No answer to rate yet in this session."
+    rating = "up" if parts[0].lower() in ("up", "good", "+") else "down"
+    _write_trace({"type": "feedback", "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "session_id": last[0],
+                  "turn_id": last[1], "rating": rating, "comment": _redact(parts[1] if len(parts) > 1 else "", 600)})
+    return "Thanks — recorded. It feeds the Improve tab (lessons and evaluation), never the trusted knowledge directly."
+
+
 def register(ctx):
     ctx.register_tool(name="rg_triage", toolset="rg_triage", schema=SCHEMA, handler=handle,
                       description=SCHEMA["description"], emoji="🛡️")
     ctx.register_hook("pre_llm_call", on_pre_llm_call)
     ctx.register_hook("pre_tool_call", on_pre_tool_call)
+    for name, hook in (("post_tool_call", on_post_tool_call), ("on_skill_lifecycle", on_skill_lifecycle),
+                       ("post_api_request", on_post_api_request), ("post_llm_call", on_post_llm_call)):
+        try:
+            ctx.register_hook(name, hook)
+        except Exception:
+            pass  # older Hermes without the hook: tracing is simply off for it
+    try:
+        ctx.register_command("rate", handler=slash_rate, description="Rate the desk's last answer (up|down [comment])",
+                             args_hint="up|down [comment]")
+    except Exception:
+        pass
     try:
         ctx.register_command("triage", handler=slash_triage, description="Security attention board (scan | list | show REF | report | doctor | onboarding | knowledge)",
                              args_hint="[scan|list|show REF|knowledge]")

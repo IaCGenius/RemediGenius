@@ -41,6 +41,7 @@ flowchart TB
 | Guards | blocks file writes outside the proposals folder; blocks reads of credential stores, keys, `.env` and Terraform state; routes every `decide` through Hermes's approval prompt |
 | `/triage` | the board without a model call (interactive chat and gateways) |
 | Skills | `rg-triage` (briefing, priorities, decisions), `rg-investigate` (threat triage), `rg-iac-fix` (code location, diff, validation), `rg-onboard` (accounts, context, schedules), `rg-knowledge` (read, cite and draft knowledge) |
+| Improvement | traces from Hermes hooks; offline evaluation, SkillOpt-style optimization and Propose–Probe–Compose in the Hermes container; grading and the security gate in the desk; candidates activated only after approval ([IMPROVEMENT.md](IMPROVEMENT.md)) |
 | Knowledge tab | Hermes dashboard plugin `rg-knowledge`: overview and gaps, browse, review queue, Add form, document import with optional AI drafting, graph. Its backend holds no AWS credentials and changes the bundle only through the desk's `knowledge-edit` command |
 
 The Hermes toolsets enabled are `skills`, `clarify`, `file` (repository reading plus writes to proposals) and

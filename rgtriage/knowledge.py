@@ -579,8 +579,15 @@ def for_finding(finding: dict, b: okf.Bundle | None = None) -> list[dict]:
 
     for path in finding.get("knowledge") or []:
         add(path, "applied to this finding's priority")
+    guidance_paths = set()
     for practice in practices_for(finding.get("control_id") or "", list(concepts.values())):
         add(practice.path, f"the security practice control {finding.get('control_id')} belongs to")
+        guidance_paths.add(practice.path)
+    guidance_paths |= {f"{SHIPPED}/playbooks/{name}.md" for name in playbooks.select(finding)}
+    # The OKF graph: an organization concept that links to this finding's practice or playbook applies to it.
+    for c in concepts.values():
+        if not is_shipped(c.path) and guidance_paths & set(c.links):
+            add(c.path, "linked to this finding's practice or playbook")
     for name in playbooks.select(finding):
         add(f"{SHIPPED}/playbooks/{name}.md", "remediation playbook for this control or finding type")
     add(f"{SHIPPED}/sources/{finding.get('source')}.md", f"how to read {finding.get('product') or finding.get('source')} findings")

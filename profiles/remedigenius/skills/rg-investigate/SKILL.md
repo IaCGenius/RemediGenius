@@ -30,12 +30,16 @@ what to do next. Budget: about 3–6 read calls. Stop when the answer is clear.
    Gaps: what you could not see (e.g. S3 data events are not in lookup_events; 90-day limit)
    Do now: containment or "nothing", and the long-term fix (load rg-iac-fix when code is involved)
    ```
+<!-- PROTECTED_START -->
 5. If only the user can confirm ("was this you running terraform at 14:02 UTC?"), ask once. Propose
    the decision (`false_positive` + reason if expected; `investigating` otherwise) and record it with
    `decide` only after the user confirms. Never record decisions in unattended/scheduled runs.
+<!-- PROTECTED_END -->
 
 ## Rules
+<!-- PROTECTED_START -->
 - Read-only. Containment commands are shown for the operator to run, never executed by you.
+<!-- PROTECTED_END -->
 - `lookup_events` covers management events for 90 days in one region per call; say so.
 - AnomalousBehavior findings flag deviations from a baseline: a person's new tool also triggers
   them. Don't call it an attack without corroboration; don't dismiss it without checking the actor.

@@ -187,9 +187,15 @@ shutil.rmtree(tab, ignore_errors=True)
 shutil.copytree(pkg / "dashboard-plugins/rg-knowledge", tab, ignore=shutil.ignore_patterns("__pycache__", "local.json"))
 (tab / "local.json").write_text(json.dumps({"socket": "/run/rgtriage/rgtriage.sock", "home": "/data/rgtriage",
                                             "proposals": "/opt/data/proposals", "inbox": "/opt/data/knowledge-inbox",
-                                            "files": "/opt/data/knowledge-files", "profile": "remedigenius"}))
-for d in ("proposals/knowledge", "knowledge-inbox", "knowledge-files"):
+                                            "files": "/opt/data/knowledge-files", "profile": "remedigenius",
+                                            "improve": "/opt/data/rg-improve", "package": "/opt/remedigenius-package"}))
+for d in ("proposals/knowledge", "knowledge-inbox", "knowledge-files", "rg-improve", "rg-traces"):
     Path("/opt/data", d).mkdir(parents=True, exist_ok=True)
+# Skill improvements a person approved survive restarts when they were made for this shipped version.
+import sys
+sys.path.insert(0, str(tab))
+from improve.runner import apply_approved
+print(json.dumps(apply_approved(Path("/opt/data/rg-improve"), pkg / "skills", prof / "skills")))
 key = os.environ.get("MODEL_API_KEY", "")
 env = prof / ".env"
 text = env.read_text() if env.exists() else ""

@@ -38,8 +38,10 @@ the desk identity ARN and organization id. Tell them:
 If the desk is not the delegated administrator, mention that running it in the delegated administrator account gives the
 org-wide findings view immediately. If the account is not in an organization, follow the standalone step in
 `next_steps` (one stack per account, then list it under `accounts:` with its `role_arn`).
+<!-- PROTECTED_START -->
 You never deploy roles or run the command yourself; you are read-only.
 The tool blocks every non-read AWS call even if the credentials could write.
+<!-- PROTECTED_END -->
 
 ## 3. Business context (changes priorities)
 Business context lives in the knowledge base (load `rg-knowledge`). Start from `rg_triage action=knowledge view=gaps`

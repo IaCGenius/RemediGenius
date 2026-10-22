@@ -247,10 +247,16 @@ def sync_profile(source: Path, hermes_home: Path):
     shutil.copytree(package / 'dashboard-plugins/rg-knowledge', tab, ignore=shutil.ignore_patterns('__pycache__', 'local.json'))
     (tab / 'local.json').write_text(json.dumps({'socket': SOCKET.as_posix(), 'home': DESK.as_posix(), 'proposals': PROPOSALS,
                                                 'inbox': '/opt/data/knowledge-inbox', 'files': '/opt/data/knowledge-files',
-                                                'profile': PROFILE}))
-    folders = [hermes_home / 'proposals' / 'knowledge', hermes_home / 'knowledge-inbox', hermes_home / 'knowledge-files']
+                                                'profile': PROFILE, 'improve': '/opt/data/rg-improve',
+                                                'package': '/opt/remedigenius-package'}))
+    folders = [hermes_home / 'proposals' / 'knowledge', hermes_home / 'knowledge-inbox', hermes_home / 'knowledge-files',
+               hermes_home / 'rg-improve', hermes_home / 'rg-traces']
     for folder in folders:
         folder.mkdir(parents=True, exist_ok=True)
+    # Skill improvements a person approved survive instance replacement when made for this shipped version.
+    sys.path.insert(0, str(tab))
+    from improve.runner import apply_approved
+    print(f"approved skill improvements: {json.dumps(apply_approved(hermes_home / 'rg-improve', package / 'skills', profile / 'skills'))}")
     for path in [profile, *profile.rglob('*'), hermes_home / 'plugins', tab, *tab.rglob('*'), *folders]:
         if hasattr(os, 'lchown'):
             os.lchown(path, UID, UID)

@@ -16,6 +16,8 @@ reaches your model provider, for every change you make to your cloud, and for AW
   totals come from aggregation APIs where AWS offers them, and capped tiers are labelled "at least N".
 - **Priorities are a transparent heuristic,** not a risk assessment of your business. Reviewed knowledge concepts
   (applications, accounts, risk exceptions, goals) and `triage.yaml` change them; the reasons always cite what did.
+- **Improvement is offline and gated.** Skills change only after evaluation on the fixed Acme organization, the
+  security gate and your approval; the evaluation set is small, so the gate is conservative. See [IMPROVEMENT.md](IMPROVEMENT.md).
 - **Knowledge is what people put in.** Search is lexical, matching uses exact tags and ids, and the agent's drafts are
   only applied after a person approves them. See [KNOWLEDGE.md](KNOWLEDGE.md).
 - **Investigations are bounded.** CloudTrail `LookupEvents` covers 90 days of management events per region. S3/Lambda
@@ -32,7 +34,8 @@ reaches your model provider, for every change you make to your cloud, and for AW
 
 Finding titles, resource identifiers, account ids, tags, CloudTrail excerpts the agent reads, your IaC excerpts,
 knowledge concepts the agent reads, documents you choose to *Draft with AI* (the Knowledge tab shows the token estimate
-and asks first), and your chat messages. Self-hosting compute does not make inference local. Choose a provider and retention policy your
+and asks first), your chat messages, and (only when you run evaluate, optimize or probe) replays of the fictional evaluation
+organization plus redacted lesson excerpts from your traces. Self-hosting compute does not make inference local. Choose a provider and retention policy your
 organization permits; see [MODELS.md](MODELS.md).
 
 ## Upstream prompts

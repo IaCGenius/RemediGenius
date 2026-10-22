@@ -65,6 +65,7 @@ Open the dashboard (workstation `http://127.0.0.1:9125`, Spot through the SSM tu
   mission critical (+15), with owner Payments team"). Concepts you add are recorded as reviewed by you.
 - **Import:** PDF, Word, PowerPoint, Excel, Markdown, text or CSV becomes a Reference concept. A Markdown file that is
   already an OKF concept, or a `.zip` of a bundle (for example exported from another OKF tool), goes to the review queue.
+- **Improve:** evaluation, skill candidates and lessons from conversations; see [IMPROVEMENT.md](IMPROVEMENT.md).
 - **Graph:** every concept and link; colour by type, solid ring when reviewed, dashed when not, orange when stale.
 
 The reviewer name at the top is recorded as `human:<name>` (default: the dashboard login name).

@@ -36,6 +36,15 @@ explained, with the code change that fixes them.
   tab (Hermes dashboard plugin) has overview and gaps, browse, review, a guided Add form, document import (PDF, Word,
   PowerPoint, Excel through markitdown, installed on first use) with optional AI drafting that shows the token
   estimate first, and a graph view. See [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md).
+- **Continuous improvement, gated and human-approved:** redacted execution traces from Hermes hooks with `/rate`
+  and correction detection; an offline evaluation organization (17 deterministic desk checks, 16 agent tasks with
+  train/validation/test splits and critical tasks); SkillOpt-style skill optimization and Harness²-style
+  Propose–Probe–Compose replayed with read-only tools on your configured model; lessons split into skill lessons and
+  organization facts (review queue only); knowledge-gap discovery; skill and knowledge consolidation; `Guidance:`
+  lines that point findings to the right skill and practice; a deterministic security gate (safety lint, protected
+  regions, strict held-out improvement, no critical regression, desk checks, OKF validity) before a person approves; an
+  Improve tab with the candidate queue, diffs, rollback and a nightly Hermes cron review. See
+  [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md).
 - **Alerts:** a `security-watch` Hermes cron job reports only new P1/P2 findings, with no model calls.
 - **Durable state:** the Hermes home and desk state are checkpointed to S3 (Spot) or a local folder (workstation) every
   2 minutes, after scans and decisions, on stop and on Spot interruption notices. Restore is verified, and lineage

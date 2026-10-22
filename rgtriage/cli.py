@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import webbrowser
 from datetime import datetime, timezone
+from pathlib import Path
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -238,6 +240,8 @@ def cmd_show(args):
         practices = []
     for p in practices:
         _out(f"Security practice: {p.title} — {p.path}  (`rgtriage knowledge show {p.path}`)")
+    from .improve import hints
+    _out(hints.line(f, practices))
 
 
 def cmd_fix(args):
@@ -249,6 +253,11 @@ def cmd_fix(args):
          f"resource {f['resource'].get('type')} `{f['resource'].get('id')}` · account {f['account']} / {f['region']}")
     if f["remediation"].get("url"):
         _out(f"AWS remediation doc: {f['remediation']['url']}")
+    try:
+        from .improve import hints
+        _out(hints.line(f, knowledge.practices_for(f.get("control_id") or "", knowledge.bundle().concepts())))
+    except Exception:  # guidance is a hint; never block the fix context on it
+        pass
     _out("\n## Where it is defined in code")
     if not paths:
         _out("No IaC paths configured. Pass --iac PATH (repeatable) or add iac_paths to triage.yaml.")
@@ -349,6 +358,12 @@ def cmd_aws(args):
     if not aws.is_read_operation(aws.snake_to_pascal(op)):
         sys.exit(f"Refused: {op} is not a read-only operation (allowed prefixes: describe/get/list/batch_get/lookup/search).")
     params = json.loads(args.params) if args.params else {}
+    recorded = os.environ.get("RGTRIAGE_EVAL_AWS")
+    if recorded:  # offline evaluation: answer from the fixture's recorded responses; never reach AWS
+        path = Path(recorded) / f"{args.service}.{op}.json"
+        text = path.read_text(encoding="utf-8") if path.is_file() else \
+            f"No recorded response for {args.service} {op} in this evaluation fixture (treat as not available)."
+        return _out(text[:args.max_chars])
     try:
         client = aws.client(aws.session_for(account, region), args.service, region)
         result = getattr(client, op)(**params)
@@ -639,6 +654,97 @@ def cmd_knowledge_edit(args):
     _json(result)
 
 
+def _improve_file(raw: str) -> Path:
+    """Files the improvement commands may read: the improvement folder and approved/shipped skill folders."""
+    path = Path(raw).expanduser()
+    if path.is_symlink():
+        sys.exit("refusing a symbolic link")
+    resolved = path.resolve()
+    roots = [Path(p) for p in os.environ.get("RGTRIAGE_IMPROVE_DIR", "").split(os.pathsep) if p]
+    roots += [Path("/opt/data/rg-improve"), config.home() / "rg-improve"]
+    if any(r.resolve() in resolved.parents or r.resolve() == resolved for r in roots if r.exists()):
+        return resolved
+    if "skills" in resolved.parts and "profiles" in resolved.parts:
+        return resolved
+    sys.exit(f"{raw} is not in the improvement folder or a profile's skills folder")
+
+
+def _grade_run(run_dir: Path, cases: dict | None = None):
+    from .improve import evals, grade
+    cases = cases or evals.load_cases()
+    meta = evals.ensure(cases["fixture"])
+    by_id = {t["id"]: t for t in evals.tasks(meta, cases)}
+    paths, refs = evals.known_paths(meta["home"]), evals.known_refs(meta["home"])
+    grades = []
+    for f in sorted((run_dir / "cases").glob("*.json")):
+        item = json.loads(f.read_text(encoding="utf-8"))
+        task = by_id.get(item.get("case"))
+        if task:
+            grades.append(grade.grade(task, item.get("answer", ""), item.get("trajectory"), paths, refs))
+    return grades
+
+
+def cmd_improve(args):
+    """Offline improvement: evaluation, grading, the security gate, trace analysis and consolidation. Never calls a model."""
+    from .improve import consolidate, evals, gate, hints, traces
+    action = args.action
+    if action == "suite":
+        result = evals.suite()
+        if args.json:
+            return _json(result)
+        _out(f"Deterministic desk checks: {result['passed']}/{result['total']} passed (fixture {result['fixture']})")
+        for r in result["checks"]:
+            _out(f"  {'ok  ' if r['ok'] else 'FAIL'} {r['id']}" + ("" if r["ok"] else f": {'; '.join(r['problems'])}"))
+        return
+    if action == "tasks":
+        cases = evals.load_cases()
+        meta = evals.ensure(cases["fixture"])
+        return _json({"fixture": meta["name"], "tasks": [{k: t.get(k) for k in ("id", "split", "critical", "tags", "prompt", "skill")}
+                                                       for t in evals.tasks(meta, cases)]})
+    if action == "exec":
+        meta = evals.ensure(evals.load_cases()["fixture"])
+        rest = [a for a in args.rest if a != "--"]
+        result = evals.exec_tool(meta, rest)
+        if result["rc"]:
+            sys.exit(result["stderr"][-1500:] or f"exit {result['rc']}")
+        return _out(result["stdout"])
+    if action == "grade-run":
+        grades = _grade_run(_improve_file(args.run))
+        return _json({"summary": gate.summarize(grades), "grades": grades})
+    if action == "gate":
+        baseline = _grade_run(_improve_file(args.baseline))
+        candidate = _grade_run(_improve_file(args.candidate))
+        text = _improve_file(args.skill_file).read_text(encoding="utf-8")
+        base = _improve_file(args.base_skill_file).read_text(encoding="utf-8") if args.base_skill_file else ""
+        suite = evals.suite()
+        okf_errors = sum(i["level"] == "error" for i in knowledge.bundle().validate())
+        return _json(gate.decide(baseline, candidate, text, base, suite=suite, okf_errors=okf_errors))
+    if action == "lint":
+        text = _improve_file(args.skill_file).read_text(encoding="utf-8")
+        base = _improve_file(args.base_skill_file).read_text(encoding="utf-8") if args.base_skill_file else ""
+        return _json(gate.lint(text, base))
+    if action == "hint":
+        f = _ref_or_exit(_latest_or_exit(), args.rest[0] if args.rest else "")
+        practices = knowledge.practices_for(f.get("control_id") or "", knowledge.bundle().concepts())
+        return _json(hints.guidance(f, practices))
+    records = traces.load(args.days)
+    if action == "traces":
+        return _json(traces.summary(records))
+    if action == "failures":
+        return _json(traces.failures(records))
+    if action == "lessons":
+        return _json(traces.lessons(records))
+    if action == "gaps":
+        return _json(traces.gaps(records))
+    if action == "cases-mined":
+        return _json(traces.case_candidates(records))
+    if action == "consolidate":
+        skills_dir = _improve_file(args.skills_dir) if args.skills_dir else Path(__file__).resolve().parents[1] / "profiles/remedigenius/skills"
+        items = (consolidate.skills_report(skills_dir) if skills_dir.is_dir() else []) + consolidate.knowledge_report()
+        return _json(items)
+    sys.exit(f"unknown improve action {action}")
+
+
 def cmd_playbook(args):
     if not args.name:
         _out("\n".join(playbooks.names()))
@@ -726,6 +832,14 @@ def main(argv=None):
     p.add_argument("--reason"); p.add_argument("--name", help="import: original file name")
     p.add_argument("--sha256"); p.add_argument("--converter"); p.add_argument("--title")
     p.set_defaults(func=cmd_knowledge_edit)
+    p = sub.add_parser("improve", help="offline improvement: evaluation, grading, gate, traces, consolidation (no model calls)")
+    p.add_argument("action", choices=["suite", "tasks", "exec", "grade-run", "gate", "lint", "hint", "traces", "failures",
+                                      "lessons", "gaps", "cases-mined", "consolidate"])
+    p.add_argument("rest", nargs="*", help="exec: rgtriage arguments after --; hint: finding ref")
+    p.add_argument("--run"); p.add_argument("--baseline"); p.add_argument("--candidate")
+    p.add_argument("--skill-file"); p.add_argument("--base-skill-file"); p.add_argument("--skills-dir")
+    p.add_argument("--days", type=int, default=30); p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_improve)
 
     args = parser.parse_args(argv)
     try:

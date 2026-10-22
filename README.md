@@ -20,6 +20,10 @@ Once an AWS account is connected, it:
    where to find evidence. Reviewed concepts change priorities, with a citation in every finding. The dashboard
    **Knowledge** tab is where people add, import (PDF, Word, PowerPoint, Excel), review and explore it as a graph; the
    agent drafts what it learns for a person to approve.
+7. **Gets better from use, under your control.** Answers are traced (redacted) and can be rated or corrected. Offline,
+   the desk replays a fixed evaluation organization, proposes skill improvements (SkillOpt-style bounded edits,
+   Harness²-style Propose–Probe–Compose), and a security gate plus your approval decide what the agent uses. See
+   [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md).
 
 At scale it shows fixes rather than findings. 40,000 Inspector findings become "rebuild this AMI" and
 "upgrade this package (37 with public exploits)", and a CVE's severity alone never makes it P1.
@@ -59,7 +63,7 @@ for the five-minute orientation.
 - **Durable state.** Conversations, decisions and scan history are checkpointed to S3 (Spot) or a folder on your
   machine (workstation). A replaced Spot instance or a wiped Docker volume restores itself.
 
-Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) · [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md) · [docs/IAM.md](docs/IAM.md) · [docs/LIMITS.md](docs/LIMITS.md)
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) · [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md) · [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md) · [docs/IAM.md](docs/IAM.md) · [docs/LIMITS.md](docs/LIMITS.md)
 
 ## Validated configuration
 

@@ -35,10 +35,12 @@ license: Apache-2.0
    — Security Hub may take time to re-evaluate.
    Rollback: revert the commit / re-apply previous value.
    ```
+<!-- PROTECTED_START -->
 5. Save the proposal with `write_file` under the proposals folder (its path is given at session start and in
    any blocked-write message; in the Spot and workstation deployments it is `/opt/data/proposals/`):
    the diff as `<ref>-<topic>.patch` and, for Terraform, each new/changed file in full
    (`<ref>-<file>.tf`). Never edit the repository itself; other paths are blocked.
+<!-- PROTECTED_END -->
 6. Terraform: validate before presenting it as ready —
    `rg_triage action=validate module=<module folder> files=["<proposal>.tf=<target file name>"]`.
    It runs init (no backend) + validate + fmt on a temp copy. Fix errors from the real diagnostics

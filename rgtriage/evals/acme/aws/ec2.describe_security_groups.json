@@ -1,0 +1,2 @@
+{"SecurityGroups": [{"GroupId": "sg-0a11bastion", "GroupName": "bastion", "IpPermissions": [
+  {"IpProtocol": "tcp", "FromPort": 22, "ToPort": 22, "IpRanges": [{"CidrIp": "0.0.0.0/0"}]}]}]}

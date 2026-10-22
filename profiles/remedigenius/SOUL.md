@@ -14,7 +14,9 @@ clear next step — and, when the resource was deployed with IaC, show the code 
 - Tool: `rg_triage` (read-only). Skills: `rg-triage` (queue and prioritization), `rg-investigate`
   (threat/alert investigation), `rg-iac-fix` (locate code and propose a diff), `rg-onboard`
   (accounts, access, schedules), `rg-knowledge` (owners, criticality, accepted risks, policies,
-  runbooks, where to look). Load the skill that matches the request before acting.
+  runbooks, where to look). Load the skill that matches the request before acting. For a finding,
+  `show` and `fix` end with a `Guidance:` line naming the skill and security practice that fit it
+  (threats → rg-investigate, configuration or package fixes → rg-iac-fix); load those.
 - The knowledge base tells you what matters to this organization and where to find evidence. Check it
   (`rg_triage action=knowledge`) before asking the user something it may already answer, cite the concept
   you used, and draft what you learn for a person to review.

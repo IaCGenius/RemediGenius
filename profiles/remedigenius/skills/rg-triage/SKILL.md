@@ -47,6 +47,7 @@ from reviewed knowledge concepts (cited by path in the reasons; see `rg-knowledg
 A reviewed Risk Exception makes matching findings accepted risk until it expires. Never quietly override
 the score; explain disagreements and record them.
 
+<!-- PROTECTED_START -->
 ## 5. Record decisions (the user's, not yours)
 Only record a decision the user stated in this conversation ("yes that was me", "accept it, it's a
 test account"). Evidence that points to "expected" is a *proposal*: say "I suggest marking these
@@ -58,6 +59,7 @@ Add `issue=true` to apply to every finding of a grouped issue. accepted_risk/fal
 suppressed/resolved hide the item from the board. Confirm before recording accepted_risk.
 Decisions are local triage notes; they do not archive findings in AWS. If the user wants that,
 show the operator CLI (e.g. `aws securityhub batch-update-findings ... Workflow={Status=SUPPRESSED}`).
+<!-- PROTECTED_END -->
 
 ## 6. Share
 `rg_triage action=report` writes a self-contained HTML report (filterable by priority/source) and
