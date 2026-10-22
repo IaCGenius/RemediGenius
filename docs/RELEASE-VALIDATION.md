@@ -12,7 +12,7 @@ OpenAI-compatible endpoint, AWS us-east-1. Sources enabled in the account: Secur
 
 | Check | Result |
 | --- | --- |
-| `pytest tests` (Windows, Python 3.12; tests never reach AWS) | 99 passed |
+| `pytest tests` (Windows, Python 3.12; tests never reach AWS) | 127 passed, 1 skipped (symlink case needs Linux) |
 | Scale: 40,000 Inspector + 3,000 Security Hub findings through the CLI (`test_rgtriage_scale.py`) | ~1 s; 23 Inspector detail pages; Security Hub read without Inspector copies; 5 MB state; board < 8 KB; newly enabled source = baseline, no alert storm |
 | Durable storage (`test_durable.py`) | round trip, live SQLite copy, unchanged-skip, no overwrite of live state, tamper rejection, retention, lineage protection (`DIVERGED`), read-only homes |
 | `python tools/demo.py` | synthetic board + IaC match, no AWS or model |
@@ -71,10 +71,29 @@ misses one is reported `INCOMPLETE` and never uploaded. After the fix, a full Do
 | Unit tests (`test_onboarding.py`) | delegated administrator without account listing; member account with listing; standalone; newly onboarded reported once; configured accounts not re-probed; reads covered by the administrator view not repeated; account listed by id uses the member role |
 | `member-read-role.yaml` | `aws cloudformation validate-template` OK (`TrustedPrincipalArn`, optional `OrganizationId`) |
 
+## Knowledge (OKF) and the Knowledge tab (validated 2026-10-22)
+
+| Check | Result |
+| --- | --- |
+| Unit tests (`test_knowledge.py`) | OKF parsing (unknown keys kept, anchors/aliases/tags/duplicate keys refused), trust tiers incl. bare `verified`, staleness, `index.md` with `okf_version`, newest-first `log.md`, validation, graph, search; shipped bundle conformant with every link resolving; reviewed Application/Account/Goal change scores with citations, unreviewed and shipped concepts never do; risk exception accepts until expiry and returns after it; the user's own decision wins; write guards (shipped folder, existing paths, reviewer format, inbox-only files, symlinks); same file imported once; edits re-rank the stored board; agent tool read-only; AI drafts are valid OKF drafts without `verified` |
+| Docker workstation, Knowledge tab (Playwright, Chrome) | tab discovered and enabled by the installer; overview shows live gaps from the last scan; shipped guide links navigate; graph 23 nodes / 78 links; Add form for Team, Application, Account with plain-language previews; duplicate save refused |
+| Agent, workstation | "Who owns the payments application …?" → loaded `rg-knowledge`, searched and read the concepts, answered with paths and trust tiers, flagged that no resource carries the application's tag; when taught an owner in chat it wrote Team and Note drafts to the review queue (no `verified`) after checking the role read-only |
+| AWS Spot, upgrade | rebuilt package → `terraform apply` (4 in-place changes) → desk seeded 23 shipped concepts; tab installed and enabled on boot |
+| AWS Spot, documents | converter installed from the tab over HTTPS egress; Word and PDF imported as references; *Draft with AI* showed the estimate first (~1,600 input tokens), then used 694/1,676 and 612/2,005 input/output tokens and produced 4 and 2 faithful drafts with source quotes |
+| AWS Spot, review | a resource-less S3.8 risk exception was flagged as applying to every bucket and rejected; a duplicate application rejected; team, policy, runbook and account drafts approved; an account draft without an id reported as a gap instead of applied |
+| AWS Spot, priorities | an Account concept (mission critical) re-ranked 2 of 89 stored findings immediately (no AWS calls); P1 reasons cite `knowledge accounts/…`; issues show the owner |
+| AWS Spot, durability | instance replaced: bundle, references and review drafts restored from S3; the converter (excluded from checkpoints) reinstalled from the tab |
+| Spot instance role, organization scope | the instance role assumed `RemediGeniusReadOnly` under `aws:ResourceOrgID` = `${aws:PrincipalOrgID}` and read through it |
+
+Defects found and fixed during these runs: Hermes's dashboard serves user plugins only when enabled in both the profile
+and the launch scope (installers now enable both); the tab backend resolved the profile folder as the Hermes root
+(AI drafting fell back to another provider, 401); the dashboard's own packages made pip skip the converter's
+dependencies (install now isolated and verified by an import test); a pip cache inside the Hermes home made each
+checkpoint 100 MB (`.cache` excluded, pip runs without a cache); the release `dist/` ignore rule hid the tab's bundle
+from git; snapshot names could sort out of order within one second.
+
 ## Not covered by this release's validation
 
-- The Spot instance role's org-scoped permission now uses `aws:ResourceOrgID` = `${aws:PrincipalOrgID}` instead of a
-  configured organization id; Terraform validates it, but it has not yet run on a Spot instance.
 - Discovery of a *different* account whose read role works (exercised by unit tests; this validation had no second
   account with the role).
 - A member role in a *different* account: the member-role path was validated with the role deployed in the stack's own account
@@ -82,3 +101,5 @@ misses one is reported `INCOMPLETE` and never uploaded. After the fix, a full Do
 - Delivery of alerts to a messaging platform (only local delivery tested).
 - Private subnets with NAT, regions other than us-east-1, models other than `deepseek-v4.1-flash`.
 - Linux/macOS workstation hosts (the workstation path was run on Windows with Docker Desktop).
+- The Knowledge tab with an existing local Hermes (`install_local_hermes.py`); PowerPoint and Excel imports (same
+  converter, not exercised); interoperability with third-party OKF tools such as okfctl beyond the spec checks in tests.

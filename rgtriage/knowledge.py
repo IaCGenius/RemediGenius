@@ -476,6 +476,10 @@ def import_reference(markdown: str, original_name: str, actor: str, sha256: str 
     """Converted document text becomes a Reference concept (source material, not reviewed knowledge)."""
     b = b or bundle()
     check_actor(actor)
+    if sha256:
+        for c in b.concepts():
+            if c.type == "Reference" and _ext(c).get("original_sha256") == sha256:
+                return {"path": c.path, "characters": len(c.body), "truncated": bool(_ext(c).get("truncated")), "existing": True}
     name = PurePosixPath(original_name.replace("\\", "/")).name[:180] or "document"
     limit = okf.MAX_CONCEPT_BYTES - 20_000
     text = markdown.strip()

@@ -18,6 +18,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -51,11 +52,13 @@ def _settings() -> dict:
 
 
 def _hermes_root() -> Path:
+    """The Hermes root (never a profile folder): the dashboard process may run with a profile as its home."""
     try:
-        from hermes_constants import get_process_hermes_home
-        return Path(get_process_hermes_home())
+        from hermes_constants import get_default_hermes_root
+        return Path(get_default_hermes_root())
     except Exception:
-        return Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+        home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+        return home.parent.parent if home.parent.name == "profiles" else home
 
 
 def _paths() -> dict:
@@ -289,13 +292,20 @@ def converter_install():
         _install.update(state="running", log="", started=time.time())
         try:
             venv.parent.mkdir(parents=True, exist_ok=True)
-            steps = [[sys.executable, "-m", "venv", str(venv)],
-                     [str(_venv_python(venv)), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "--no-cache-dir", MARKITDOWN]]
-            for cmd in steps:
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1500)
-                _install["log"] += (proc.stdout + proc.stderr)[-4000:]
-                if proc.returncode:
-                    raise RuntimeError(f"{' '.join(cmd[:4])} failed")
+            (venv / "rg-documents.ok").unlink(missing_ok=True)
+            python = str(_venv_python(venv))
+            # -I and a clean environment: the dashboard's own packages must not count as "already installed",
+            # and nothing (pip cache included) is written into the Hermes home outside the venv.
+            steps = [[sys.executable, "-I", "-m", "venv", "--clear", str(venv)],
+                     [python, "-I", "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "--no-cache-dir", MARKITDOWN],
+                     [python, "-I", "-c", "import markitdown, pdfminer, mammoth, pptx, openpyxl; print('converter ok')"]]
+            with tempfile.TemporaryDirectory() as tmp:
+                env = {"PATH": os.environ.get("PATH", ""), "HOME": tmp, "LANG": "C.UTF-8"}
+                for cmd in steps:
+                    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1500, env=env, cwd=tmp)
+                    _install["log"] += (proc.stdout + proc.stderr)[-4000:]
+                    if proc.returncode:
+                        raise RuntimeError(f"{' '.join(cmd[:4])} failed")
             (venv / "rg-documents.ok").write_text(MARKITDOWN)
             _install["state"] = "done"
         except Exception as exc:

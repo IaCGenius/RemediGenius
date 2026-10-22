@@ -376,6 +376,11 @@
             h("h2", { className: "rgk-title" }, item.meta.title || "(no title)"),
             item.meta.description ? h("p", { className: "rgk-lead" }, item.meta.description) : null,
             h(Notice, { tone: "info", text: "Effect once approved: " + item.effect }),
+            item.meta.type === "Risk Exception" && !((item.meta.remedigenius || {}).resource) ? h(Notice, { tone: "warn",
+              text: "This exception names no resource: it accepts the risk for every finding that matches " +
+                [(item.meta.remedigenius || {}).control_id, (item.meta.remedigenius || {}).finding_type].filter(Boolean).join(" / ") +
+                ((item.meta.remedigenius || {}).account_id ? " in account " + item.meta.remedigenius.account_id : " in every account") +
+                ". Add a resource (Edit before approving) unless that is intended." }) : null,
             item.meta.remedigenius ? h("dl", { className: "rgk-settings" }, Object.keys(item.meta.remedigenius).map(function (k) {
               var v = item.meta.remedigenius[k];
               return h(React.Fragment, { key: k }, h("dt", null, k.replace(/_/g, " ")), h("dd", null, typeof v === "object" ? JSON.stringify(v) : String(v)));
@@ -520,7 +525,7 @@
           h("label", { className: "rgk-field" }, h("span", { className: "rgk-label" }, "Title (optional)"),
             h("input", { className: "rgk-input", value: title, onChange: function (e) { setTitle(e.target.value); } }))),
         h("div", { className: "rgk-row" }, h(Button, { kind: "primary", disabled: busy || !file, onClick: upload }, busy && !est ? "Importing…" : "Import")),
-        result && result.path ? h(Notice, { tone: "ok", text: "Imported as " + result.path + " (" + (result.characters || 0).toLocaleString() + " characters" + (result.truncated ? ", truncated" : "") + ")." }) : null,
+        result && result.path ? h(Notice, { tone: "ok", text: (result.existing ? "Already imported (same file) as " : "Imported as ") + result.path + " (" + (result.characters || 0).toLocaleString() + " characters" + (result.truncated ? ", truncated" : "") + ")." }) : null,
         result && result.queued ? h(Notice, { tone: "ok", text: result.note + ". Open Review to approve." }) : null),
       est ? h("section", { className: "rgk-card" },
         h("h3", null, "Draft concepts with AI (optional)"),

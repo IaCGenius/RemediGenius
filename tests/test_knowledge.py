@@ -252,6 +252,8 @@ def test_import_reference_and_review_queue(home):
     knowledge.seed()
     result = knowledge.import_reference("# Payments\n\nOwned by the payments team.", "Payments Runbook.pdf", "human:alex",
                                         sha256="ab" * 32, converter="markitdown/0.1.9")
+    again = knowledge.import_reference("# changed text", "copy.pdf", "human:sam", sha256="ab" * 32)
+    assert again["existing"] and again["path"] == result["path"]  # the same file is imported once
     c = knowledge.bundle().read(result["path"])
     assert c.type == "Reference" and okf.trust_tier(c.meta) == "unverified" and c.meta["generated"]["by"] == "markitdown/0.1.9"
     draft = home / "proposals" / "knowledge" / "teams" / "payments.md"
