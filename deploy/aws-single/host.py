@@ -328,15 +328,19 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 ''',
-        # Community Hermes WebUI (MIT, github.com/nesquena/hermes-webui): chat goes through the Hermes gateway of the
-        # remedigenius profile, so the agent, its skills, plugin guards and approvals stay in the Hermes container.
+        # Community Hermes WebUI (MIT, github.com/nesquena/hermes-webui): its code comes from the pinned WebUI image and
+        # runs with the pinned Hermes image's own Python (the documented "manual launch"), so every Hermes module it reads
+        # (skills, kanban, cron) matches the agent. Chat goes through the Hermes gateway of the remedigenius profile, so
+        # skills, plugin guards and approvals stay in the Hermes container.
         'remedigenius-webui.service': f'''[Unit]
 Description=Hermes WebUI (community project, MIT, pinned) for RemediGenius-CE, gateway mode
 After=remedigenius-hermes.service
 Requires=docker.service
 [Service]
 ExecStartPre=-/usr/bin/docker rm -f {WEBUI_CONTAINER}
-ExecStart=/usr/bin/docker run --rm --name {WEBUI_CONTAINER} --network {CONTAINER} --env-file /run/remedigenius/webui.env -e HERMES_WEBUI_HOST=0.0.0.0 -e HERMES_WEBUI_PORT=8787 -e HERMES_WEBUI_SKIP_ONBOARDING=1 -e HERMES_HOME=/opt/data -e HERMES_WEBUI_STATE_DIR=/opt/data/webui -e HERMES_WEBUI_CHAT_BACKEND=gateway -e HERMES_WEBUI_GATEWAY_BASE_URL=http://{CONTAINER}:{API_PORT}/p/{PROFILE} -e HERMES_API_URL=http://{CONTAINER}:{API_PORT} -e WANTED_UID={UID} -e WANTED_GID={UID} -e AWS_EC2_METADATA_DISABLED=true -v {HERMES_HOME.as_posix()}:/opt/data -p 127.0.0.1:8787:8787 --memory 1024m --pids-limit 512 {WEBUI_IMAGE}
+ExecStartPre=-/usr/bin/docker volume rm -f {WEBUI_CONTAINER}-src
+ExecStartPre=/usr/bin/docker run --rm --entrypoint sh -v {WEBUI_CONTAINER}-src:/webui {WEBUI_IMAGE} -c "cp -a /apptoo/. /webui/ && chmod -R a+rX,go-w /webui"
+ExecStart=/usr/bin/docker run --rm --name {WEBUI_CONTAINER} --network {CONTAINER} --user {UID}:{UID} --entrypoint /opt/hermes/.venv/bin/python --env-file /run/remedigenius/webui.env -e HOME=/opt/data -e HERMES_HOME=/opt/data -e HERMES_WEBUI_STATE_DIR=/opt/data/webui -e HERMES_WEBUI_HOST=0.0.0.0 -e HERMES_WEBUI_PORT=8787 -e HERMES_WEBUI_SKIP_ONBOARDING=1 -e HERMES_WEBUI_CHAT_BACKEND=gateway -e HERMES_WEBUI_GATEWAY_BASE_URL=http://{CONTAINER}:{API_PORT}/p/{PROFILE} -e HERMES_API_URL=http://{CONTAINER}:{API_PORT} -e HERMES_WEBUI_AGENT_DIR=/opt/hermes -e AWS_EC2_METADATA_DISABLED=true -w /webui -v {HERMES_HOME.as_posix()}:/opt/data -v {WEBUI_CONTAINER}-src:/webui:ro -p 127.0.0.1:8787:8787 --memory 1024m --pids-limit 512 {cfg['image']} /webui/server.py
 ExecStop=/usr/bin/docker stop -t 20 {WEBUI_CONTAINER}
 Restart=always
 RestartSec=10

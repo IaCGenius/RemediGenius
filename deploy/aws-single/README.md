@@ -71,7 +71,8 @@ reinstalled after an instance replacement).
 
 The stack also runs [Hermes WebUI](https://github.com/nesquena/hermes-webui), a lightweight browser chat for Hermes.
 It is a **separate community project** (MIT License), pinned by version and digest (0.52.492), and not maintained by
-RemediGenius or Nous Research. It uses the same password as the dashboard and sends chat through the Hermes gateway
+RemediGenius or Nous Research. Its code is taken unmodified from that image and run with the pinned Hermes image's own
+Python (the WebUI's documented manual launch), so its Skills, Kanban, Tasks and Insights views match the agent. It uses the same password as the dashboard and sends chat through the Hermes gateway
 of the `remedigenius` profile, so skills, plugin guards and approval prompts work as in the dashboard.
 
 ```sh

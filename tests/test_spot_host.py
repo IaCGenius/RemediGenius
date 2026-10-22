@@ -124,6 +124,8 @@ def test_org_wide_member_role_is_limited_to_the_organization():
 def test_webui_is_pinned_disclosed_private_and_uses_the_profile_gateway(host):
     webui = host.units(CFG)["remedigenius-webui.service"]
     assert "ghcr.io/nesquena/hermes-webui:0.52.492@sha256:" in host.WEBUI_IMAGE and host.WEBUI_IMAGE in webui
+    assert "--entrypoint /opt/hermes/.venv/bin/python" in webui and CFG["image"] in webui  # Hermes's own Python
+    assert ":/webui:ro" in webui and "--user 10000:10000" in webui
     assert "-p 127.0.0.1:8787:8787" in webui and "0.0.0.0:8787" not in webui.split("HERMES_WEBUI_HOST")[0]
     assert "HERMES_WEBUI_CHAT_BACKEND=gateway" in webui and "/p/remedigenius" in webui
     assert "--env-file /run/remedigenius/webui.env" in webui and "PASSWORD=" not in webui  # secrets only in the env file
