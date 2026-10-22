@@ -1,5 +1,17 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
+## v0.3.1
+
+**New**
+- **Knowledge in the Hermes WebUI.** On Spot, the WebUI's Insights → LLM Wiki card shows the knowledge bundle (pages,
+  imported references, last update, last approver) and "Browse wiki" lists it. It is a read-only view regenerated after
+  every scan; knowledge is still added and approved in the dashboard Knowledge tab ([docs/KNOWLEDGE.md](docs/KNOWLEDGE.md)).
+
+**Fixed**
+- The Hermes profile `config.yaml` now carries the schema version of the pinned Hermes image. Without it Hermes logged
+  "config migration skipped" at boot and would not migrate the file on a Hermes upgrade. Existing deployments keep their
+  operator-owned `config.yaml`; the warning there is harmless.
+
 ## v0.3.0 — Security Desk
 
 RemediGenius-CE is rebuilt around one idea: once an AWS account is connected, the right findings reach you first,
