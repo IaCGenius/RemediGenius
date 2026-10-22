@@ -57,11 +57,11 @@ def release(version: str) -> dict:
     subprocess.run([sys.executable, "-m", "pip", "wheel", "--no-deps", "-q", "-w", str(out), str(ROOT)], check=True)
     for wheel in out.glob(f"remedigenius_community-{version}-*.whl"):
         digests[wheel.name] = hashlib.sha256(wheel.read_bytes()).hexdigest()
-    (out / "SHA256SUMS").write_text("".join(f"{d}  {n}\n" for n, d in sorted(digests.items())))
+    (out / "SHA256SUMS").write_text("".join(f"{d}  {n}\n" for n, d in sorted(digests.items())), newline="\n")  # LF: sha256sum -c
     manifest = {"product": "RemediGenius Community Edition (RemediGenius-CE)", "version": version, "source_commit": commit,
                 "hermes_image": "nousresearch/hermes-agent:stable@sha256:444b42594e7f467425872fc35e077a227d377f0fe0726bc818706d62175fad8b",
                 "validated_model": "deepseek-v4.1-flash", "validation": "docs/RELEASE-VALIDATION.md", "files": digests}
-    (out / "RELEASE.json").write_text(json.dumps(manifest, indent=1) + "\n")
+    (out / "RELEASE.json").write_text(json.dumps(manifest, indent=1) + "\n", newline="\n")
     return manifest
 
 
