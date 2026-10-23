@@ -87,3 +87,12 @@ show the operator CLI (e.g. `aws securityhub batch-update-findings ... Workflow=
 ## 6. Share
 `rg_triage action=report` writes a self-contained HTML report (filterable by priority/source) and
 returns its path for the user to open or share.
+
+## 7. Kanban cards (only when the user asks)
+When the user asks to open, track or put a task on the Kanban board, call `rg_triage action=card ref=<ref>` (or
+`refs=[...]` when one change fixes several refs; `board=<slug>` when they name a board). The desk writes the card:
+exact AWS CLI fix commands from a live read, a chat prompt for a Terraform/CloudFormation/CDK fix, and the verify
+command. It files the card in triage with no assignee: cards are a to-do list for people, and no agent ever works
+on them. Show the user the card id and the fix block. `action=cards` lists the desk's cards and their fix status;
+cards get a comment when a fix record moves (decided, pr, deployed, verified). A card does not record a decision:
+offer `decide status=fixing` (owner, PR, proof) separately.

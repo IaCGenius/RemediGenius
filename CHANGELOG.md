@@ -1,5 +1,23 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
+## v0.3.3
+
+**New**
+- **Kanban cards for people.** Ask the desk to open a task for a finding and it files a card on the Hermes Kanban board
+  (`rg_triage action=card`, CLI `rgtriage card REF`). The card holds the exact AWS CLI fix commands (for security
+  groups, revoke commands for the rule ids that are open to the internet, from a live read-only call; S3 public access,
+  SSM document sharing, IMDSv2, EBS default encryption, patching), a paste-into-chat prompt for a Terraform,
+  CloudFormation, CDK or Pulumi fix, and the command that proves the fix. Threat and root findings get investigation
+  or console steps instead of commands. The desk never runs the commands.
+- **Cards never start agents.** Cards are filed in triage with no assignee; the Hermes Kanban dispatcher and automatic
+  task splitting are turned off on Spot and the Docker workstation (`kanban.dispatch_in_gateway: false`,
+  `kanban.auto_decompose: false`), and the agent has no Kanban toolset of its own. Filing the same change twice returns
+  the existing card.
+- **Tracking.** When a fix record moves (decided, pr, deployed, verified, reopened, stalled) the desk adds a comment to
+  its card; `action=cards` lists the desk's cards and their fix status.
+- `tools/spot_release_test.py`: test a published release on a throwaway Spot stack with one command (see
+  `deploy/aws-single/README.md`).
+
 ## v0.3.2
 
 **Fixed**

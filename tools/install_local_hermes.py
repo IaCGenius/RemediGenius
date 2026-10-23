@@ -77,6 +77,9 @@ def merge_config(path: Path, model_from_template: bool) -> None:
     agent = current.setdefault("agent", {}) or {}
     agent["max_turns"] = max(int(agent.get("max_turns") or 0), template["agent"]["max_turns"])
     current["agent"] = agent
+    kanban = current.setdefault("kanban", {}) or {}
+    kanban.update(template["kanban"])  # Kanban cards are for people: no worker agents, no automatic splitting
+    current["kanban"] = kanban
     path.write_text(yaml.safe_dump(current, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
 
@@ -165,6 +168,8 @@ def main() -> None:
 Done{' (new profile)' if created else ''}.
   1. Check access:       {sys.executable} -m rgtriage doctor     (set RGTRIAGE_HOME={home})
   2. Start the desk:     hermes -p {args.profile} chat   -> it opens with your attention board
+  Kanban: the desk files cards in triage for people. If this Hermes runs a gateway, keep its dispatcher from
+     splitting them with agents: hermes config set kanban.auto_decompose false   (shared setting, so not changed here)
   3. Optional alerts:    hermes -p {args.profile} cron create "every 2h" --name security-watch --no-agent --script rgtriage-watch.py --deliver local
 """)
 

@@ -147,5 +147,5 @@ It downloads the release and checks `SHA256SUMS`, deploys this Terraform as a se
 warnings, the served Knowledge tab) and the dashboard and WebUI in headless Chrome, asks the agent "hi" once, then
 destroys everything, bucket included. `settings.json` holds your Terraform variables (`account_id`, `subnet_id`,
 `model_secret_arn`, ...); keep it outside the repository. The PASS/FAIL report and screenshots are written to
-`.rgce/release-test-<tag>/`. Use `--keep` to leave the stack up for manual testing, `--skip-chat` to spend no model
+`.rgce/release-test-<tag>/`. Use `--local dist/vX.Y.Z` to test a build before publishing it, `--keep` to leave the stack up for manual testing, `--skip-chat` to spend no model
 tokens. It needs terraform, the AWS CLI with the Session Manager plugin, boto3 and, for the browser checks, Playwright.

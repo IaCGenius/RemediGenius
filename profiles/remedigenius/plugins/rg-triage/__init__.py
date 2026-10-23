@@ -138,10 +138,92 @@ def _refresh_in_background() -> bool:
         return False
 
 
+# ------------------------------------------------------------------ kanban cards
+
+def _kanban(args: list[str], board: str | None = None, body: str | None = None) -> tuple[int, str]:
+    """Run `hermes kanban` (the board belongs to Hermes, not to the desk)."""
+    exe = Path(sys.executable).with_name("hermes.exe" if os.name == "nt" else "hermes")
+    cmd = [str(exe) if exe.exists() else "hermes", "kanban"] + (["--board", board] if board else []) + args
+    try:
+        proc = subprocess.run(cmd, input=body, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return 1, f"hermes kanban unavailable: {exc}"
+    return proc.returncode, (proc.stdout or "").strip() or (proc.stderr or "").strip()
+
+
+def _cards_file() -> Path:
+    return _proposals_dir().parent / "rg-cards.json"
+
+
+def _cards() -> dict:
+    try:
+        return json.loads(_cards_file().read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError):
+        return {}
+
+
+def _create_card(refs: list[str], board: str | None) -> str:
+    """File one card in triage with no assignee: Hermes never dispatches it, so no agent ever works on it."""
+    out = _run(["card", *refs])
+    try:
+        card = json.loads(out)
+    except ValueError:
+        return out
+    rc, created = _kanban(["create", "--triage", "--priority", str(card["priority"]), "--idempotency-key", card["key"],
+                           "--created-by", "remedigenius", "--body-file", "-", "--json", card["title"]], board, card["body"])
+    try:
+        task = json.loads(created)
+    except ValueError:
+        return f"Could not create the card (exit {rc}): {created[-600:]}"
+    cards = _cards()
+    known = task["id"] in cards
+    cards[task["id"]] = {**cards.get(task["id"], {}), "refs": card["refs"], "board": board or "", "title": task["title"]}
+    _cards_file().write_text(json.dumps(cards, indent=1), encoding="utf-8")
+    return (f"{'Card already on the board' if known else 'Card created'}: {task['id']} \"{task['title']}\" in triage "
+            f"(people move it; no agent works on it){' on board ' + board if board else ''}.\n\n{card['body']}")
+
+
+def _sync_cards() -> list[str]:
+    """Comment on each card when its fix record moves (decided, pr, deployed, verified, reopened, stalled)."""
+    cards = _cards()
+    if not cards:
+        return []
+    try:
+        records = {r.get("key"): r for r in json.loads(_run(["fixes", "--json"]))}
+    except (ValueError, TypeError, AttributeError):
+        return []
+    notes = []
+    for task_id, card in cards.items():
+        record = next((records[k] for k in card.get("refs", []) if k in records), None)
+        if not record or record.get("state") == card.get("state"):
+            continue
+        check = record.get("last_check") or {}
+        text = (f"Fix status: {record.get('state')} · owner {record.get('owner') or 'not set'} · PR {record.get('pr') or '-'}"
+                + (f" · proof check {check.get('at')} {'passed' if check.get('passed') else 'failed'}" if check else "")
+                + (" · verified fixed: move this card to Done" if record.get("state") == "verified" else ""))
+        rc, out = _kanban(["comment", "--author", "remedigenius", task_id, text], card.get("board") or None)
+        if rc == 0:
+            card["state"] = record.get("state")
+            notes.append(f"{task_id}: {text}")
+    if notes:
+        _cards_file().write_text(json.dumps(cards, indent=1), encoding="utf-8")
+    return notes
+
+
+def _card_status() -> str:
+    notes = _sync_cards()
+    cards = _cards()
+    if not cards:
+        return "No cards yet. Ask to open a card for a finding ref (action=card)."
+    lines = [f"- {task_id} · fix status {c.get('state') or 'no fix record yet'} · refs {', '.join(c.get('refs', [])[:4])} · {c.get('title', '')[:90]}"
+             for task_id, c in cards.items()]
+    return ("Updated: " + "; ".join(notes) + "\n" if notes else "") + "Cards filed by the desk:\n" + "\n".join(lines)
+
+
 # ------------------------------------------------------------------ tool
 
 ACTIONS = ("digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "onboarding", "playbook", "report",
-           "knowledge", "remember", "fixes")
+           "knowledge", "remember", "fixes", "card", "cards")
 KNOWLEDGE_VIEWS = ("overview", "search", "show", "for", "gaps", "review", "validate")
 
 
@@ -207,6 +289,13 @@ def handle(params: dict, **_kwargs) -> str:
         args = ["knowledge", view] + ([arg] if arg else []) + (["--limit", str(p.get("limit", 8))] if view == "search" else [])
     elif action == "fixes":
         args = ["fixes"]
+    elif action == "card":
+        refs = [r for r in (p.get("refs") or []) + [p.get("ref")] if r]
+        if not refs:
+            return "card needs ref (or refs: several refs for one change)"
+        return _create_card(list(dict.fromkeys(refs)), p.get("board") or None)
+    elif action == "cards":
+        return _card_status()
     elif action == "remember":
         # A fact the user stated, drafted under proposals/knowledge/, made active after the user's one click (approval).
         try:
@@ -220,7 +309,12 @@ def handle(params: dict, **_kwargs) -> str:
         if "failed" not in out[:80]:
             draft.unlink(missing_ok=True)
         return out
-    return _run(args)
+    out = _run(args)
+    if action in ("decide", "digest", "fixes"):  # a fix record may have moved: keep the cards in step
+        notes = _sync_cards()
+        if notes:
+            out += "\nKanban cards updated: " + "; ".join(notes)
+    return out
 
 
 SCHEMA = {
@@ -243,7 +337,11 @@ SCHEMA = {
         "report = write the HTML report. fixes = fix records (decided, pr, deployed, verified, reopened, stalled). "
         "decide status=fixing may carry proof (the read-only call and expected values that prove the fix), pr and owner. "
         "remember = make a knowledge draft you wrote under proposals/knowledge/ active, for a fact the USER stated; the "
-        "user approves it with one click. Never changes AWS resources or code."),
+        "user approves it with one click. card = put one change on the Hermes Kanban board for people to track (ref, or refs "
+        "fixed by the same change; optional board): the desk writes exact AWS CLI fix commands from a live read, a chat "
+        "prompt for an IaC fix and the verify command, and files it in triage with no assignee, so no agent ever works "
+        "on it. cards = the cards the desk filed and their fix status (comments are added as fixes move). "
+        "Never changes AWS resources or code."),
     "parameters": {
         "type": "object",
         "properties": {
@@ -275,6 +373,8 @@ SCHEMA = {
             "proof": {"type": "object", "description": "decide fixing: proof of done {service, operation, parameters, expect: {\"Field.Path\": value}}"},
             "pr": {"type": "string", "description": "decide fixing: pull request link"},
             "owner": {"type": "string", "description": "decide fixing: owner (team or person)"},
+            "refs": {"type": "array", "items": {"type": "string"}, "description": "card: several refs fixed by one change"},
+            "board": {"type": "string", "description": "card: Kanban board slug (default: the current board)"},
         },
         "required": ["action"],
         "additionalProperties": False,
