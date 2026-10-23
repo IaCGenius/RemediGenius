@@ -133,3 +133,19 @@ instance role may assume `RemediGeniusReadOnly` only inside its own organization
 - Interruptions: Spot gives a two-minute notice. The desk saves state immediately; at most the last few minutes of
   activity can be lost.
 - Remove: `terraform destroy`. The bucket is kept unless `delete_data_on_destroy = true`.
+
+## Test a release before you rely on it
+
+`tools/spot_release_test.py` runs a published release on a throwaway Spot stack and removes it afterwards:
+
+```
+python tools/spot_release_test.py v0.3.2 --settings path/to/settings.json
+```
+
+It downloads the release and checks `SHA256SUMS`, deploys this Terraform as a separate stack named `rgce-release-test`
+(your real installation is not touched), checks the instance over SSM (version, services, skills, plugins, config,
+warnings, the served Knowledge tab) and the dashboard and WebUI in headless Chrome, asks the agent "hi" once, then
+destroys everything, bucket included. `settings.json` holds your Terraform variables (`account_id`, `subnet_id`,
+`model_secret_arn`, ...); keep it outside the repository. The PASS/FAIL report and screenshots are written to
+`.rgce/release-test-<tag>/`. Use `--keep` to leave the stack up for manual testing, `--skip-chat` to spend no model
+tokens. It needs terraform, the AWS CLI with the Session Manager plugin, boto3 and, for the browser checks, Playwright.
