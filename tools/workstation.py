@@ -274,6 +274,8 @@ def start_hermes(args):
     # The dashboard serves user plugins only when enabled: in the profile (tab list) and at its launch scope (API).
     docker("exec", "-i", "--user", "10000:10000", HERMES, "python", "-", input=ENABLE_PROFILE_PLUGIN)
     docker("exec", "--user", "10000:10000", HERMES, "hermes", "-p", "default", "plugins", "enable", "rg-knowledge", capture=True)
+    for key in ("kanban.dispatch_in_gateway", "kanban.auto_decompose"):  # Kanban cards are for people, never worker agents
+        docker("exec", "--user", "10000:10000", HERMES, "hermes", "-p", "default", "config", "set", key, "false", capture=True)
     docker("exec", "--user", "10000:10000", HERMES, "hermes", "profile", "use", PROFILE, capture=True)
     docker("restart", HERMES, capture=True)
     for _ in range(60):

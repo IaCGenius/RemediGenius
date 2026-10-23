@@ -67,6 +67,14 @@ check "dashboard serves the release Knowledge tab" $([ "$j" = "__JS_SHA__" ]; ec
 D="setpriv --reuid=10000 --regid=10000 --clear-groups env PYTHONPATH=/opt/rgtriage/src RGTRIAGE_HOME=/data/rgtriage HOME=/data/rgtriage/.home AWS_DEFAULT_REGION=__REGION__ /opt/rgtriage/venv/bin/python -m rgtriage"
 for i in $(seq 1 30); do b=$($D digest --limit 3 2>&1); echo "$b" | grep -qiE "P[1-4]|no open findings" && break; sleep 10; done
 echo "$b" | grep -qiE "P[1-4]|no open findings"; check "first scan produced a board" $? "$(echo "$b" | head -1 | cut -c1-120)"
+c=$($H -p default config get kanban.dispatch_in_gateway 2>&1 | tail -1)
+check "Kanban dispatcher off" $([ "$c" = "false" ]; echo $?) "$c"
+ref=$($D list --limit 1 --json 2>/dev/null | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['key'])" 2>/dev/null)
+if [ -n "$ref" ]; then
+  out=$(docker exec --user 10000:10000 remedigenius python -c "import importlib.util as u;s=u.spec_from_file_location('p','/opt/data/profiles/remedigenius/plugins/rg-triage/__init__.py');m=u.module_from_spec(s);s.loader.exec_module(m);print(m.handle({'action':'card','ref':'$ref'}))" 2>&1)
+  t=$($H kanban list --json 2>&1 | python3 -c "import json,sys;t=[x for x in json.load(sys.stdin) if x.get('created_by')=='remedigenius'];print(t[0]['status'],t[0]['assignee'],t[0]['id'] if t else '') if t else print('none')" 2>&1)
+  echo "$out" | grep -q "Fix in code" && [ "${t%% *}" = "triage" ] && echo "$t" | grep -q " None "; check "Kanban card filed for people (triage, unassigned, fix steps)" $? "$t"
+else check "Kanban card filed for people (triage, unassigned, fix steps)" 1 "no finding to file"; fi
 """
 
 
@@ -82,20 +90,22 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def download(repo: str, tag: str, dest: Path) -> dict[str, Path]:
+def download(repo: str, tag: str, dest: Path, local: Path | None = None) -> dict[str, Path]:
     version = tag.lstrip("v")
     dest.mkdir(parents=True, exist_ok=True)
     files = {}
     for name in (a.format(v=version) for a in ASSETS):
         target = dest / name
-        if not target.exists():
+        if local:  # a build from tools/package_release.py, tested before it is published
+            shutil.copy2(local / name, target)
+        elif not target.exists():
             urllib.request.urlretrieve(f"https://github.com/{repo}/releases/download/{tag}/{name}", target)
         files[name] = target
     for line in files["SHA256SUMS"].read_text().splitlines():
         digest, name = line.split(maxsplit=1)
         if name in files and sha256(files[name]) != digest:
             raise SystemExit(f"checksum mismatch for {name}; delete {dest} and retry")
-    say(f"downloaded {tag}: checksums OK")
+    say(f"{'local build' if local else 'downloaded'} {tag}: checksums OK")
     return files
 
 
@@ -235,6 +245,7 @@ def main():
     ap.add_argument("--settings", required=True, type=Path, help="JSON file with your Terraform variables (kept out of the repo)")
     ap.add_argument("--repo", default="IaCGenius/RemediGenius")
     ap.add_argument("--workdir", type=Path, help="default: .rgce/release-test-TAG")
+    ap.add_argument("--local", type=Path, help="test a local build (tools/package_release.py --release) instead of downloading")
     ap.add_argument("--keep", action="store_true", help="leave the stack running for manual testing (destroy it yourself)")
     ap.add_argument("--skip-browser", action="store_true", help="skip the dashboard/WebUI browser checks")
     ap.add_argument("--skip-chat", action="store_true", help="do not ask the agent anything (no model tokens)")
@@ -248,7 +259,7 @@ def main():
     settings = json.loads(args.settings.expanduser().read_text(encoding="utf-8"))
     region = settings.get("region", "us-east-1")
 
-    files = download(args.repo, args.tag, work / "release")
+    files = download(args.repo, args.tag, work / "release", args.local)
     spot_zip = files[f"remedigenius-ce-{version}-spot.zip"]
     with zipfile.ZipFile(spot_zip) as z:
         js_sha = hashlib.sha256(z.read(JS_IN_ZIP)).hexdigest()[:16]

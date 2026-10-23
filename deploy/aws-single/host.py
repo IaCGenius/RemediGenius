@@ -254,6 +254,11 @@ def sync_profile(source: Path, hermes_home: Path):
     tab = hermes_home / 'plugins' / 'rg-knowledge'
     if tab.exists():
         shutil.rmtree(tab)
+    # `hermes profile install` also copied the dashboard plugin into the profile; keep that copy on this release too.
+    copy = profile / 'dashboard-plugins'
+    if copy.exists():
+        shutil.rmtree(copy)
+        shutil.copytree(package / 'dashboard-plugins', copy, ignore=shutil.ignore_patterns('__pycache__', 'local.json'))
     shutil.copytree(package / 'dashboard-plugins/rg-knowledge', tab, ignore=shutil.ignore_patterns('__pycache__', 'local.json'))
     (tab / 'local.json').write_text(json.dumps({'socket': SOCKET.as_posix(), 'home': DESK.as_posix(), 'proposals': PROPOSALS,
                                                 'inbox': '/opt/data/knowledge-inbox', 'files': '/opt/data/knowledge-files',
@@ -432,6 +437,9 @@ def enable_knowledge_tab():
     """The dashboard serves user plugins only when enabled: in the profile (tab list) and at its launch scope (API)."""
     in_container('python', '-c', ENABLE_PROFILE_PLUGIN)
     in_container('hermes', '-p', 'default', 'plugins', 'enable', 'rg-knowledge', capture_output=True)
+    # The gateway runs the Kanban dispatcher from the root config: cards are for people, never for worker agents.
+    for key in ('kanban.dispatch_in_gateway', 'kanban.auto_decompose'):
+        in_container('hermes', '-p', 'default', 'config', 'set', key, 'false', capture_output=True)
 
 
 def main():

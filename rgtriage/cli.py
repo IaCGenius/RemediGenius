@@ -427,6 +427,32 @@ def cmd_fixes(args):
              f"{check.get('at', 'never')} {'passed' if check.get('passed') else ('failed ' + json.dumps(check.get('observed') or check.get('error'), default=str)[:120] if check else '')}")
 
 
+def cmd_card(args):
+    """A Kanban card for people: the change, exact AWS CLI from a live read, an IaC chat prompt, the verify read."""
+    from . import cards
+    scan = _latest_or_exit()
+    try:
+        found = cards.members(scan, args.ref, store.find)
+    except ValueError as exc:
+        sys.exit(f"{exc}. Use a ref from `rgtriage list`.")
+    live = not args.offline and not os.environ.get("RGTRIAGE_EVAL_AWS")
+    profile = config.load() if live else {"accounts": []}
+    known = profile["accounts"] + (store.discovered_accounts(profile) if live else [])
+
+    def read(f, service, op, params):  # one read-only call; None when it cannot be made (commands fall back)
+        account = next((a for a in known if f["account"] in (a.get("account_id"), a["name"])), None)
+        if not account or not aws.is_read_operation(aws.snake_to_pascal(op)):
+            return None
+        try:
+            return getattr(aws.client(aws.session_for(account, f["region"]), service, f["region"]), op)(**params)
+        except (ClientError, BotoCoreError, aws.WriteBlocked, AttributeError):
+            return None
+    card = cards.build(found, read)
+    if args.json:
+        return _json(card)
+    _out(f"# {card['title']}\n\n{card['body']}")
+
+
 def cmd_report(args):
     scan = _latest_or_exit()
     path = config.home() / "report.html"
@@ -952,6 +978,10 @@ def main(argv=None):
     p.set_defaults(func=cmd_decide)
     p = sub.add_parser("fixes", help="fix records from decision to verified closure"); p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_fixes)
+    p = sub.add_parser("card", help="Kanban card text for one change: AWS CLI fix, IaC prompt, verify read")
+    p.add_argument("ref", nargs="+"); p.add_argument("--offline", action="store_true", help="no live read for exact commands")
+    p.add_argument("--text", dest="json", action="store_false", help="print markdown instead of JSON")
+    p.set_defaults(func=cmd_card, json=True)
     p = sub.add_parser("report", help="write the HTML report"); p.add_argument("--open", action="store_true"); p.set_defaults(func=cmd_report)
     p = sub.add_parser("watch", help="scan; print only new urgent findings (empty output = nothing new)")
     p.add_argument("--min-priority", default="P2", choices=PRIORITY_ORDER); p.set_defaults(func=cmd_watch)

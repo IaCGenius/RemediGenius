@@ -19,6 +19,8 @@ Once an AWS account is connected, it:
 5. **Proposes the fix in your IaC.** It finds the Terraform, CloudFormation or CDK that deployed the resource,
    writes a minimal diff in your repository's style and runs `terraform validate` on a scratch copy. You apply it
    through your own PR and CI/CD; the desk tracks the fix until a proof-of-done read passes and the AWS finding is gone.
+   Ask it to open a task and it files a card on the Hermes Kanban board with the exact AWS CLI fix, a paste-into-chat
+   prompt for an IaC fix and the verify command. Cards are for people: no agent ever works on them.
 6. **Knows your organization.** One [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format)
    bundle holds who owns what, how critical it is, accepted risks, policies and runbooks, next to shipped guides on
    where to find evidence. Reviewed concepts change priorities, with a citation in every finding. The dashboard
