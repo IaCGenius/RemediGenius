@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config, knowledge, store
+from . import validators as _validators
 
 API = "https://api.github.com"
 DEFAULT_PREFIX = "feature/remedigenius/"
@@ -49,10 +50,15 @@ FORBIDDEN_PATHS = (r"^\.github/", r"(^|/)CODEOWNERS$", r"^\.git/", r"(^|/)\.git/
                    r"(^|/)\.terraform/", r"\.tfstate", r"\.tfvars(\.json)?$", r"(^|/)\.env", r"\.pem$", r"(^|/)id_(rsa|ed25519)")
 MAX_FILES, MAX_FILE_BYTES, MAX_TARBALL = 40, 512 * 1024, 200 * 1024 * 1024
 READ_PERMISSIONS = {"contents": "read", "pull_requests": "read", "checks": "read", "statuses": "read", "metadata": "read"}
+# Reading branch protection and rulesets needs Administration: read. Only the verification token carries it, and never Administration: write.
+VERIFY_PERMISSIONS = {**READ_PERMISSIONS, "administration": "read"}
 WRITE_PERMISSIONS = {"contents": "write", "pull_requests": "write", "metadata": "read"}
+TOKEN_PERMISSIONS = {"read": READ_PERMISSIONS, "write": WRITE_PERMISSIONS, "verify": VERIFY_PERMISSIONS}
 APP_PERMISSIONS = {"contents": "write", "pull_requests": "write", "checks": "read", "statuses": "read",
                    "administration": "read", "metadata": "read"}
 OWNER = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})"
+REVIEWER_USER = OWNER
+REVIEWER_TEAM = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}"
 REPO = r"[A-Za-z0-9._-]{1,100}"
 SHA = r"[0-9a-f]{40}"
 
@@ -114,12 +120,7 @@ def load_policy() -> dict:
     return _read_json(home() / "policy.json")
 
 
-def proposals_dir() -> Path:
-    """Where the agent saves proposals (the same path on the host and inside the agent container)."""
-    for candidate in (os.environ.get("RGTRIAGE_PROPOSALS"), "/opt/data/proposals", str(config.home() / "proposals")):
-        if candidate and Path(candidate).is_dir():
-            return Path(candidate)
-    return config.home() / "proposals"
+proposals_dir = config.proposals_dir  # shared with `rgtriage validate`
 
 
 def key_path() -> Path:
@@ -147,12 +148,31 @@ def validate_policy(policy: dict) -> list[str]:
     base = str(policy.get("base") or "")
     if not base or is_protected(base, str(policy.get("default_branch") or "")):
         problems.append("base must be a development branch, never main, master, release/production or the repository's default branch")
+    owner = repo.split("/")[0].lower()
+    for entry in policy.get("reviewers") or []:
+        entry = str(entry)
+        if "/" in entry:
+            org, _, team = entry.partition("/")
+            if not re.fullmatch(REVIEWER_TEAM, entry):
+                problems.append(f"reviewer team {entry!r} must look like org/team-slug")
+            elif org.lower() != owner:
+                problems.append(f"reviewer team {entry!r} must belong to the repository's organization ({owner})")
+        elif not re.fullmatch(REVIEWER_USER, entry):
+            problems.append(f"reviewer {entry!r} is not a valid GitHub login")
     prefix = str(policy.get("branch_prefix") or "")
     if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*/", prefix) or is_protected(prefix.rstrip("/")):
         problems.append("branch_prefix must be a folder-style prefix such as feature/remedigenius/")
     if prefix and base and (base.startswith(prefix) or prefix.startswith(base + "/")):
         problems.append("branch_prefix must not contain the base branch")
     return problems
+
+
+def split_reviewers(policy: dict) -> tuple[set[str], set[str]]:
+    """Designated reviewers as two lowercase allowlists: user logins, and team slugs (the part after `org/`, org = the repository owner)."""
+    owner = str(policy.get("repo") or "").split("/")[0].lower()
+    users = {str(r).lower() for r in policy.get("reviewers") or [] if "/" not in str(r)}
+    teams = {str(r).partition("/")[2].lower() for r in policy.get("reviewers") or [] if "/" in str(r) and str(r).partition("/")[0].lower() == owner}
+    return users, teams
 
 
 class Gate:
@@ -166,7 +186,7 @@ class Gate:
         self.repo = policy["repo"].lower()
         self.base = policy["base"]
         self.prefix = policy["branch_prefix"]
-        self.reviewers = {r.lower() for r in policy.get("reviewers") or []}
+        self.users, self.teams = split_reviewers(policy)
 
     def _branch_ok(self, ref: str) -> bool:
         """A full branch name inside the feature prefix, spelled with safe characters only (no encodings, spaces, dot segments or .lock)."""
@@ -221,9 +241,10 @@ class Gate:
                 return
             requested = re.fullmatch(r"/pulls/\d+/requested_reviewers", rest)
             if requested:
-                names = {n.lower() for n in body.get("reviewers") or []} | {n.lower() for n in body.get("team_reviewers") or []}
-                if not names or not names <= self.reviewers or set(body) - {"reviewers", "team_reviewers"}:
-                    raise Denied("reviewers must be among the designated human reviewers")
+                users, teams = {n.lower() for n in body.get("reviewers") or []}, {n.lower() for n in body.get("team_reviewers") or []}
+                if (not (users or teams) or users - self.users or teams - self.teams or set(body) - {"reviewers", "team_reviewers"}
+                        or any("/" in n for n in teams)):
+                    raise Denied("reviewers must be among the designated human reviewers (users by login, teams by slug within the repository's organization)")
                 return
             if re.fullmatch(r"/issues/\d+/comments", rest):
                 return
@@ -346,7 +367,7 @@ class Client:
         if not installation:
             raise GitHubError("the GitHub App is not installed on any repository yet. Run: rgtriage github connect")
         repo = (self.policy.get("repo") or "").split("/")[-1]
-        body = {"permissions": READ_PERMISSIONS if kind == "read" else WRITE_PERMISSIONS}
+        body = {"permissions": TOKEN_PERMISSIONS[kind]}
         if repo:
             body["repositories"] = [repo]
         jwt = self.jwt()
@@ -360,7 +381,7 @@ class Client:
     def call(self, method: str, path: str, body: dict | None = None, write_enabled: bool = True) -> dict | list | None:
         """The only way the desk reaches the repository: gate first, then send. Returns parsed JSON (None for 404)."""
         self.gate.check(method, path, body, write_enabled=write_enabled)
-        kind = "read" if method.upper() == "GET" else "write"
+        kind = token_kind(method, path)
         token = self.token(kind)
         status, _, raw = self._raw(method, path, token, body)
         if status == 404 and method.upper() == "GET":
@@ -389,6 +410,13 @@ class Client:
         return raw
 
 
+def token_kind(method: str, path: str) -> str:
+    """Which narrowed token a request needs: writes get contents+PR write; protection reads get Administration: read; the rest read-only."""
+    if method.upper() != "GET":
+        return "write"
+    return "verify" if re.search(r"/(branches/[^/]+/protection|rulesets)$", path.split("?", 1)[0]) else "read"
+
+
 def _explain(status: int, raw: bytes, doing: str) -> str:
     try:
         message = json.loads(raw).get("message", "")
@@ -398,14 +426,15 @@ def _explain(status: int, raw: bytes, doing: str) -> str:
              403: "GitHub refused (missing permission, organization approval pending, rate limit or the App was suspended)",
              404: "not found, or the App cannot see it (is the repository selected in the App installation?)",
              409: "conflict (the branch changed)", 429: "rate limit reached; wait and retry", 422: "GitHub rejected the request (for example a non-fast-forward branch update)"}
-    return f"GitHub {doing} failed ({status}): {hints.get(status, 'error')}. {message}".strip()
+    hint = hints.get(status) or ("GitHub had a temporary server error; retry in a minute" if status >= 500 else "error")
+    return f"GitHub {doing} failed ({status}): {hint}. {message}".strip()
 
 
 # ------------------------------------------------------------------ protection check
 
 def protection_check(client: Client) -> dict:
     """Read what protects the development base and the production branch. Never assumes; unknown is reported as unknown."""
-    policy, checks = client.policy, []
+    policy, checks, permission_problem = client.policy, [], False
     repo = policy["repo"]
     info = client.call("GET", f"/repos/{repo}", write_enabled=False) or {}
     default = info.get("default_branch") or ""
@@ -420,7 +449,10 @@ def protection_check(client: Client) -> dict:
             checks.append((f"{role} {branch!r} exists", "fail", "branch not found; create it (from the recorded starting commit) before enabling writes"))
             continue
         rules = client.call("GET", f"/repos/{repo}/rules/branches/{urllib.parse.quote(branch, safe='')}", write_enabled=False) or []
-        classic = client.call("GET", f"/repos/{repo}/branches/{urllib.parse.quote(branch, safe='')}/protection", write_enabled=False) or {}
+        classic, denied = _read_protection(client, f"/repos/{repo}/branches/{urllib.parse.quote(branch, safe='')}/protection")
+        if denied:
+            permission_problem = True
+            checks.append((f"{role} protection readable", "fail", f"{branch}: " + PERMISSION_REMEDY))
         types = {r.get("type") for r in rules if isinstance(r, dict)}
         review = next((r for r in rules if r.get("type") == "pull_request"), None)
         approvals = max([(review or {}).get("parameters", {}).get("required_approving_review_count", 0) or 0,
@@ -440,13 +472,30 @@ def protection_check(client: Client) -> dict:
                    (f"{role} dismisses stale approvals", "pass" if stale else "warn", branch),
                    (f"{role} requires CI checks", "pass" if has_checks else "warn", branch)]
         if role.startswith("development"):
-            rulesets = client.call("GET", f"/repos/{repo}/rulesets", write_enabled=False) or []
+            rulesets, denied = _read_protection(client, f"/repos/{repo}/rulesets", empty=[])
+            if denied and not permission_problem:
+                permission_problem = True
+                checks.append((f"{role} rulesets readable", "fail", PERMISSION_REMEDY))
             bypass = [a for r in rulesets for a in r.get("bypass_actors") or [] if a.get("actor_type") in ("Integration", "OrganizationAdmin", "RepositoryRole")]
             if bypass:
                 checks.append((f"{role} bypass list", "warn", "rulesets list bypass actors; confirm the agent App is not among them"))
     ok = all(c[1] != "fail" for c in checks)
-    return {"ok": ok, "checks": [{"check": c, "result": r, "detail": d} for c, r, d in checks],
+    return {"ok": ok, "permission_problem": permission_problem, "checks": [{"check": c, "result": r, "detail": d} for c, r, d in checks],
             "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "default_branch": default}
+
+
+PERMISSION_REMEDY = ("the App cannot read branch protection: it needs 'Administration: read'. Approve the App's updated permissions "
+                     "(GitHub: Settings, Applications, Installed GitHub Apps, Configure) or reconnect, then run `rgtriage github verify`.")
+
+
+def _read_protection(client: Client, path: str, empty=None):
+    """(data, permission_denied). A 404 means nothing exists there; a 403 is a permission problem and is never read as 'no protection'."""
+    try:
+        return client.call("GET", path, write_enabled=False) or ({} if empty is None else empty), False
+    except GitHubError as exc:
+        if exc.status == 403:
+            return ({} if empty is None else empty), True
+        raise
 
 
 def reviewers_ok(client: Client, reviewers: list[str]) -> list[str]:
@@ -518,7 +567,10 @@ def status(client: Client | None = None, verify: bool = False) -> dict:
         return out
     failed = [c for c in check.get("checks", []) if c["result"] == "fail"]
     out["state"] = "Connected: read/proposal access"
-    out["remedy"] = ("Fix on GitHub, then run `rgtriage github verify`: " + "; ".join(f"{c['check']} ({c['detail']})" for c in failed)) if failed else (
+    if check.get("permission_problem"):
+        out["remedy"] = "Permissions, not protection: " + PERMISSION_REMEDY
+        return out
+    out["remedy"] = ("Fix on GitHub (a repository administrator can apply the rulesets in deploy/github), then run `rgtriage github verify`: " + "; ".join(f"{c['check']} ({c['detail']})" for c in failed)) if failed else (
         "Run `rgtriage github verify` to check the branch protection and enable writes." if not check else
         "Set a designated human reviewer: `rgtriage github configure --reviewer <login>`.")
     return out
@@ -587,12 +639,22 @@ def connect(owner: str = "", port: int = 8743, open_browser: bool = True, timeou
     """Create the App through GitHub's manifest flow and wait for the installation. Runs on the host; the browser reaches
     http://localhost:<port> directly (or through an SSM port forward on Spot)."""
     existing = load_app()
-    if existing.get("app_id") and key_path().is_file() and not reconnect:
-        if existing.get("installation_id"):
-            raise Denied(f"GitHub is already connected (App {existing.get('slug')}). To replace the connection run `rgtriage github disconnect` first, "
-                         "or pass --reconnect to create a new App (the old App stays installed until you remove it).")
-        say("An App was already created for this installation; resuming at the install step.")
-        return wait_for_installation(existing, timeout, transport=transport, say=say)
+    if existing.get("app_id") and key_path().is_file():
+        verdict = probe_connection(existing, transport)
+        if verdict["state"] == "unreachable":
+            raise GitHubError(f"cannot check the existing connection ({verdict['detail']}); fix the network and run connect again")
+        if verdict["state"] == "healthy" and not reconnect:
+            raise Denied(f"GitHub is already connected (App {existing.get('slug')}). To replace it, run `rgtriage github disconnect` first, or "
+                         "`rgtriage github connect --reconnect` to create a new App (the old App and its installation stay on GitHub until you remove them).")
+        if verdict["state"] in ("not_installed", "reinstalled") and not reconnect:
+            say("The App exists on GitHub but is not installed" + (" any more" if existing.get("installation_id") else "") + "; resuming at the install step.")
+            existing.pop("installation_id", None)
+            existing.pop("installed_on", None)
+            _write_private(home() / "app.json", json.dumps(existing, indent=1))
+            return wait_for_installation(existing, timeout, transport=transport, say=say)
+        say("The App no longer exists on GitHub (deleted, or its key was rejected): creating a replacement. Its old installation went away with it."
+            if verdict["state"] == "app_gone" else "Creating a new App as asked; the previous App and its installation stay on GitHub until you remove them.")
+        forget_connection()
     state = secrets.token_urlsafe(24)
     redirect = f"http://localhost:{port}/created"
     app_name = f"RemediGenius-CE-{secrets.token_hex(3)}"
@@ -615,31 +677,62 @@ def connect(owner: str = "", port: int = 8743, open_browser: bool = True, timeou
             self.end_headers()
             self.wfile.write(text.encode())
 
+        def _fail(self, message: str, code: int = 502):
+            result["error"] = message
+            done.set()
+            try:
+                self._page("The connection could not be completed. The reason is shown in the terminal where you ran connect.", code)
+            except OSError:
+                pass
+
+        def _created(self, query):
+            if query.get("state", [""])[0] != state:
+                return self._page("State mismatch: start again from the terminal.", 400)
+            code = query.get("code", [""])[0]
+            if not re.fullmatch(r"[A-Za-z0-9_-]{8,128}", code):
+                return self._page("Missing code.", 400)
+            try:
+                status_, _, raw = post("POST", f"{API}/app-manifests/{code}/conversions",
+                                       {"Accept": "application/vnd.github+json", "User-Agent": "RemediGenius-CE"}, None)
+            except (urllib.error.URLError, TimeoutError, OSError, GitHubError) as exc:
+                return self._fail(f"could not reach GitHub to finish creating the App ({type(exc).__name__}); nothing was saved, run connect again")
+            if status_ != 201:
+                return self._fail(_redact(_explain(status_, raw, "creating the App from the manifest"), []))
+            try:
+                data = json.loads(raw)
+                app_id, app_slug, pem = int(data["id"]), str(data["slug"]), str(data["pem"])
+                if not re.fullmatch(r"[A-Za-z0-9-]{1,80}", app_slug) or not pem.startswith("-----BEGIN"):
+                    raise ValueError("unexpected shape")
+            except (ValueError, KeyError, TypeError):
+                return self._fail("GitHub's answer was not what a created App looks like, so nothing was saved. If an App named RemediGenius-CE-... "
+                                  "was created, delete it at https://github.com/settings/apps and run connect again")
+            try:
+                _write_private(key_path(), pem)
+                _write_private(home() / "app.json", json.dumps({"app_id": app_id, "slug": app_slug, "owner": (data.get("owner") or {}).get("login", owner or "personal"),
+                                                                "html_url": data.get("html_url")}, indent=1))
+            except OSError as exc:
+                for name in ("app.pem", "app.json"):
+                    try:
+                        (home() / name).unlink(missing_ok=True)  # leave no half-saved connection behind
+                    except OSError:
+                        pass
+                return self._fail(f"the App '{app_slug}' was created, but its key could not be saved ({exc.strerror or type(exc).__name__}). Delete the App at "
+                                  f"https://github.com/settings/apps/{app_slug}/advanced and run connect again")
+            result["created"] = app_slug
+            done.set()
+            return self._page(f"The App was created. Next: <a href=\"https://github.com/apps/{html.escape(app_slug)}/installations/new\">install it</a> "
+                              f"and select only the repository RemediGenius may use. You can close this tab afterwards.")
+
         def do_GET(self):
             url = urllib.parse.urlparse(self.path)
             query = urllib.parse.parse_qs(url.query)
             if url.path == "/":
                 return self._page(form)
             if url.path == "/created":
-                if query.get("state", [""])[0] != state:
-                    return self._page("State mismatch: start again from the terminal.", 400)
-                code = query.get("code", [""])[0]
-                if not re.fullmatch(r"[A-Za-z0-9_-]{8,128}", code):
-                    return self._page("Missing code.", 400)
-                status_, _, raw = post("POST", f"{API}/app-manifests/{code}/conversions",
-                                       {"Accept": "application/vnd.github+json", "User-Agent": "RemediGenius-CE"}, None)
-                if status_ != 201:
-                    result["error"] = _explain(status_, raw, "creating the App from the manifest")
-                    done.set()
-                    return self._page("GitHub did not create the App; see the terminal.", 502)
-                data = json.loads(raw)
-                _write_private(key_path(), data["pem"])
-                _write_private(home() / "app.json", json.dumps({"app_id": data["id"], "slug": data["slug"], "owner": (data.get("owner") or {}).get("login", owner or "personal"),
-                                                                "html_url": data.get("html_url")}, indent=1))
-                result["created"] = data["slug"]
-                done.set()
-                return self._page(f"The App was created. Next: <a href=\"https://github.com/apps/{html.escape(data['slug'])}/installations/new\">install it</a> "
-                                  f"and select only the repository RemediGenius may use. You can close this tab afterwards.")
+                try:
+                    return self._created(query)
+                except Exception as exc:  # never leave the waiting command hanging: report what failed, without detail that could hold a secret
+                    return self._fail(f"the App callback failed unexpectedly ({type(exc).__name__}); nothing is connected, run connect again")
             self._page("Not found", 404)
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
@@ -659,6 +752,37 @@ def connect(owner: str = "", port: int = 8743, open_browser: bool = True, timeou
     finally:
         server.shutdown()
     return wait_for_installation(load_app(), timeout, transport=transport, say=say)
+
+
+def probe_connection(app: dict, transport=None) -> dict:
+    """Ask GitHub what became of this App: healthy | not_installed | reinstalled | app_gone | unreachable (with the reason)."""
+    client = Client({}, app, transport=transport)
+    try:
+        status_, _, raw = client._raw("GET", "/app/installations", client.jwt(), None)
+    except GitHubError as exc:  # the key file cannot sign: it is not a working App key any more
+        return {"state": "app_gone", "detail": str(exc)}
+    if status_ == 401:
+        return {"state": "app_gone", "detail": "GitHub rejected the App's key"}
+    if status_ != 200:
+        return {"state": "unreachable", "detail": _redact(_explain(status_, raw, "checking the App"), [])}
+    try:
+        ids = [i["id"] for i in json.loads(raw)]
+    except (ValueError, KeyError, TypeError):
+        return {"state": "unreachable", "detail": "unexpected answer from GitHub"}
+    if app.get("installation_id") in ids:
+        return {"state": "healthy", "detail": ""}
+    return {"state": "reinstalled" if ids else "not_installed", "detail": ""}
+
+
+def forget_connection() -> None:
+    """Delete the local App identity (a replacement is about to be created). Writes stay off until the new App is verified."""
+    for name in ("app.pem", "app.json"):
+        (home() / name).unlink(missing_ok=True)
+    policy = load_policy()
+    if policy:
+        policy["writes_enabled"] = False
+        policy.pop("protection", None)
+        _write_private(home() / "policy.json", json.dumps(policy, indent=1))
 
 
 def wait_for_installation(app: dict, timeout: int, transport=None, say=print) -> dict:
@@ -702,6 +826,52 @@ def detect_iac(paths: list[str]) -> dict:
     return {kind: sorted(folders)[:20] for kind, folders in found.items()}
 
 
+GEN_START, GEN_END = "<!-- rg-generated:start -->", "<!-- rg-generated:end -->"
+NOTES_STUB = "## Notes\n\n_Add the owning team and context here. The desk only rewrites the generated block above and never touches text outside it._"
+
+
+def merge_repository_page(existing, repo: str, base: str, generated: str, facts: dict) -> tuple[dict, str, str]:
+    """The Repository concept after a refresh: generated facts are replaced, everything a person wrote or reviewed is kept.
+
+    A new page gets a generated block and a notes section. An existing page keeps its title, description, owner, notes, review history
+    and any other field; only the block between the markers (and the `remedigenius` facts) change. If the page has no markers (an earlier
+    version, or a person rewrote it), the block is appended and nothing is removed. Review: when the repository, the development
+    branch or the kind of IaC changes, `stale_after` is set to now so the page shows as stale in the Knowledge tab and a person
+    re-confirms it, with their earlier review history intact; a new commit alone does not."""
+    block = f"{GEN_START}\n{generated}\n{GEN_END}"
+    if existing is None or existing.error:
+        meta = {"type": "Repository", "title": repo, "description": f"IaC repository {repo} (development branch {base})", "remedigenius": facts}
+        return meta, f"{block}\n\n{NOTES_STUB}\n", "created"
+    meta, body = dict(existing.meta), existing.body
+    previous = meta.get("remedigenius") if isinstance(meta.get("remedigenius"), dict) else {}
+    meta["remedigenius"] = {**previous, **facts}
+    if GEN_START in body and GEN_END in body:
+        head, _, rest = body.partition(GEN_START)
+        _, _, tail = rest.partition(GEN_END)
+        body = f"{head}{block}{tail}"
+    else:
+        body = f"{body.rstrip()}\n\n{block}\n"
+    material = [k for k in ("repo", "base", "iac") if previous and previous.get(k) != facts.get(k)]
+    note = "updated"
+    if material:
+        meta["stale_after"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        meta["remedigenius"]["review_note"] = f"{', '.join(material)} changed on {meta['stale_after'][:10]}: please re-confirm this page"
+        note = "updated, needs re-confirmation (" + ", ".join(material) + " changed)"
+    return meta, body, note
+
+
+def record_repository(name: str, repo: str, base: str, generated: str, facts: dict) -> str:
+    path = f"repositories/{name}.md"
+    bundle = knowledge.bundle()
+    try:
+        existing = bundle.read(path) if bundle.path_of(path).exists() else None
+    except Exception:
+        existing = None
+    meta, body, note = merge_repository_page(existing, repo, base, generated, facts)
+    knowledge.save(meta, body, "human:desk-github", path=path, replace=True)
+    return f"{path} ({note})"
+
+
 def refresh(client: Client | None = None) -> dict:
     """Mirror the development branch (read-only, no secrets) and record the repository in the knowledge bundle.
 
@@ -739,17 +909,14 @@ def refresh(client: Client | None = None) -> dict:
         shutil.rmtree(target)
     os.replace(stage, target)
     kinds = detect_iac(paths)
-    body = (f"Connected through the RemediGenius GitHub App. Fixes for resources deployed from this repository become pull requests from "
-            f"`{client.policy['branch_prefix']}...` branches into `{base}`; a human reviewer approves and merges.\n\n"
-            f"- Development branch: `{base}` (commit `{sha[:10]}`, mirrored read-only at `{target}`)\n"
-            f"- Infrastructure code found (from file names): " + (", ".join(f"{k} in {', '.join(v[:5])}" for k, v in kinds.items()) or "none detected") +
-            f"\n- Designated reviewers: {', '.join(client.policy.get('reviewers') or []) or 'not set'}\n"
-            "\nThis page is kept up to date by the desk; edit the owner and notes in the Knowledge tab.")
-    meta = {"type": "Repository", "title": repo, "description": f"IaC repository {repo} (development branch {base})",
-            "remedigenius": {"repo": repo, "base": base, "commit": sha, "iac": sorted(kinds)}}
+    generated = (f"Connected through the RemediGenius GitHub App. Fixes for resources deployed from this repository become pull requests from "
+                 f"`{client.policy['branch_prefix']}...` branches into `{base}`; a human reviewer approves and merges.\n\n"
+                 f"- Development branch: `{base}` (commit `{sha[:10]}`, mirrored read-only at `{target}`)\n"
+                 f"- Infrastructure code found (from file names): " + (", ".join(f"{k} in {', '.join(v[:5])}" for k, v in kinds.items()) or "none detected") +
+                 f"\n- Designated reviewers: {', '.join(client.policy.get('reviewers') or []) or 'not set'}")
+    facts = {"repo": repo, "base": base, "commit": sha, "iac": sorted(kinds)}
     try:
-        knowledge.save(meta, body, "human:desk-github", path=f"repositories/{name}.md", replace=True)
-        recorded = f"repositories/{name}.md"
+        recorded = record_repository(name, repo, base, generated, facts)
     except Exception as exc:  # the mirror is useful even when the knowledge bundle is unavailable
         recorded = f"not recorded ({exc})"
     return {"repo": repo, "branch": base, "commit": sha, "files": kept, "iac": kinds, "mirror": str(target), "knowledge": recorded}
@@ -803,8 +970,9 @@ def _extract_tarball(raw: bytes, dest: Path) -> None:
         _ = top
 
 
-def branch_name(prefix: str, ref: str, topic: str) -> str:
-    return f"{prefix}{slug(topic or ref)}-{hashlib.sha1(ref.encode()).hexdigest()[:6]}"
+def branch_name(prefix: str, ref: str, topic: str = "") -> str:
+    """One branch per remediation task, from the finding ref only (immutable). Title and topic are presentation and never change it."""
+    return f"{prefix}fix-{slug(ref, 40)}"
 
 
 def clean_text(text, limit: int = 4000) -> str:
@@ -815,7 +983,8 @@ def clean_text(text, limit: int = 4000) -> str:
     return text[:limit]
 
 
-def pr_body(finding: dict, files: list[str], validation: list[dict], evidence: str, change: str, effect: str, risk: str, rollback: str) -> str:
+def pr_body(finding: dict, files: list[str], validation: list[dict], evidence: str, change: str, effect: str, risk: str, rollback: str,
+            validated_on: str = "") -> str:
     sanitize = clean_text
     rows = "\n".join(f"- `{v['check']}`: **{v['result']}**" + (f" ({sanitize(v['detail'])[:160]})" if v.get("detail") else "") for v in validation) or "- not validated"
     return (f"## Finding\n{sanitize(finding.get('title') or finding.get('ref'))}\n\nRef: `{sanitize(finding.get('ref'))}`\n\n"
@@ -826,84 +995,168 @@ def pr_body(finding: dict, files: list[str], validation: list[dict], evidence: s
             "provider schema only, not a plan.")
 
 
+def _default_validate(tree: Path, paths: dict[str, bytes]) -> list[dict]:
+    """Check the candidate tree (the parent commit's files with the proposal applied) in the isolated validation service."""
+    files = _validators.snapshot_dir(tree)
+    files.update(paths)
+    return _validators.check_tree(files, sorted(paths))
+
+
+def _prs_for(client: Client, repo: str, branch: str) -> list[dict]:
+    owner = repo.split("/")[0]
+    return client.call("GET", f"/repos/{repo}/pulls?head={urllib.parse.quote(owner)}:{urllib.parse.quote(branch, safe='/')}&state=all&per_page=50") or []
+
+
+def _require_workflow_pr(client: Client, pr: dict, repo: str, branch: str) -> None:
+    """An existing PR is only updated when it is still exactly what this workflow opened: same repository, our head, the development base."""
+    base = (client.policy or {}).get("base")
+    problems = []
+    if (pr.get("base") or {}).get("ref") != base:
+        problems.append(f"targets {(pr.get('base') or {}).get('ref')!r} instead of the development branch {base!r}")
+    for side, expected in (("base", repo), ("head", repo)):
+        full = ((pr.get(side) or {}).get("repo") or {}).get("full_name")
+        if full and full.lower() != repo.lower():
+            problems.append(f"its {side} is in {full}, not {repo}")
+    if (pr.get("head") or {}).get("ref") != branch:
+        problems.append(f"its head is {(pr.get('head') or {}).get('ref')!r}, not {branch!r}")
+    if problems:
+        raise Denied(f"existing PR #{pr.get('number')} {'; '.join(problems)}. Nothing was pushed or changed: close it, or point it back at "
+                     f"{base!r}, then publish again")
+
+
+def _task_branch(client: Client, repo: str, ref: str) -> tuple[str, dict | None]:
+    """The branch and open PR for this task. A PR that was merged earlier starts a numbered follow-up branch (`-r2`, `-r3`);
+    one that was closed without merging is simply replaced by a new PR from the same branch."""
+    stable = branch_name(client.policy["branch_prefix"], ref)
+    branch = stable
+    for generation in range(2, 12):
+        prs = _prs_for(client, repo, branch)
+        open_ = [pr for pr in prs if pr.get("state") == "open"]
+        if len(open_) > 1:
+            raise Denied(f"more than one open PR from {branch}: " + ", ".join(f"#{pr['number']}" for pr in open_) + "; close the extra ones first")
+        if open_:
+            _require_workflow_pr(client, open_[0], repo, branch)
+            return branch, open_[0]
+        if any(pr.get("merged_at") for pr in prs):
+            branch = f"{stable}-r{generation}"
+            continue
+        return branch, None
+    raise Denied("too many earlier merged PRs for this finding; ask a person to look at it")
+
+
+def _reviewer_requests(client: Client, pr: dict) -> dict:
+    """The reviewers still to ask: designated users and team slugs not already requested on the PR."""
+    users, teams = split_reviewers(client.policy)
+    have_users = {(u.get("login") or "").lower() for u in pr.get("requested_reviewers") or []}
+    have_teams = {(t.get("slug") or "").lower() for t in pr.get("requested_teams") or []}
+    asks = {"reviewers": sorted(users - have_users), "team_reviewers": sorted(teams - have_teams)}
+    return {k: v for k, v in asks.items() if v}
+
+
 def publish(ref: str, files: dict[str, bytes], title: str = "", client: Client | None = None, validators=None, finding: dict | None = None,
             evidence: str = "", change: str = "", effect: str = "", risk: str = "", rollback: str = "", topic: str = "") -> dict:
-    """Validate, push to the task's feature branch and open or update one PR into the development base."""
+    """Validate, push to the task's feature branch and open or update ONE PR into the development base.
+
+    Order matters: the existing PR and branch are resolved and checked first (nothing is changed if they are not what this workflow
+    created), the validated tree is exactly parent commit + proposal, and every later step is safe to repeat, so a retry after a partial
+    failure finishes the job without a second commit or PR."""
     client = client or Client()
     st = status(client, verify=True)  # protection is re-verified for every publish; a failed check denies the write
     if not st["writes_enabled"]:
         raise Denied(f"writes are not enabled ({st['state']}): {st['remedy']}")
+    if validators is None and not _validators.isolated():
+        raise Denied("validation isolation is not configured (RGVALIDATE_SOCKET): the checks run untrusted tools and must not run next to the GitHub key")
+    run_validators = _default_validate if validators is None else validators
     policy, repo = client.policy, client.policy["repo"]
     paths = {_safe_repo_path(p): d for p, d in files.items()}
     if len(paths) > MAX_FILES:
         raise Denied("too many files")
-    branch = branch_name(policy["branch_prefix"], ref, topic or title)
-    head_branch = urllib.parse.quote(branch, safe="/")
+    warnings: list[str] = []
+
+    # 1. resolve and check the existing PR and branch before any change
+    branch, open_pr = _task_branch(client, repo, ref)
+    quoted = urllib.parse.quote(branch, safe="/")
     base = client.call("GET", f"/repos/{repo}/branches/{urllib.parse.quote(policy['base'], safe='')}", write_enabled=False)
     if base is None:
         raise GitHubError(f"development branch {policy['base']!r} was not found")
     base_sha = base["commit"]["sha"]
-
-    # 1. validate in a scratch copy with no credentials at all
-    validation: list[dict] = []
-    if validators is not False:
-        run = validators or __import__("rgtriage.validators", fromlist=["validate_overlay"]).validate_overlay
-        with tempfile.TemporaryDirectory(prefix="rg-github-") as scratch:
-            tree_dir = Path(scratch) / "repo"
-            tree_dir.mkdir()
-            _extract_tarball(client.raw_read(f"/repos/{repo}/tarball/{base_sha}"), tree_dir)
-            validation = run(tree_dir, paths)
-    if any(v["result"] == "fail" for v in validation):
-        return {"published": False, "reason": "validation failed; nothing was pushed", "validation": validation}
-
-    # 2. reuse the task's branch if it is ours; never overwrite someone else's work
-    existing = client.call("GET", f"/repos/{repo}/git/ref/heads/{head_branch}", write_enabled=False)
-    parent = base_sha
+    existing = client.call("GET", f"/repos/{repo}/git/ref/heads/{quoted}", write_enabled=False)
+    if open_pr and not existing:
+        raise GitHubError(f"PR #{open_pr['number']} is open but its branch {branch} was not found; ask a person to look at it")
+    parent = existing["object"]["sha"] if existing else base_sha
     if existing:
-        parent = existing["object"]["sha"]
         last = client.call("GET", f"/repos/{repo}/commits/{parent}", write_enabled=False) or {}
         author = ((last.get("author") or {}).get("login") or "")
         if author and author.lower() != f"{client.app.get('slug', '')}[bot]".lower():
             raise Denied(f"branch {branch} already has commits by {author}; refusing to build on or overwrite someone else's work")
-    base_tree = (client.call("GET", f"/repos/{repo}/git/commits/{parent}", write_enabled=False) or {})["tree"]["sha"]
+    parent_tree = (client.call("GET", f"/repos/{repo}/git/commits/{parent}", write_enabled=False) or {})["tree"]["sha"]
+
+    # 2. validate exactly what will be committed: the parent commit's files with the proposal applied, with no credentials in reach
+    validation: list[dict] = []
+    if run_validators is not False:
+        with tempfile.TemporaryDirectory(prefix="rg-github-") as scratch:
+            tree_dir = Path(scratch) / "repo"
+            tree_dir.mkdir()
+            _extract_tarball(client.raw_read(f"/repos/{repo}/tarball/{parent}"), tree_dir)
+            validation = run_validators(tree_dir, paths)
+    validated_on = f"{parent[:10]} ({'the branch head' if existing else 'the development branch'})"
+    if any(v["result"] == "fail" for v in validation):
+        return {"published": False, "reason": "validation failed; nothing was pushed", "validation": validation, "validated_on": validated_on}
+
+    # 3. build the commit; an unchanged tree only skips the commit and ref update, never the PR
     entries = []
     for path, data in sorted(paths.items()):
         blob = client.call("POST", f"/repos/{repo}/git/blobs", {"content": base64.b64encode(data).decode(), "encoding": "base64"})
         entries.append({"path": path, "mode": "100644", "type": "blob", "sha": blob["sha"]})
-    tree = client.call("POST", f"/repos/{repo}/git/trees", {"base_tree": base_tree, "tree": entries})
-    pulls = client.call("GET", f"/repos/{repo}/pulls?head={urllib.parse.quote(repo.split('/')[0])}:{head_branch}&state=open") or []
-    if existing and tree["sha"] == base_tree:
-        return {"published": True, "changed": False, "branch": branch, "pr": (pulls[0]["html_url"] if pulls else None), "validation": validation,
-                "note": "the branch already contains exactly these changes"}
-    title = clean_text(title, 200).replace("\n", " ").strip()
-    commit = client.call("POST", f"/repos/{repo}/git/commits", {"message": f"{title or 'RemediGenius fix'}\n\nRef: {clean_text(ref, 40)}\nProposed by RemediGenius-CE; needs human review.",
-                                                                   "tree": tree["sha"], "parents": [parent]})
-    if existing:
-        try:
-            client.call("PATCH", f"/repos/{repo}/git/refs/heads/{head_branch}", {"sha": commit["sha"], "force": False})
-        except GitHubError as exc:
-            if exc.status in (409, 422):
-                raise GitHubError(f"the branch moved while publishing (not a fast-forward). Nothing was overwritten; run publish again. {exc}", exc.status)
-            raise
+    tree = client.call("POST", f"/repos/{repo}/git/trees", {"base_tree": parent_tree, "tree": entries})
+    new_commit = None
+    if tree["sha"] == parent_tree:
+        if not existing:
+            return {"published": False, "reason": "the proposal changes nothing compared with the development branch; nothing was pushed",
+                    "validation": validation, "validated_on": validated_on}
     else:
-        client.call("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": commit["sha"]})
-    body = pr_body(finding or {"ref": ref, "title": title}, sorted(paths), validation, evidence, change or title, effect, risk, rollback)
-    if pulls:
-        pr = client.call("PATCH", f"/repos/{repo}/pulls/{pulls[0]['number']}", {"title": title or pulls[0]["title"], "body": body})
-        action = "updated"
-    else:
-        pr = client.call("POST", f"/repos/{repo}/pulls", {"title": title or f"RemediGenius fix for {ref}", "body": body, "head": branch, "base": policy["base"]})
-        action = "opened"
-        reviewers = [r for r in policy.get("reviewers", []) if "/" not in r]
-        teams = [r.split("/", 1)[1] for r in policy.get("reviewers", []) if "/" in r]
+        clean_title = clean_text(title, 200).replace("\n", " ").strip()
+        commit = client.call("POST", f"/repos/{repo}/git/commits", {
+            "message": f"{clean_title or 'RemediGenius fix'}\n\nRef: {clean_text(ref, 40)}\nProposed by RemediGenius-CE; needs human review.",
+            "tree": tree["sha"], "parents": [parent]})
+        if existing:
+            try:
+                client.call("PATCH", f"/repos/{repo}/git/refs/heads/{quoted}", {"sha": commit["sha"], "force": False})
+            except GitHubError as exc:
+                if exc.status in (409, 422):
+                    raise GitHubError(f"the branch moved while publishing (not a fast-forward). Nothing was overwritten; run publish again. {exc}", exc.status)
+                raise
+        else:
+            client.call("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": commit["sha"]})
+        new_commit = commit["sha"]
+
+    # 4. the PR, the reviewers and the remediation record, each safe to repeat
+    body = pr_body(finding or {"ref": ref, "title": title}, sorted(paths), validation, evidence, change or title, effect, risk, rollback, validated_on)
+    pr_title = clean_text(title, 200).replace("\n", " ").strip()
+    try:
+        if open_pr:
+            pr = client.call("PATCH", f"/repos/{repo}/pulls/{open_pr['number']}", {"title": pr_title or open_pr["title"], "body": body})
+            action = "updated" if new_commit else "unchanged"
+            pr = {**open_pr, **(pr or {})}
+        else:
+            pr = client.call("POST", f"/repos/{repo}/pulls", {"title": pr_title or f"RemediGenius fix for {clean_text(ref, 40)}", "body": body, "head": branch,
+                                                              "base": policy["base"]})
+            action = "opened"
+    except GitHubError as exc:
+        return {"published": False, "partial": True, "branch": branch, "commit": new_commit or parent, "validation": validation, "validated_on": validated_on,
+                "reason": f"the branch {branch} has the change but the pull request could not be created or updated ({exc}). Run publish again to finish; "
+                          "the commit will not be repeated"}
+    asks = _reviewer_requests(client, pr)
+    if asks:
         try:
-            asks = {k: v for k, v in (("reviewers", reviewers), ("team_reviewers", teams)) if v}
-            if asks:
-                client.call("POST", f"/repos/{repo}/pulls/{pr['number']}/requested_reviewers", asks)
-        except GitHubError:
-            pass  # CODEOWNERS or the reviewers can still be asked on GitHub; the PR exists
-    link_fix_record(ref, pr["html_url"])
-    return {"published": True, "changed": True, "action": action, "branch": branch, "pr": pr["html_url"], "number": pr["number"], "validation": validation}
+            client.call("POST", f"/repos/{repo}/pulls/{pr['number']}/requested_reviewers", asks)
+        except (GitHubError, Denied) as exc:
+            warnings.append(f"reviewers were not requested ({exc}); ask them on GitHub, or run publish again")
+    linked = link_fix_record(ref, pr["html_url"])
+    if not linked:
+        warnings.append("no fix record for this finding yet: record `decide status=fixing` with this PR so the desk tracks it")
+    return {"published": True, "changed": new_commit is not None, "action": action, "branch": branch, "pr": pr["html_url"], "number": pr["number"],
+            "commit": new_commit, "validation": validation, "validated_on": validated_on, "warnings": warnings, "linked_fix_record": linked}
 
 
 def link_fix_record(ref: str, url: str) -> bool:
@@ -944,3 +1197,227 @@ def pr_status(number: int | None = None, branch: str = "", client: Client | None
     return {"found": True, "number": pr["number"], "url": pr["html_url"], "state": "merged" if pr.get("merged") else pr["state"], "base": pr["base"]["ref"],
             "head": pr["head"]["ref"], "human_reviews": latest, "checks": {r["name"]: r.get("conclusion") or r.get("status") for r in runs},
             "status": combined.get("state"), "mergeable_state": pr.get("mergeable_state")}
+
+
+# ------------------------------------------------------------------ guided setup (one command, safe to repeat)
+
+def prerequisites(transport=None) -> list[dict]:
+    """What must be true before setup can work. Each row: {check, ok, blocking, detail, remedy}."""
+    rows = []
+
+    def add(check, ok, detail="", remedy="", blocking=True):
+        rows.append({"check": check, "ok": bool(ok), "blocking": blocking, "detail": detail, "remedy": remedy})
+    isolated_home = bool(os.environ.get("RGGITHUB_HOME"))
+    add("key folder isolated from the agent", isolated_home, os.environ.get("RGGITHUB_HOME", "RGGITHUB_HOME is not set"),
+        "" if isolated_home else ISOLATION_REMEDY)
+    if isolated_home:
+        try:
+            probe = home(create=True) / ".write-test"
+            probe.write_text("x")
+            probe.unlink()
+            add("key folder writable", True, str(home()))
+        except OSError as exc:
+            add("key folder writable", False, str(exc), "Run this command as the desk user: `sudo rgdesk github setup`.")
+    add("openssl available (signs the App token)", shutil.which("openssl"), shutil.which("openssl") or "not found", "Install openssl.")
+    pong = _validators.ping()
+    add("validation service reachable (keeps untrusted tools away from the key)", bool(pong.get("ok")),
+        "running" if pong.get("ok") else (pong.get("error") or "RGVALIDATE_SOCKET is not set"),
+        "Check `systemctl status remedigenius-validate` on the instance.")
+    try:
+        status_, _, _ = (transport or _http)("GET", f"{API}/", {"Accept": "application/vnd.github+json", "User-Agent": "RemediGenius-CE"}, None)
+        reached = status_ == 200
+        add("github.com API reachable", reached, f"HTTP {status_}", "The instance needs outbound HTTPS to api.github.com.")
+    except (urllib.error.URLError, OSError, GitHubError) as exc:
+        add("github.com API reachable", False, type(exc).__name__, "The instance needs outbound HTTPS to api.github.com.")
+    tools = _validators.available()
+    for name, present in tools.items():
+        add(f"{name} installed", present, "yes" if present else "missing: changes touching those files are reported as NOT validated", blocking=False)
+    return rows
+
+
+def installation_repos(app: dict, transport=None, sign=None) -> list[str]:
+    """The repositories the operator selected when installing the App (operator-only: this is how setup offers a choice)."""
+    client = Client({}, app, transport=transport, sign=sign)
+    installation = app.get("installation_id")
+    if not installation:
+        raise GitHubError("the App is not installed yet")
+    jwt = client.jwt()
+    status_, _, raw = client._raw("POST", f"/app/installations/{int(installation)}/access_tokens", jwt, {"permissions": READ_PERMISSIONS})
+    if status_ != 201:
+        raise GitHubError(_redact(_explain(status_, raw, "minting an installation token"), [jwt]), status_)
+    token = json.loads(raw)["token"]
+    status_, _, raw = client._raw("GET", "/installation/repositories", token, None)
+    if status_ != 200:
+        raise GitHubError(_redact(_explain(status_, raw, "listing the selected repositories"), [token]), status_)
+    return sorted(r["full_name"] for r in json.loads(raw).get("repositories", []))
+
+
+def candidate_bases(repo: str, app: dict, transport=None, sign=None) -> tuple[list[str], str]:
+    """(branches that could be the development base, the default branch)."""
+    probe = {"repo": repo, "base": "setup-probe", "branch_prefix": DEFAULT_PREFIX, "reviewers": []}
+    client = Client(probe, app, transport=transport, sign=sign)
+    default = (client.call("GET", f"/repos/{repo}", write_enabled=False) or {}).get("default_branch", "")
+    branches = client.call("GET", f"/repos/{repo}/branches?per_page=100", write_enabled=False) or []
+    names = [b["name"] for b in branches if not is_protected(b["name"], default)]
+    return sorted(names), default
+
+
+def admin_branch_command(repo: str, base: str, default: str) -> str:
+    return f"gh api repos/{repo}/git/refs -f ref=refs/heads/{base} -f sha=$(gh api repos/{repo}/commits/{default} --jq .sha)"
+
+
+def setup(repo: str = "", base: str = "", reviewers: list[str] | None = None, org: str = "", port: int = 8743, ask=input, say=print,
+          transport=None, sign=None, timeout: int = 900, interactive: bool = True, open_browser: bool = False, reconnect: bool = False) -> dict:
+    """One guided command: prerequisites, connect (or resume), repository, development branch, reviewers, protection check, next step.
+
+    Every step looks at the real state first, so an interrupted setup is simply run again. Finishing is NOT the same as working:
+    the last lines say whether PRs can be created and, if not, exactly what is missing."""
+    say("RemediGenius GitHub setup\n")
+    say("1. Prerequisites")
+    rows = prerequisites(transport)
+    for row in rows:
+        say(f"   [{'ok' if row['ok'] else ('MISSING' if row['blocking'] else 'warn')}] {row['check']}" + (f": {row['detail']}" if row["detail"] else ""))
+    blockers = [r for r in rows if r["blocking"] and not r["ok"]]
+    if blockers:
+        for row in blockers:
+            say(f"   -> {row['remedy']}")
+        return {"state": "Blocked", "step": "prerequisites", "next": blockers[0]["remedy"]}
+
+    say("\n2. GitHub App")
+    app = load_app()
+    if reconnect or not (app.get("app_id") and key_path().is_file()) or not app.get("installation_id"):
+        result = connect(owner=org, port=port, open_browser=open_browser, timeout=timeout, transport=transport, say=lambda m: say("   " + m),
+                         reconnect=reconnect)
+        say(f"   Connected: App {result['app']} installed on {result['account']}.")
+        app = load_app()
+    else:
+        verdict = probe_connection(app, transport)
+        if verdict["state"] != "healthy":
+            say(f"   The saved connection is not healthy ({verdict['state']}); reconnecting.")
+            result = connect(owner=org, port=port, open_browser=open_browser, timeout=timeout, transport=transport, say=lambda m: say("   " + m),
+                             reconnect=False)
+            app = load_app()
+        else:
+            say(f"   Already connected: {app.get('slug')}[bot] (installed on {app.get('installed_on') or 'your selection'}).")
+
+    say("\n3. Repository (only the repositories you selected when installing the App are offered)")
+    repos = installation_repos(app, transport, sign)
+    if not repos:
+        raise GitHubError("the App is installed on no repository. Choose repositories at https://github.com/settings/installations and run setup again.")
+    if not repo:
+        if len(repos) == 1:
+            repo = repos[0]
+            say(f"   Only one repository is selected: {repo}")
+        elif interactive:
+            for i, name in enumerate(repos, 1):
+                say(f"   {i}. {name}")
+            repo = repos[int(ask("   Number of the repository to use: ").strip()) - 1]
+        else:
+            raise Denied("several repositories are selected; pass --repo OWNER/NAME")
+    if repo.lower() not in {r.lower() for r in repos}:
+        raise Denied(f"{repo} is not selected in the App installation (selected: {', '.join(repos)})")
+
+    say("\n4. Development branch (pull requests go here; never your production branch)")
+    branches, default = candidate_bases(repo, app, transport, sign)
+    if not base:
+        suggestion = "dev" if "dev" in branches else (branches[0] if len(branches) == 1 else "")
+        if not branches:
+            command = admin_branch_command(repo, "dev", default or "main")
+            say(f"   {repo} has no development branch yet (only {default or 'the default branch'}). A repository administrator must create one, with their own login:\n"
+                f"       {command}\n   Then run setup again.")
+            return {"state": "Blocked", "step": "development branch", "next": command}
+        if interactive:
+            say("   Branches: " + ", ".join(branches))
+            base = ask(f"   Development branch [{suggestion}]: ").strip() or suggestion
+        else:
+            base = suggestion
+        if not base:
+            raise Denied("several branches could be the base; pass --base NAME")
+    if base not in branches:
+        if is_protected(base, default):
+            raise Denied(f"{base!r} is a production or default branch and can never be the development base")
+        raise Denied(f"branch {base!r} does not exist in {repo}; existing candidates: {', '.join(branches) or 'none'}")
+
+    say("\n5. Human reviewers (people or an org/team who approve and merge; bots are refused)")
+    names = list(reviewers or [])
+    if not names and interactive:
+        names = [n.strip() for n in ask("   GitHub login(s) or org/team, comma separated: ").split(",") if n.strip()]
+    if not names:
+        raise Denied("at least one human reviewer is required; pass --reviewer LOGIN")
+
+    say("\n6. Checking the repository and its protections")
+    final = configure(repo, base, DEFAULT_PREFIX, names, transport=transport, sign=sign)
+    for c in (final.get("protection") or {}).get("checks", []):
+        say(f"   [{c['result']}] {c['check']}: {c['detail']}")
+    say(f"\nResult: {final['state']}. Writes enabled: {'yes' if final['writes_enabled'] else 'no'}.")
+    if final.get("repository"):
+        say(f"   Repository knowledge: {final['repository'].get('knowledge') or final['repository'].get('note')}")
+    if final["writes_enabled"]:
+        say("   Next: ask the agent for a fix and approve the pull request; run `rgtriage github status` any time. "
+            "Setup finishing is not proof of a working flow: the first PR is the real test.")
+    else:
+        say(f"   Next step: {final['remedy']}")
+    return final
+
+
+# ------------------------------------------------------------------ proof that GitHub itself rejects what the adapter never sends
+
+def probe_protections(client: Client, confirm_repo: str, say=print) -> dict:
+    """Operator-only evidence run. Using the App's own write token and deliberately bypassing the adapter's gate, attempt the operations the
+    adapter never sends, and record whether GitHub rejects them. Every attempt is expected to be REJECTED; any acceptance is a FAIL
+    (and, because the attempts are real, may have changed the repository: run this only against a disposable repository).
+
+    It refuses to run unless the operator names the repository, the configured policy matches it, and the protection check passes."""
+    policy = client.policy
+    if not policy.get("repo") or confirm_repo.lower() != policy["repo"].lower():
+        raise Denied("pass --confirm-disposable OWNER/REPO with the configured repository to confirm this is a disposable test repository")
+    check = protection_check(client)
+    if not check["ok"]:
+        raise Denied("the protection check does not pass, so these probes would not be safe to run; fix the protections and run `verify` first")
+    repo, base, default = policy["repo"], policy["base"], check["default_branch"]
+    token = client.token("write")
+    results: list[dict] = []
+
+    def attempt(name: str, method: str, path: str, body: dict | None, expect: str):
+        status_, _, raw = client._raw(method, path, token, body)
+        try:
+            message = json.loads(raw).get("message", "") if raw else ""
+        except ValueError:
+            message = ""
+        rejected = status_ in (403, 405, 409, 422) or (method == "DELETE" and status_ not in (204,))
+        results.append({"attempt": name, "expected": expect, "http": status_, "github_said": _redact(message, [token])[:140], "result": "REJECTED (pass)" if rejected else "ACCEPTED (FAIL)"})
+        say(f"   [{'pass' if rejected else 'FAIL'}] {name}: HTTP {status_} {message[:100]}")
+
+    heads = {b: (client.call("GET", f"/repos/{repo}/branches/{urllib.parse.quote(b, safe='')}", write_enabled=False) or {}).get("commit", {}).get("sha")
+             for b in (default, base)}
+    if not all(heads.values()):
+        raise GitHubError("could not read the branch heads")
+    tree = client.call("GET", f"/repos/{repo}/git/commits/{heads[base]}", write_enabled=False)["tree"]["sha"]
+    probe_commit = {}
+    for branch in (default, base):  # a real commit object on top of each branch, created with the allowed object API; moving the branch to it is the attack
+        made = client.call("POST", f"/repos/{repo}/git/commits", {"message": "probe: must never reach this branch", "tree": tree, "parents": [heads[branch]]})
+        probe_commit[branch] = made["sha"]
+    for branch in (default, base):
+        quoted = urllib.parse.quote(branch, safe="/")
+        attempt(f"update {branch} directly (ref update, as `git push HEAD:{branch}` does)", "PATCH", f"/repos/{repo}/git/refs/heads/{quoted}",
+                {"sha": probe_commit[branch], "force": False}, "rejected by the ruleset: a reviewed PR is required")
+        attempt(f"force-push {branch} to another commit", "PATCH", f"/repos/{repo}/git/refs/heads/{quoted}",
+                {"sha": heads[base if branch == default else default], "force": True}, "rejected: non-fast-forward is blocked")
+        attempt(f"delete {branch}", "DELETE", f"/repos/{repo}/git/refs/heads/{quoted}", None, "rejected: deletion is blocked")
+    prs = client.call("GET", f"/repos/{repo}/pulls?state=open&base={urllib.parse.quote(base)}&per_page=20") or []
+    mine = [pr for pr in prs if str((pr.get("head") or {}).get("ref", "")).startswith(policy["branch_prefix"])]
+    if mine:
+        pr = client.call("GET", f"/repos/{repo}/pulls/{mine[0]['number']}") or {}
+        if pr.get("mergeable_state") in ("blocked", "behind", "dirty", "unstable"):
+            attempt(f"merge PR #{pr['number']} with the App token while it is blocked", "PUT", f"/repos/{repo}/pulls/{pr['number']}/merge",
+                    {"merge_method": "squash"}, "rejected: required reviews and checks are not satisfied")
+        else:
+            say(f"   [skipped] merge probe: PR #{pr.get('number')} reports {pr.get('mergeable_state')!r}; it is not blocked, so a merge attempt would not be safe")
+            results.append({"attempt": "merge probe", "expected": "n/a", "http": 0, "github_said": f"skipped: PR is {pr.get('mergeable_state')}", "result": "SKIPPED (not run)"})
+    else:
+        say("   [skipped] merge probe: no open RemediGenius PR to try it on (publish one first)")
+        results.append({"attempt": "merge probe", "expected": "n/a", "http": 0, "github_said": "skipped: no open PR", "result": "SKIPPED (not run)"})
+    failed = [r for r in results if r["result"].startswith("ACCEPTED")]
+    return {"repo": repo, "ok": not failed, "results": results,
+            "note": "FAIL means GitHub accepted an operation that protections should block: restore the repository and fix the rulesets" if failed else
+                    "GitHub rejected every attempted operation (skipped probes were not run and are not counted as passed)"}

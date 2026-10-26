@@ -1,14 +1,16 @@
-"""Connect GitHub to a RemediGenius-CE Spot stack with one command (the browser step needs you).
+"""Set up GitHub for a RemediGenius-CE Spot stack with one command. This is the supported way to start.
 
-    python tools/github_connect_spot.py --stack rgce-release-test
+    python tools/github_connect_spot.py --stack <your stack name>
 
-It forwards the callback port over SSM, then runs `sudo rgdesk github connect --no-browser` on the instance. When it prints the
-address, open http://localhost:8743/ in YOUR browser: click "Create GitHub App" on github.com, then "Install" and select only the
-repository RemediGenius may use. The command finishes by itself when GitHub confirms the installation. Nothing secret passes through
-this script: GitHub returns the App key straight to the desk on the instance.
+It forwards the callback port over SSM and runs the guided `sudo rgdesk github setup` on the instance, which:
+  1. checks prerequisites and says what to fix;
+  2. prints the address to open (http://localhost:8743/): in YOUR browser click "Create GitHub App" on github.com, then "Install" and
+     select only the repository RemediGenius may use (GitHub consent is yours; nothing secret passes through this script);
+  3. lets you pick the repository (only the ones you selected), the development branch and the human reviewers;
+  4. shows which protections are present or missing, and what to do next.
+Run it again any time: it resumes, it never starts over. Afterwards use `sudo rgdesk github status|verify|refresh|disconnect` in an SSM session.
 
-Needs the AWS CLI with the Session Manager plugin and boto3, using your current AWS credentials. Then, on the instance:
-    sudo rgdesk github configure --repo OWNER/REPO --base dev --reviewer YOUR-GITHUB-LOGIN
+Needs the AWS CLI with the Session Manager plugin and boto3, using your current AWS credentials.
 """
 from __future__ import annotations
 
@@ -29,7 +31,7 @@ def forward_command(aws: str, region: str, instance: str, port: int = PORT) -> l
 
 
 def connect_command(aws: str, region: str, instance: str, port: int = PORT, extra: str = "") -> list[str]:
-    remote = f"sudo rgdesk github connect --no-browser --port {port} {extra}".strip()
+    remote = f"sudo rgdesk github setup --no-browser --port {port} {extra}".strip()
     return [aws, "ssm", "start-session", "--region", region, "--target", instance, "--document-name", "AWS-StartInteractiveCommand",
             "--parameters", f'command=["{remote}"]']
 
@@ -49,7 +51,7 @@ def main() -> None:
     ap.add_argument("--instance", help="instance id (default: the stack's running instance)")
     ap.add_argument("--region", default="us-east-1")
     ap.add_argument("--org", help="create the App under this organization you own")
-    ap.add_argument("--reconnect", action="store_true", help="create a new App even if one is already connected")
+    ap.add_argument("--reconnect", action="store_true", help="create a new App even if one is already connected (see docs/GITHUB.md)")
     args = ap.parse_args()
     aws = shutil.which("aws")
     if not aws:

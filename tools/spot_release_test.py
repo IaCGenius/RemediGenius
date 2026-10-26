@@ -89,6 +89,26 @@ s=u.spec_from_file_location('p','/opt/data/profiles/remedigenius/plugins/rg-tria
 print(m.handle({'action':'github','op':'publish','ref':'x','files':['/etc/passwd=main.tf']})[:70])" 2>&1)
   check "agent publish without a connected repository is refused" $(echo "$t" | grep -qE "DENIED|Blocked|not enabled|GitHub is not connected|not a file"; echo $?) "$t"
 else check "rgdesk wrapper installed" 1 "missing"; fi
+if [ -x /usr/local/bin/rgdesk ]; then
+  # --- the untrusted-tools boundary (PR #19 finding 1): validation runs as its own user, away from the key and policy
+  vs=$(systemctl is-active remedigenius-validate); vpid=$(systemctl show -p MainPID --value remedigenius-validate); vuid=$(ps -o uid= -p "$vpid" 2>/dev/null | tr -d ' ')
+  check "validation service runs as its own user (10002)" $([ "$vs" = active ] && [ "$vuid" = 10002 ]; echo $?) "$vs uid=$vuid"
+  printf 'SYNTHETIC-BROKER-KEY' > /data/rggithub/app.pem; printf '{"repo":"x/y"}' > /data/rggithub/policy.json; chown 10000:10000 /data/rggithub/app.pem /data/rggithub/policy.json; chmod 600 /data/rggithub/app.pem /data/rggithub/policy.json
+  r=$(sudo -u '#10002' cat /data/rggithub/app.pem 2>&1 | head -1); check "validation user cannot read the GitHub key" $(echo "$r" | grep -qi "permission denied"; echo $?) "$r"
+  r=$(sudo -u '#10002' sh -c 'echo tamper >> /data/rggithub/policy.json' 2>&1 | head -1); check "validation user cannot modify the GitHub policy" $(echo "$r" | grep -qi "permission denied"; echo $?) "$r $(cat /data/rggithub/policy.json | cut -c1-20)"
+  r=$(sudo -u '#10002' ls /data/rggithub 2>&1 | head -1); check "validation user cannot even list the key folder" $(echo "$r" | grep -qi "permission denied"; echo $?) "$r"
+  c=$(sudo -u '#10002' curl -s -m 5 -o /dev/null -w '%{http_code}' http://169.254.169.254/latest/meta-data/ 2>&1); check "validation user cannot reach the instance metadata service" $([ "$c" = 000 ]; echo $?) "http $c"
+  mkdir -p /data/iac/_rgtest; printf 'locals {\n  a = 1\n}\n' > /data/iac/_rgtest/main.tf; chown -R 10000:10000 /data/iac/_rgtest; printf 'locals {\n  b = 2\n}\n' > /opt/data/proposals/_t.tf; chown 10000:10000 /opt/data/proposals/_t.tf
+  rm -f /data/rgtriage/stolen.pem /data/rgtriage/stolen.tf
+  o1=$(rgdesk validate --module /data/iac/_rgtest --file /data/rggithub/app.pem=/data/rgtriage/stolen.pem 2>&1 | tail -1 | cut -c1-90)
+  o2=$(rgdesk validate --module /data/iac/_rgtest --file /opt/data/proposals/_t.tf=/data/rgtriage/stolen.tf 2>&1 | tail -1 | cut -c1-90)
+  o3=$(rgdesk validate --module /data/rggithub --file /opt/data/proposals/_t.tf=a.tf 2>&1 | tail -1 | cut -c1-90)
+  check "the key cannot be copied out through validate (absolute destination, key as source, key folder as module)" $( (echo "$o1" | grep -q DENIED && echo "$o2" | grep -q "safe relative" && echo "$o3" | grep -q DENIED && [ ! -e /data/rgtriage/stolen.pem ] && [ ! -e /data/rgtriage/stolen.tf ]); echo $?) "$o1 | $o2"
+  o4=$(rgdesk validate --module /data/iac/_rgtest --file /opt/data/proposals/_t.tf=extra.tf 2>&1 | tail -1 | cut -c1-80)
+  check "normal proposal validation works through the validation service" $(echo "$o4" | grep -q "VALID"; echo $?) "$o4"
+  rm -rf /data/iac/_rgtest /opt/data/proposals/_t.tf /data/rggithub/app.pem /data/rggithub/policy.json
+  fw=$(iptables -S OUTPUT | grep -c "uid-owner 10002.*REJECT"); check "firewall blocks the validation user from metadata and private networks" $([ "$fw" -ge 3 ]; echo $?) "$fw rules"
+fi
 ref=$($D list --limit 1 --json 2>/dev/null | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['key'])" 2>/dev/null)
 if [ -n "$ref" ]; then
   out=$(docker exec --user 10000:10000 remedigenius python -c "import importlib.util as u;s=u.spec_from_file_location('p','/opt/data/profiles/remedigenius/plugins/rg-triage/__init__.py');m=u.module_from_spec(s);s.loader.exec_module(m);print(m.handle({'action':'card','ref':'$ref'}))" 2>&1)

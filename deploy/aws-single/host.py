@@ -25,6 +25,9 @@ UID = 10000                               # Hermes container user; also the desk
 HERMES_HOME = Path('/data/hermes')
 WIKI = HERMES_HOME / 'rg-wiki'            # generated, read-only view of the knowledge bundle for the WebUI
 DESK = Path('/data/rgtriage')
+VUID = 10002                              # validation service user: runs Terraform, tflint and cfn-lint; no access to the GitHub key
+VALIDATE_HOME = Path('/var/lib/rgvalidate')
+VALIDATE_SOCKET = Path('/run/rgvalidate/validate.sock')
 GITHUB = Path('/data/rggithub')           # GitHub App key and policy: desk-only, never mounted into the agent container
 IAC = Path('/data/iac')
 RUNDIR = Path('/run/rgtriage')
@@ -65,6 +68,11 @@ def ensure_user():
     if subprocess.run(['getent', 'passwd', str(UID)], capture_output=True).returncode:
         run('useradd', '--system', '--uid', str(UID), '--gid', str(UID), '--no-create-home', '--shell', '/sbin/nologin',
             'remedigenius')
+    # A different user for the code we do not trust (validation): it cannot read what the desk user can (GitHub key and policy).
+    if subprocess.run(['getent', 'group', str(VUID)], capture_output=True).returncode:
+        run('groupadd', '--system', '--gid', str(VUID), 'rgvalidate')
+    if subprocess.run(['getent', 'passwd', str(VUID)], capture_output=True).returncode:
+        run('useradd', '--system', '--uid', str(VUID), '--gid', str(VUID), '--no-create-home', '--shell', '/sbin/nologin', 'rgvalidate')
 
 
 def install_runtime():
@@ -87,7 +95,8 @@ def wrapper_script() -> str:
     """`sudo rgdesk <rgtriage args>`: run the desk CLI as the desk user with the desk environment (operator use over SSM)."""
     return ("#!/bin/sh\n"
             f"exec sudo -u '#{UID}' env PYTHONPATH={CODE.as_posix()} RGTRIAGE_HOME={DESK.as_posix()} RGGITHUB_HOME={GITHUB.as_posix()} "
-            f"RGGITHUB_IAC_DIR={IAC.as_posix()} RGTRIAGE_PROPOSALS=/opt/data/proposals HOME={DESK.as_posix()}/.home "
+            f"RGGITHUB_IAC_DIR={IAC.as_posix()} RGVALIDATE_SOCKET={VALIDATE_SOCKET.as_posix()} RGTRIAGE_PROPOSALS=/opt/data/proposals "
+            f"HOME={DESK.as_posix()}/.home "
             f"{(VENV / 'bin/python').as_posix()} -m rgtriage \"$@\"\n")
 
 
@@ -133,6 +142,10 @@ def restore_state(cfg):
         path.mkdir(parents=True, exist_ok=True)
         os.chown(path, UID, UID)
     GITHUB.chmod(0o700)  # only the desk user; the folder is not mounted into the Hermes container
+    for path in (VALIDATE_HOME, VALIDATE_HOME / 'scratch', VALIDATE_HOME / '.home'):
+        path.mkdir(parents=True, exist_ok=True)
+        os.chown(path, VUID, VUID)
+    VALIDATE_HOME.chmod(0o700)
     for path in (DESK / '.lineage').iterdir():
         os.chown(path, UID, UID)
     # Same path on the host as in the container, so the desk can validate files the agent proposes.
@@ -221,6 +234,19 @@ def network():
                         ('DOCKER-USER', ['-i', 'br-remedigenius', '-j', 'REMEDIGENIUS'])]:
         if subprocess.run(['iptables', '-C', chain, *args], stderr=subprocess.DEVNULL).returncode:
             run('iptables', '-I', chain, '1', *args)
+    # Untrusted validation tools may use the internet (provider downloads) but never the instance metadata service (the instance
+    # role's credentials), the agent's container network or other private addresses.
+    for destination in ('169.254.0.0/16', SUBNET, '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'):
+        args = ['-m', 'owner', '--uid-owner', str(VUID), '-d', destination, '-j', 'REJECT']
+        if subprocess.run(['iptables', '-C', 'OUTPUT', *args], stderr=subprocess.DEVNULL).returncode:
+            run('iptables', '-I', 'OUTPUT', '1', *args)
+    for line in Path('/etc/resolv.conf').read_text().splitlines():  # name resolution is still allowed (inserted before the blocks)
+        fields = line.split()
+        if len(fields) >= 2 and fields[0] == 'nameserver' and ':' not in fields[1]:
+            for protocol in ('udp', 'tcp'):
+                args = ['-m', 'owner', '--uid-owner', str(VUID), '-d', fields[1], '-p', protocol, '--dport', '53', '-j', 'ACCEPT']
+                if subprocess.run(['iptables', '-C', 'OUTPUT', *args], stderr=subprocess.DEVNULL).returncode:
+                    run('iptables', '-I', 'OUTPUT', '1', *args)
 
 
 def seed_model(config_text: str, model_seed) -> str:
@@ -310,7 +336,8 @@ def units(cfg: dict) -> dict:
            f'Environment=REMEDIGENIUS_MODEL_BASE_URL={cfg.get("model_base_url") or ""}\n'
            f'Environment=RGTRIAGE_WIKI_DIR={WIKI.as_posix()}\n'
            f'Environment=RGGITHUB_HOME={GITHUB.as_posix()}\n'
-           f'Environment=RGGITHUB_IAC_DIR={IAC.as_posix()}\n')
+           f'Environment=RGGITHUB_IAC_DIR={IAC.as_posix()}\n'
+           f'Environment=RGVALIDATE_SOCKET={VALIDATE_SOCKET.as_posix()}\n')
     harden = (f'User={UID}\nGroup={UID}\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\n'
               f'ReadWritePaths={DESK.as_posix()} -{WIKI.as_posix()} {GITHUB.as_posix()} {IAC.as_posix()}\n')
     python = (VENV / 'bin/python').as_posix()
@@ -321,7 +348,8 @@ def units(cfg: dict) -> dict:
     return {
         'remedigenius-desk.service': f'''[Unit]
 Description=RemediGenius-CE desk: read-only AWS access, Unix socket API, S3 checkpoints
-After=network-online.target
+After=network-online.target remedigenius-validate.service
+Wants=remedigenius-validate.service
 [Service]
 {env}{harden}RuntimeDirectory=rgtriage
 RuntimeDirectoryPreserve=yes
@@ -329,6 +357,37 @@ RuntimeDirectoryMode=0750
 ExecStart={python} -m rgtriage serve --socket {SOCKET.as_posix()} --durable {store} {homes} --every 120 --spot
 ExecStopPost={python} -m rgtriage durable checkpoint --url {store} {homes}
 TimeoutStopSec=120
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
+''',
+        'remedigenius-validate.service': f'''[Unit]
+Description=RemediGenius-CE validation service: Terraform, tflint and cfn-lint away from every credential
+After=network-online.target
+[Service]
+User={VUID}
+Group={VUID}
+SupplementaryGroups={UID}
+Environment=PYTHONPATH={CODE.as_posix()}
+Environment=HOME={VALIDATE_HOME.as_posix()}/.home
+Environment=TF_PLUGIN_CACHE_DIR={VALIDATE_HOME.as_posix()}/.home/plugins
+Environment=PATH=/usr/local/bin:/usr/bin
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths={VALIDATE_HOME.as_posix()}
+RuntimeDirectory=rgvalidate
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+MemoryMax=3G
+TasksMax=512
+ExecStart={(VENV / 'bin/python').as_posix()} -m rgtriage serve-validate --socket {VALIDATE_SOCKET.as_posix()} --scratch {VALIDATE_HOME.as_posix()}/scratch --workers 2 --group {UID}
 Restart=always
 RestartSec=5
 [Install]
@@ -516,7 +575,14 @@ def main():
     for name, body in units(cfg).items():
         Path('/etc/systemd/system', name).write_text(body)
     run('systemctl', 'daemon-reload')
-    run('systemctl', 'enable', 'remedigenius-desk.service', 'remedigenius-scan.timer', 'remedigenius-hermes.service')
+    run('systemctl', 'enable', 'remedigenius-validate.service', 'remedigenius-desk.service', 'remedigenius-scan.timer', 'remedigenius-hermes.service')
+    run('systemctl', 'restart', 'remedigenius-validate.service')
+    for _ in range(60):
+        if VALIDATE_SOCKET.exists():
+            break
+        time.sleep(1)
+    else:
+        raise RuntimeError('remedigenius-validate did not start; check journalctl -u remedigenius-validate')
     run('systemctl', 'restart', 'remedigenius-desk.service')
     for _ in range(60):
         if SOCKET.exists():

@@ -22,6 +22,19 @@
   mirrors the development branch read-only for `fix` (secrets, state files and `.tfvars` are left out) and writes a
   **Repository** page into the Knowledge tab. Published PRs are linked to the fix record automatically.
 - `rgdesk`: operators run the desk CLI as the desk user over SSM (`sudo rgdesk github status`).
+- **One guided setup command**: `python tools/github_connect_spot.py --stack <name>` runs `sudo rgdesk github setup`: prerequisites,
+  App creation and installation (your two clicks on github.com), repository, development branch and reviewers, and a protection report with
+  the next step. It resumes if interrupted; `connect` self-heals after an uninstall or a deleted App.
+- **Untrusted checking tools run away from the key.** A separate validation service (its own OS user, no access to the GitHub key or
+  policy, blocked from the instance credentials) runs Terraform, tflint and cfn-lint for both `publish` and the agent's `validate`
+  command. `validate` now accepts only proposals from the proposals folder, modules from approved IaC folders, and destinations inside its
+  scratch copy; `fix` is never pointed at the key folder.
+- **Publishing is idempotent and exact**: the existing PR and branch are checked first (a PR retargeted away from the development branch
+  stops the publish before anything changes); the validated tree is exactly the tree that is committed; a retry after a partial failure
+  completes the missing PR without a second commit; the branch and PR belong to the finding, not the title (closed PRs are replaced,
+  merged ones start a `-r2` follow-up); user and team reviewers are separate allowlists.
+- Refreshing the repository knowledge page keeps the owner, notes and review history a person added, and marks the page stale when the
+  repository, branch or kind of IaC changes.
 
 **Changed**
 - Spot installs pinned `tflint` 0.63.1 and `cfn-lint` 1.57.2 for the checks above; the desk service can write `/data/iac`

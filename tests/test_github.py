@@ -36,6 +36,11 @@ class FakeGitHub:
         self.users = users or {"alice": "User", "ci-bot": "Bot"}
         self.fail = {}  # (method, regex) -> status, to simulate outages
         self.installation_repos = [REPO]
+        self.installations = [{"id": 77, "account": {"login": "acme"}}]
+        self.app_gone = False
+        self.rulesets = []
+        self.enforce = True            # rulesets reject direct updates, force pushes, deletions and blocked merges on these branches
+        self.protected = {DEFAULT, BASE}
         blob = self._blob(TF)
         tree = self._tree({"terraform/main.tf": blob})
         c0 = self._commit(tree, [], "acme-dev")
@@ -76,11 +81,18 @@ class FakeGitHub:
         for (m, pattern), status in self.fail.items():
             if m == method and re.search(pattern, path):
                 return self.reply(status, {"message": "simulated failure"})
+        if path in ("", "/") and method == "GET":
+            return self.reply(200, {})
         if parsed.hostname == "codeload.github.com":
             return 200, {}, self.tarball(path.rsplit("/", 1)[-1])
         r = re.fullmatch
+        if path == "/app/installations" and method == "GET":
+            return self.reply(401, {"message": "Bad credentials"}) if self.app_gone else self.reply(200, self.installations)
         if (m := r(r"/app/installations/(\d+)/access_tokens", path)) and method == "POST":
-            return self.reply(201, {"token": "ghs_" + "T" * 36, "expires_at": "2099-01-01T00:00:00Z"})
+            if self.app_gone:
+                return self.reply(401, {"message": "Bad credentials"})
+            admin = "A" if ((body or {}).get("permissions") or {}).get("administration") else "N"  # the token says what it may do
+            return self.reply(201, {"token": "ghs_" + admin + "T" * 35, "expires_at": "2099-01-01T00:00:00Z"})
         if path == "/installation/repositories":
             return self.reply(200, {"repositories": [{"full_name": n} for n in self.installation_repos]})
         if (m := r(r"/users/([^/]+)", path)):
@@ -90,13 +102,17 @@ class FakeGitHub:
         rest = m.group(1) or ""
         if rest == "":
             return self.reply(200, {"default_branch": DEFAULT})
+        if rest == "/branches" and method == "GET":
+            return self.reply(200, [{"name": n} for n in self.refs])
         if (m := r(r"/branches/([^/]+)", rest)) and method == "GET":
             sha = self.refs.get(m.group(1))
             return self.reply(200, {"commit": {"sha": sha}}) if sha else self.reply(404, {"message": "Branch not found"})
         if (m := r(r"/rules/branches/([^/]+)", rest)):
             return self.reply(200, self.rules.get(m.group(1), []))
         if r(r"/branches/[^/]+/protection", rest) or rest == "/rulesets":
-            return self.reply(404, {"message": "Not Found"}) if "protection" in rest else self.reply(200, [])
+            if not headers.get("Authorization", "").startswith("Bearer ghs_A"):  # needs Administration: read, like GitHub
+                return self.reply(403, {"message": "Resource not accessible by integration"})
+            return self.reply(404, {"message": "Branch not protected"}) if "protection" in rest else self.reply(200, self.rulesets)
         if (m := r(r"/tarball/([0-9a-f]+)", rest)):
             return 302, {"Location": f"https://codeload.github.com/acme/infra/legacy.tar.gz/{m.group(1)}"}, b""
         if (m := r(r"/git/ref/heads/(.+)", rest)):
@@ -120,6 +136,16 @@ class FakeGitHub:
                 return self.reply(422, {"message": "Reference already exists"})
             self.refs[name] = body["sha"]
             return self.reply(201, {"ref": body["ref"]})
+        if (m := r(r"/git/refs/heads/(.+)", rest)) and method in ("PATCH", "DELETE") and self.enforce and m.group(1) in self.protected:
+            return self.reply(403, {"message": "Cannot update this protected ref."})
+        if (m := r(r"/git/refs/heads/(.+)", rest)) and method == "DELETE":
+            self.refs.pop(m.group(1), None)
+            return 204, {}, b""
+        if (m := r(r"/pulls/(\d+)/merge", rest)) and method == "PUT":
+            if self.enforce:
+                return self.reply(405, {"message": "At least 1 approving review is required by reviewers with write access."})
+            self.pulls[int(m.group(1)) - 1].update(state="closed", merged_at="2026-10-26T00:00:00Z")
+            return self.reply(200, {"merged": True})
         if (m := r(r"/git/refs/heads/(.+)", rest)) and method == "PATCH":
             if body["sha"] and self.commits[body["sha"]]["parents"] != [self.refs[m.group(1)]] and not body.get("force"):
                 return self.reply(422, {"message": "Update is not a fast forward"})
@@ -128,12 +154,15 @@ class FakeGitHub:
         if rest == "/pulls" and method == "POST":
             number = len(self.pulls) + 1
             pr = {"number": number, "html_url": f"https://github.com/{REPO}/pull/{number}", "title": body["title"], "body": body["body"], "state": "open",
-                  "head": {"ref": body["head"], "sha": self.refs[body["head"]]}, "base": {"ref": body["base"]}, "merged": False, "mergeable_state": "blocked"}
+                  "head": {"ref": body["head"], "sha": self.refs[body["head"]], "repo": {"full_name": REPO}},
+                  "base": {"ref": body["base"], "repo": {"full_name": REPO}}, "merged": False, "merged_at": None, "mergeable_state": "blocked",
+                  "requested_reviewers": [], "requested_teams": []}
             self.pulls.append(pr)
             return self.reply(201, pr)
         if rest == "/pulls" and method == "GET":
             head = query.get("head", [""])[0].split(":", 1)[-1]
-            return self.reply(200, [p for p in self.pulls if p["head"]["ref"] == head and p["state"] == "open"])
+            wanted = query.get("state", ["open"])[0]
+            return self.reply(200, [p for p in self.pulls if (not head or p["head"]["ref"] == head) and (wanted == "all" or p["state"] == wanted)])
         if (m := r(r"/pulls/(\d+)", rest)):
             pr = self.pulls[int(m.group(1)) - 1]
             if method == "PATCH":
@@ -141,6 +170,9 @@ class FakeGitHub:
             pr["head"]["sha"] = self.refs[pr["head"]["ref"]]
             return self.reply(200, pr)
         if (m := r(r"/pulls/(\d+)/requested_reviewers", rest)):
+            pr = self.pulls[int(m.group(1)) - 1]
+            pr["requested_reviewers"] += [{"login": u} for u in body.get("reviewers", [])]
+            pr["requested_teams"] += [{"slug": t} for t in body.get("team_reviewers", [])]
             return self.reply(201, {})
         if (m := r(r"/pulls/(\d+)/reviews", rest)):
             return self.reply(200, [{"user": {"login": "alice", "type": "User"}, "state": "APPROVED"},
@@ -381,7 +413,7 @@ def test_tokens_are_never_stored(connected):
 
 def test_errors_never_contain_the_token_or_key(gh):
     client = make_client(gh)
-    secret = "ghs_" + "T" * 36
+    secret = "ghs_N" + "T" * 35  # what the fake mints for a read token
     gh.fail[("GET", r"/repos/acme/infra$")] = 403
     with pytest.raises(github.GitHubError) as caught:
         client.call("GET", f"/repos/{REPO}")
@@ -575,7 +607,7 @@ def publish(gh, files=None, ref="ab12cd34ef56", **kw):
 def test_publish_opens_one_pr_from_a_feature_branch_into_dev_with_the_review_asked(connected):
     result = publish(connected)
     assert result["published"] and result["action"] == "opened" and result["pr"].endswith("/pull/1")
-    assert result["branch"].startswith("feature/remedigenius/s3-public-policy-")
+    assert result["branch"] == "feature/remedigenius/fix-ab12cd34ef56"  # from the finding ref only
     pr = connected.pulls[0]
     assert pr["base"]["ref"] == BASE and pr["head"]["ref"] == result["branch"]
     assert connected.refs[DEFAULT] == connected.refs[BASE] and BASE in connected.refs
@@ -958,7 +990,8 @@ def test_titles_commit_messages_and_bodies_are_cleaned_before_publishing(connect
 
 # ---------------------------------------------------------------- reconnecting
 
-def test_connect_refuses_to_replace_a_healthy_connection_unless_asked(connected):
+def test_connect_refuses_to_replace_a_healthy_connection_unless_asked(connected, monkeypatch):
+    monkeypatch.setattr(github, "Client", SignedClient)
     with pytest.raises(github.Denied, match="already connected"):
         github.connect(open_browser=False, timeout=1, transport=connected, say=lambda m: None)
     assert github.load_app()["app_id"] == APP["app_id"]  # nothing was replaced
@@ -983,9 +1016,9 @@ def test_a_rejected_app_key_stops_the_install_wait_with_a_clear_error(gh, home, 
     monkeypatch.setenv("RGGITHUB_HOME", str(home / "github"))
     monkeypatch.setattr(github, "Client", SignedClient)
     github._write_private(github.key_path(), "-----BEGIN PRIVATE KEY-----\n")
-    github._write_private(github.home() / "app.json", json.dumps({"app_id": 9, "slug": "x", "owner": "acme"}))
     with pytest.raises(github.GitHubError, match="reconnect"):
-        github.connect(open_browser=False, timeout=5, transport=lambda *a: (401, {}, b'{"message":"Bad credentials"}'), say=lambda m: None)
+        github.wait_for_installation({"app_id": 9, "slug": "x", "owner": "acme"}, 5, transport=lambda *a: (401, {}, b'{"message":"Bad credentials"}'),
+                                     say=lambda m: None)
 
 
 def test_tools_installed_next_to_the_interpreter_are_found_without_being_on_path(tmp_path, monkeypatch):
@@ -1075,4 +1108,590 @@ def test_the_connect_helper_forwards_the_callback_port_and_runs_connect_as_the_d
     forward = helper.forward_command("aws", "us-east-1", "i-123")
     assert "AWS-StartPortForwardingSession" in forward and "portNumber=8743,localPortNumber=8743" in forward[-1]
     connect = helper.connect_command("aws", "us-east-1", "i-123", extra="--org acme")
-    assert "AWS-StartInteractiveCommand" in connect and "sudo rgdesk github connect --no-browser --port 8743 --org acme" in connect[-1]
+    assert "AWS-StartInteractiveCommand" in connect and "sudo rgdesk github setup --no-browser --port 8743 --org acme" in connect[-1]
+
+
+# ================================================================ PR #19 review findings
+
+REF = "ab12cd34ef56"
+TF_A = b'resource "aws_s3_bucket" "alpha" {\n  bucket = "alpha"\n}\n'
+TF_B = b'resource "aws_s3_bucket" "beta" {\n  bucket = "beta"\n}\n'
+
+
+def writes(gh):
+    """Requests that changed something on GitHub (token minting is not a change to the repository)."""
+    return [x for x in gh.requests if x[0] != "GET" and "/access_tokens" not in x[2]]
+
+
+def passing(tree, paths):
+    return [{"check": "x", "result": "pass", "detail": ""}]
+
+
+def publish_ref(gh, files, title="t", **kw):
+    return github.publish(REF, files, title=title, client=new_client(gh), validators=kw.pop("validators", passing), **kw)
+
+
+# ---------------------------------------------------------------- finding 2: the verification token can read protection
+
+def test_only_the_verification_token_carries_administration_read_and_never_write():
+    assert github.VERIFY_PERMISSIONS["administration"] == "read"
+    for kind, perms in github.TOKEN_PERMISSIONS.items():
+        assert perms.get("administration") != "write" and "workflows" not in perms and "administration" not in perms or kind == "verify"
+    assert github.token_kind("GET", "/repos/acme/infra/branches/dev/protection") == "verify"
+    assert github.token_kind("GET", "/repos/acme/infra/rulesets") == "verify"
+    assert github.token_kind("GET", "/repos/acme/infra/pulls") == "read" and github.token_kind("POST", "/repos/acme/infra/git/blobs") == "write"
+
+
+def test_a_token_without_administration_read_cannot_verify_and_the_failure_says_why(connected, monkeypatch):
+    monkeypatch.setattr(github, "token_kind", lambda method, path: "read" if method.upper() == "GET" else "write")  # the behaviour that was reviewed
+    st = github.status(new_client(connected), verify=True)
+    assert not st["writes_enabled"] and st["protection"]["permission_problem"] is True
+    assert st["remedy"].startswith("Permissions, not protection") and "Administration: read" in st["remedy"]
+
+
+def test_the_corrected_token_verifies_protection_for_real_and_enables_writes(connected):
+    st = github.status(new_client(connected), verify=True)
+    assert st["writes_enabled"] and st["protection"]["permission_problem"] is False
+    verify_mints = [x[3] for x in connected.sent("POST", r"/access_tokens") if "administration" in x[3]["permissions"]]
+    assert verify_mints and all(m["permissions"]["administration"] == "read" for m in verify_mints)
+    assert not [x for x in connected.sent("POST", r"/access_tokens") if x[3]["permissions"].get("administration") == "write"]
+
+
+def test_missing_protection_is_reported_as_missing_not_as_a_permission_problem(connected):
+    connected.rules = {}
+    st = github.status(new_client(connected), verify=True)
+    assert not st["writes_enabled"] and st["protection"]["permission_problem"] is False
+    assert "Permissions, not protection" not in st["remedy"] and "requires a reviewed PR" in st["remedy"]
+
+
+# ---------------------------------------------------------------- finding 3: an existing PR's base is checked before anything changes
+
+def test_a_pr_retargeted_to_main_stops_the_next_publish_before_any_remote_change(connected):
+    first = publish_ref(connected, {"terraform/main.tf": TF + b"# one\n"})
+    connected.pulls[0]["base"]["ref"] = "main"
+    refs, commits, count = dict(connected.refs), len(connected.commits), len(writes(connected))
+    with pytest.raises(github.Denied, match="targets 'main' instead of the development branch 'dev'"):
+        publish_ref(connected, {"terraform/main.tf": TF + b"# two\n"})
+    assert len(writes(connected)) == count and connected.refs == refs and len(connected.commits) == commits
+    assert connected.pulls[0]["base"]["ref"] == "main" and first["branch"] in connected.refs
+
+
+def test_a_pr_from_another_repository_or_head_is_never_updated(connected):
+    publish_ref(connected, {"terraform/main.tf": TF + b"# one\n"})
+    connected.pulls[0]["head"]["repo"]["full_name"] = "evil/fork"
+    count = len(writes(connected))
+    with pytest.raises(github.Denied, match="head is in evil/fork"):
+        publish_ref(connected, {"terraform/main.tf": TF + b"# two\n"})
+    assert len(writes(connected)) == count
+
+
+def test_two_open_prs_for_one_task_are_refused(connected):
+    publish_ref(connected, {"terraform/main.tf": TF + b"# one\n"})
+    connected.pulls.append({**connected.pulls[0], "number": 2, "html_url": connected.pulls[0]["html_url"].replace("/1", "/2")})
+    with pytest.raises(github.Denied, match="more than one open PR"):
+        publish_ref(connected, {"terraform/main.tf": TF + b"# two\n"})
+
+
+def test_a_matching_pr_into_dev_remains_updatable(connected):
+    first = publish_ref(connected, {"terraform/main.tf": TF + b"# one\n"})
+    second = publish_ref(connected, {"terraform/other.tf": TF_A})
+    assert second["action"] == "updated" and second["pr"] == first["pr"] and len(connected.pulls) == 1
+
+
+# ---------------------------------------------------------------- finding 4: validate the exact tree that is committed
+
+def test_two_successive_publishes_are_validated_together_on_the_branch_head(connected):
+    seen = []
+
+    def capture(tree, paths):
+        seen.append(sorted(p.relative_to(tree).as_posix() for p in tree.rglob("*") if p.is_file()))
+        return passing(tree, paths)
+    one = publish_ref(connected, {"terraform/a.tf": TF_A}, validators=capture)
+    two = publish_ref(connected, {"terraform/b.tf": TF_B}, validators=capture)
+    assert seen[0] == ["terraform/main.tf"]                      # the first change is checked against the development branch
+    assert "terraform/a.tf" in seen[1]                           # the second against the branch head, which already has the first change
+    assert two["validated_on"].startswith(one["commit"][:10]) and "branch head" in two["validated_on"]
+    assert set(connected.trees[connected.commits[connected.refs[two["branch"]]]["tree"]]) >= {"terraform/a.tf", "terraform/b.tf"}
+
+
+def test_a_combination_that_conflicts_is_rejected_although_each_file_passes_alone(connected, tmp_path):
+    import re as _re
+
+    def no_duplicate_resources(tree, paths):
+        texts = [f.read_text() for f in tree.rglob("*.tf") if f.relative_to(tree).as_posix() not in paths] + [d.decode() for d in paths.values()]
+        names = [m for t in texts for m in _re.findall(r'resource "(\w+)" "(\w+)"', t)]
+        dupes = {n for n in names if names.count(n) > 1}
+        return [{"check": "duplicate resources", "result": "fail" if dupes else "pass", "detail": str(sorted(dupes))}]
+    dup = b'resource "aws_s3_bucket" "alpha" {\n  bucket = "other"\n}\n'
+    dev_only = tmp_path / "dev"                                   # the development branch on its own: the second file passes there
+    (dev_only / "terraform").mkdir(parents=True)
+    (dev_only / "terraform" / "main.tf").write_bytes(TF)
+    assert no_duplicate_resources(dev_only, {"terraform/b.tf": dup})[0]["result"] == "pass"
+    one = publish_ref(connected, {"terraform/a.tf": TF_A}, validators=no_duplicate_resources)
+    refs, count = dict(connected.refs), len(writes(connected))
+    two = publish_ref(connected, {"terraform/b.tf": dup}, validators=no_duplicate_resources)
+    assert two["published"] is False and "validation failed" in two["reason"] and "alpha" in two["validation"][0]["detail"]
+    assert connected.refs == refs and len(writes(connected)) == count and one["published"]
+
+
+# ---------------------------------------------------------------- finding 5: a retry finishes what a partial failure left
+
+def test_retry_after_the_pr_step_failed_completes_with_one_pr_and_no_second_commit(connected):
+    store.save_decision(REF, "fixing", "fix it", fix={"state": "decided", "owner": "team-a", "pr": None})
+    connected.fail[("POST", r"/pulls$")] = 500
+    first = publish_ref(connected, {"terraform/main.tf": TF + b"# fix\n"})
+    assert first["published"] is False and first["partial"] is True and first["branch"] in connected.refs and not connected.pulls
+    assert "run publish again" in first["reason"].lower() and store.load_decisions()[REF]["fix"]["pr"] is None   # nothing is claimed that is not true
+    commits = len(connected.commits)
+    connected.fail.clear()
+    second = publish_ref(connected, {"terraform/main.tf": TF + b"# fix\n"})
+    assert second["published"] and second["action"] == "opened" and second["changed"] is False
+    assert len(connected.pulls) == 1 and len(connected.commits) == commits                 # one PR, no duplicate commit
+    assert store.load_decisions()[REF]["fix"]["pr"] == second["pr"] and second["linked_fix_record"]
+    third = publish_ref(connected, {"terraform/main.tf": TF + b"# fix\n"})
+    assert third["action"] == "unchanged" and len(connected.pulls) == 1 and len(connected.commits) == commits
+
+
+def test_a_proposal_that_changes_nothing_is_not_published(connected):
+    result = publish_ref(connected, {"terraform/main.tf": TF})
+    assert result["published"] is False and "changes nothing" in result["reason"] and not connected.pulls
+
+
+# ---------------------------------------------------------------- finding 6: one stable identity per remediation task
+
+def test_changing_the_title_or_topic_never_creates_another_branch_or_pr(connected):
+    files = {"terraform/main.tf": TF + b"# fix\n"}
+    a = github.publish(REF, files, title="Block public policy", client=new_client(connected), validators=passing)
+    b = github.publish(REF, files, title="A completely different title", client=new_client(connected), validators=passing)
+    c = github.publish(REF, files, title="Third wording", topic="something else entirely", client=new_client(connected), validators=passing)
+    assert a["branch"] == b["branch"] == c["branch"] == "feature/remedigenius/fix-" + REF
+    assert len(connected.pulls) == 1 and connected.pulls[0]["title"] == "Third wording"   # the title is only presentation, and it follows the latest
+    other = github.publish("ffffffffffff", files, title="Block public policy", client=new_client(connected), validators=passing)
+    assert other["branch"] != a["branch"]                                               # a different finding is a different task
+
+
+def test_a_closed_pr_is_replaced_and_a_merged_pr_starts_a_numbered_follow_up(connected):
+    a = publish_ref(connected, {"terraform/main.tf": TF + b"# one\n"})
+    connected.pulls[0]["state"] = "closed"                                              # closed without merging: replaced by a new PR
+    b = publish_ref(connected, {"terraform/main.tf": TF + b"# two\n"})
+    assert b["branch"] == a["branch"] and b["number"] == 2 and b["action"] == "opened"
+    connected.pulls[1]["state"], connected.pulls[1]["merged_at"] = "closed", "2026-10-26T00:00:00Z"    # merged: the next fix is a follow-up
+    c = publish_ref(connected, {"terraform/main.tf": TF + b"# three\n"})
+    assert c["branch"] == a["branch"] + "-r2" and c["number"] == 3 and c["action"] == "opened"
+    assert connected.commits[connected.refs[c["branch"]]]["parents"] == [connected.refs[BASE]]   # built from the development branch, not the merged one
+
+
+# ---------------------------------------------------------------- finding 7: user and team reviewers
+
+def connect_with(gh, reviewers):
+    github._write_private(github.key_path(), "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n")
+    github._write_private(github.home() / "app.json", json.dumps(APP))
+    return github.configure(REPO, BASE, reviewers=reviewers, transport=gh, sign=fake_sign)
+
+
+def test_a_user_and_an_org_team_both_work_through_the_whole_publish(gh, home):  # noqa: F811
+    assert connect_with(gh, ["alice", "acme/security"])["writes_enabled"]
+    result = publish_ref(gh, {"terraform/main.tf": TF + b"# fix\n"})
+    assert result["published"] and not result["warnings"][:1] == ["x"]
+    ask = gh.sent("POST", r"/requested_reviewers")[0][3]
+    assert ask == {"reviewers": ["alice"], "team_reviewers": ["security"]}              # the team is sent as a slug, the user as a login
+    assert gh.pulls[0]["requested_teams"] == [{"slug": "security"}] and gh.pulls[0]["requested_reviewers"] == [{"login": "alice"}]
+
+
+@pytest.mark.parametrize("body", [{"reviewers": ["mallory"]}, {"team_reviewers": ["other"]}, {"team_reviewers": ["acme/security"]},
+                                  {"team_reviewers": ["alice"]}, {"reviewers": ["security"]}, {"reviewers": ["alice"], "assignees": ["x"]}, {}])
+def test_unauthorized_reviewer_requests_are_refused(gh, home, body):  # noqa: F811
+    connect_with(gh, ["alice", "acme/security"])
+    with pytest.raises(github.Denied):
+        new_client(gh).gate.check("POST", f"/repos/{REPO}/pulls/1/requested_reviewers", body)
+
+
+def test_a_team_from_another_organization_is_not_a_valid_reviewer(gh, home):  # noqa: F811
+    with pytest.raises(github.Denied, match="must belong to the repository's organization"):
+        connect_with(gh, ["other-org/team"])
+    assert not (github.home() / "policy.json").exists()
+
+
+def test_reviewer_request_failure_keeps_the_pr_and_its_link_and_the_retry_asks_again(connected):
+    store.save_decision(REF, "fixing", "fix it", fix={"state": "decided", "owner": "team-a", "pr": None})
+    connected.fail[("POST", r"requested_reviewers")] = 422
+    first = publish_ref(connected, {"terraform/main.tf": TF + b"# fix\n"})
+    assert first["published"] and first["pr"] and any("reviewers were not requested" in w for w in first["warnings"])   # the PR exists and says so
+    assert store.load_decisions()[REF]["fix"]["pr"] == first["pr"]                                                      # and its link is kept
+    connected.fail.clear()
+    second = publish_ref(connected, {"terraform/main.tf": TF + b"# fix\n"})
+    assert second["action"] == "unchanged" and connected.pulls[0]["requested_reviewers"] == [{"login": "alice"}] and len(connected.pulls) == 1
+    publish_ref(connected, {"terraform/main.tf": TF + b"# fix\n"})
+    assert len(connected.sent("POST", r"/requested_reviewers")) == 2                    # not asked a third time: already requested
+
+
+# ---------------------------------------------------------------- finding 8: refresh keeps what a person wrote and reviewed
+
+def _extra_commit(gh, files):
+    entries = dict(gh.trees[gh.commits[gh.refs[BASE]]["tree"]])
+    entries.update({path: gh._blob(data) for path, data in files.items()})
+    gh.refs[BASE] = gh._commit(gh._tree(entries), [gh.refs[BASE]], "acme-dev")
+    return gh.refs[BASE]
+
+
+def _human_edit(path, owner="team-platform", notes="Owned by platform. On-call: #infra"):
+    from rgtriage import knowledge
+    bundle = knowledge.bundle()
+    page = bundle.read(path)
+    meta = dict(page.meta, owner=owner)
+    body = page.body.replace(github.NOTES_STUB, f"## Notes\n\n{notes}")
+    knowledge.save(meta, body, "human:alice", path=path, replace=True, verify=True)
+    return bundle.read(path)
+
+
+def test_refresh_keeps_owner_notes_and_review_and_updates_only_the_generated_facts(connected):
+    from rgtriage import knowledge, okf
+    path = "repositories/acme-infra.md"
+    github.refresh(new_client(connected))
+    reviewed = _human_edit(path)
+    history = okf.verifications(reviewed.meta)
+    assert history and history[-1]["by"] == "human:alice"
+    commit = _extra_commit(connected, {"README.md": b"hi"})                              # a new commit, same kind of IaC
+    out = github.refresh(new_client(connected))
+    page = knowledge.bundle().read(path)
+    assert page.meta["owner"] == "team-platform" and "Owned by platform. On-call: #infra" in page.body       # human content survives
+    assert okf.verifications(page.meta) == history                                                              # and so does the review history
+    assert commit[:10] in page.body and page.meta["remedigenius"]["commit"] == commit                           # the facts are current
+    assert not okf.is_stale(page.meta) and "(updated)" in out["knowledge"]                                       # a new commit alone needs no new review
+    assert page.body.count(github.GEN_START) == 1 and page.body.count(github.GEN_END) == 1
+
+
+def test_refresh_marks_the_page_for_re_review_when_the_repository_facts_change(connected):
+    from rgtriage import knowledge, okf
+    path = "repositories/acme-infra.md"
+    github.refresh(new_client(connected))
+    reviewed = _human_edit(path)
+    history = okf.verifications(reviewed.meta)
+    _seed_secrets(connected)                                                              # Terraform, CloudFormation and CDK now present
+    out = github.refresh(new_client(connected))
+    page = knowledge.bundle().read(path)
+    assert okf.is_stale(page.meta) and "iac changed" in page.meta["remedigenius"]["review_note"] and "needs re-confirmation" in out["knowledge"]
+    assert page.meta["owner"] == "team-platform" and okf.verifications(page.meta) == history     # still the person's page, still their history
+
+
+def test_refresh_never_removes_text_from_a_page_without_markers(connected):
+    from rgtriage import knowledge
+    path = "repositories/acme-infra.md"
+    knowledge.save({"type": "Repository", "title": "acme/infra", "description": "by hand", "owner": "me"}, "My own words about this repository.\n",
+                   "human:alice", path=path, replace=True)
+    github.refresh(new_client(connected))
+    page = knowledge.bundle().read(path)
+    assert "My own words about this repository." in page.body and page.meta["owner"] == "me" and github.GEN_START in page.body
+
+
+# ---------------------------------------------------------------- finding 9: a failed App callback ends promptly with the real reason
+
+def _free_port():
+    with __import__("socket").socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def drive_connect(monkeypatch, transport, **kw):
+    """Run `connect` and play the browser: load the start page, then GitHub's redirect with a code."""
+    import threading
+    import urllib.request
+    monkeypatch.setattr(github, "Client", SignedClient)
+    port, outcome, said = _free_port(), {}, []
+
+    def run():
+        try:
+            outcome["result"] = github.connect(owner="acme", port=port, open_browser=False, timeout=15, transport=transport, say=said.append, **kw)
+        except Exception as exc:
+            outcome["error"] = exc
+    started = time.time()
+    thread = threading.Thread(target=run)
+    thread.start()
+    page, deadline = "", time.time() + 10
+    while not page and thread.is_alive() and time.time() < deadline:
+        try:
+            page = urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2).read().decode()
+        except OSError:
+            time.sleep(0.1)
+    if page:
+        state = re.search(r"\?state=([A-Za-z0-9_-]+)", page).group(1)
+        try:
+            outcome["browser"] = urllib.request.urlopen(f"http://127.0.0.1:{port}/created?code=abcdefgh1234&state={state}", timeout=5).read().decode()
+        except urllib.error.HTTPError as exc:
+            outcome["browser"] = exc.read().decode()
+    thread.join(30)
+    outcome["seconds"], outcome["said"] = time.time() - started, said
+    return outcome
+
+
+PEM = "-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----\n"
+
+
+def good_transport(app_id=9, slug_="remedigenius-ce-new", installed=True, installations=None):
+    def transport(method, url, headers, body):
+        path = urllib.parse.urlparse(url).path
+        if path.endswith("/conversions"):
+            return 201, {}, json.dumps({"id": app_id, "slug": slug_, "pem": PEM, "owner": {"login": "acme"}}).encode()
+        if path == "/app/installations":
+            return 200, {}, json.dumps(installations if installations is not None else ([{"id": 55, "account": {"login": "acme"}}] if installed else [])).encode()
+        return 404, {}, b"{}"
+    return transport
+
+
+def test_a_network_error_during_the_callback_ends_promptly_with_the_real_reason(gh, home, monkeypatch):  # noqa: F811
+    monkeypatch.setenv("RGGITHUB_HOME", str(home / "github"))
+
+    def down(method, url, headers, body):
+        raise urllib.error.URLError("connection refused")
+    out = drive_connect(monkeypatch, down)
+    assert out["seconds"] < 8 and "could not reach GitHub" in str(out["error"]) and "URLError" in str(out["error"])
+    assert "timed out" not in str(out["error"]) and "PRIVATE KEY" not in out["browser"]
+    assert not (github.home() / "app.pem").exists() and github.load_app() == {}                   # nothing half-connected is left behind
+
+
+@pytest.mark.parametrize("answer,reason", [((422, {}, b'{"message":"Validation Failed"}'), "GitHub"),
+                                           ((201, {}, b"this is not json"), "not what a created App looks like"),
+                                           ((201, {}, json.dumps({"id": 1, "slug": "x y", "pem": PEM}).encode()), "not what a created App looks like"),
+                                           ((201, {}, json.dumps({"id": 1, "slug": "ok", "pem": "no key"}).encode()), "not what a created App looks like")])
+def test_bad_answers_during_the_callback_end_promptly_and_save_nothing(gh, home, monkeypatch, answer, reason):  # noqa: F811
+    monkeypatch.setenv("RGGITHUB_HOME", str(home / "github"))
+    out = drive_connect(monkeypatch, lambda *a: answer)
+    assert out["seconds"] < 8 and reason in str(out["error"]) and "PRIVATE KEY" not in str(out["error"])
+    assert github.load_app() == {} and not (github.home() / "app.pem").exists()
+
+
+def test_a_failure_saving_the_key_cleans_up_names_the_app_and_leaves_setup_recoverable(gh, home, monkeypatch):  # noqa: F811
+    monkeypatch.setenv("RGGITHUB_HOME", str(home / "github"))
+    real, calls = github._write_private, {"n": 0}
+
+    def flaky(path, text):
+        calls["n"] += 1
+        if calls["n"] == 2:                                                               # the key is written, the App record is not
+            raise OSError(13, "Permission denied")
+        return real(path, text)
+    monkeypatch.setattr(github, "_write_private", flaky)
+    out = drive_connect(monkeypatch, good_transport())
+    assert out["seconds"] < 8 and "could not be saved" in str(out["error"]) and "https://github.com/settings/apps/remedigenius-ce-new/advanced" in str(out["error"])
+    assert "BEGIN" not in str(out["error"]) + out["browser"] and github.load_app() == {} and not github.key_path().exists()
+    monkeypatch.setattr(github, "_write_private", real)
+    retry = drive_connect(monkeypatch, good_transport(app_id=10, slug_="remedigenius-ce-second"))   # setup is not blocked by the failed attempt
+    assert retry["result"]["connected"] and github.load_app()["app_id"] == 10
+
+
+# ---------------------------------------------------------------- finding 10: the recovery the status shows really works
+
+def test_after_revocation_the_displayed_recovery_leads_to_a_working_reconnection(connected, monkeypatch):
+    connected.app_gone = True                                                             # the App was deleted on GitHub
+    st = github.status(new_client(connected))
+    assert st["state"] == "Blocked" and "rgtriage github connect" in st["remedy"]
+    assert "rgdesk github connect" in (Path(__file__).resolve().parents[1] / "docs" / "GITHUB.md").read_text(encoding="utf-8")   # the docs say the same
+    old_key = github.key_path().read_text()
+    attempts = {"n": 0}
+    good = good_transport(app_id=11, slug_="remedigenius-ce-replacement")
+
+    def transport(method, url, headers, body):                                           # the old App is gone; the replacement works
+        path = urllib.parse.urlparse(url).path
+        if path == "/app/installations":
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                return 401, {}, b'{"message":"Bad credentials"}'
+        return good(method, url, headers, body)
+    out = drive_connect(monkeypatch, transport)                                           # the plain command, no --reconnect
+    assert out["result"] == {"connected": True, "app": "remedigenius-ce-replacement", "installation": 55, "account": "acme"}
+    assert any("no longer exists" in m and "replacement" in m for m in out["said"]) and github.load_app()["app_id"] == 11
+    assert github.key_path().read_text() == PEM and github.key_path().read_text() != old_key
+    assert github.load_policy()["writes_enabled"] is False and "protection" not in github.load_policy()   # the new App is verified before it writes
+
+
+def test_when_only_the_installation_was_removed_connect_resumes_without_a_new_app(connected, monkeypatch):
+    first_id, key = github.load_app()["app_id"], github.key_path().read_text()
+    connected.installations = []                                                          # uninstalled, the App itself still exists
+    seen = {"polls": 0}
+
+    def transport(method, url, headers, body):
+        assert not urllib.parse.urlparse(url).path.endswith("/conversions")             # no replacement App is created
+        seen["polls"] += 1
+        return connected(method, url, headers, body) if seen["polls"] < 2 else (200, {}, json.dumps([{"id": 99, "account": {"login": "acme"}}]).encode())
+    monkeypatch.setattr(github, "Client", SignedClient)
+    out = github.connect(open_browser=False, timeout=10, transport=transport, say=lambda m: None)
+    assert out["installation"] == 99 and github.load_app()["app_id"] == first_id and github.key_path().read_text() == key
+    assert github.load_app()["installation_id"] == 99                                     # the stale id was replaced
+
+
+def test_connect_reports_an_unreachable_github_instead_of_replacing_a_working_app(connected, monkeypatch):
+    monkeypatch.setattr(github, "Client", SignedClient)
+    with pytest.raises(github.GitHubError, match="cannot check the existing connection"):
+        github.connect(open_browser=False, timeout=2, transport=lambda *a: (503, {}, b'{"message":"unavailable"}'), say=lambda m: None)
+    assert github.load_app()["app_id"] == APP["app_id"]
+
+
+# ================================================================ the guided setup command
+
+@pytest.fixture
+def setup_env(gh, home, monkeypatch):  # noqa: F811
+    """Prerequisites satisfied (openssl, validation service) and `connect` replaced by a stand-in that 'creates' and installs the App."""
+    import shutil as _shutil
+    real_which = _shutil.which
+    monkeypatch.setattr(_shutil, "which", lambda name, *a, **k: "/usr/bin/" + name if name in ("openssl", "terraform", "tflint", "cfn-lint") else real_which(name, *a, **k))
+    monkeypatch.setattr(github._validators, "ping", lambda: {"ok": True})
+    gh.installation_repos = [REPO, "acme/other"]
+    calls = {"connect": 0}
+
+    def fake_connect(**kwargs):
+        calls["connect"] += 1
+        github._write_private(github.key_path(), "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n")
+        github._write_private(github.home() / "app.json", json.dumps({**APP, "installed_on": "acme"}))
+        return {"connected": True, "app": APP["slug"], "installation": APP["installation_id"], "account": "acme"}
+    monkeypatch.setattr(github, "connect", fake_connect)
+    monkeypatch.setattr(github, "probe_connection", lambda app, transport=None: {"state": "healthy", "detail": ""})
+    return {"gh": gh, "calls": calls, "lines": []}
+
+
+def run_setup(env, **kw):
+    kw.setdefault("interactive", False)
+    return github.setup(transport=env["gh"], sign=fake_sign, say=env["lines"].append, **kw)
+
+
+def test_setup_walks_the_whole_flow_and_reports_the_result(setup_env):
+    final = run_setup(setup_env, repo=REPO, base=BASE, reviewers=["alice"])
+    text = "\n".join(setup_env["lines"])
+    assert final["writes_enabled"] and final["state"] == "Ready to create development PRs"
+    for step in ("1. Prerequisites", "2. GitHub App", "3. Repository", "4. Development branch", "5. Human reviewers", "6. Checking"):
+        assert step in text
+    assert "[pass] development base requires a reviewed PR" in text and "Result: Ready to create development PRs. Writes enabled: yes." in text
+    assert "not proof of a working flow" in text                                      # finishing is not presented as verified
+    assert setup_env["calls"]["connect"] == 1 and "Repository knowledge: repositories/acme-infra.md" in text
+
+
+def test_setup_asks_the_operator_when_there_is_a_choice(setup_env):
+    answers = iter(["1", "", "alice, acme/security"])                                 # repository number, default branch, reviewers
+    final = run_setup(setup_env, interactive=True, ask=lambda prompt: next(answers))
+    assert final["writes_enabled"] and final["reviewers"] == ["alice", "acme/security"] and final["repo"] == REPO and final["base"] == BASE
+    assert "2. acme/other" in "\n".join(setup_env["lines"])                           # only the selected repositories are offered
+
+
+def test_setup_is_safe_to_run_again_and_does_not_reconnect(setup_env):
+    run_setup(setup_env, repo=REPO, base=BASE, reviewers=["alice"])
+    setup_env["lines"].clear()
+    again = run_setup(setup_env, repo=REPO, base=BASE, reviewers=["alice"])
+    assert again["writes_enabled"] and setup_env["calls"]["connect"] == 1 and "Already connected" in "\n".join(setup_env["lines"])
+
+
+def test_an_interrupted_setup_resumes_where_it_stopped(setup_env, monkeypatch):
+    real = github.connect
+    monkeypatch.setattr(github, "connect", lambda **kw: (_ for _ in ()).throw(github.GitHubError("timed out waiting for the App creation; run connect again")))
+    with pytest.raises(github.GitHubError, match="timed out"):
+        run_setup(setup_env, repo=REPO, base=BASE, reviewers=["alice"])
+    assert github.load_app() == {} and not (github.home() / "policy.json").exists()    # nothing half-saved
+    monkeypatch.setattr(github, "connect", real)
+    assert run_setup(setup_env, repo=REPO, base=BASE, reviewers=["alice"])["writes_enabled"]
+
+
+def test_setup_stops_at_the_first_missing_prerequisite_with_its_remedy(setup_env, monkeypatch):
+    monkeypatch.setattr(github._validators, "ping", lambda: {"error": "the validation service is unavailable (FileNotFoundError)"})
+    final = run_setup(setup_env, repo=REPO, base=BASE, reviewers=["alice"])
+    text = "\n".join(setup_env["lines"])
+    assert final["state"] == "Blocked" and final["step"] == "prerequisites" and "[MISSING] validation service reachable" in text
+    assert "systemctl status remedigenius-validate" in text and setup_env["calls"]["connect"] == 0
+    monkeypatch.delenv("RGGITHUB_HOME")
+    final = run_setup(setup_env)
+    assert final["step"] == "prerequisites" and "agent cannot read" in final["next"]
+
+
+def test_setup_reports_an_unreachable_github(setup_env):
+    def down(*a):
+        raise urllib.error.URLError("no route")
+    rows = github.prerequisites(down)
+    assert [r for r in rows if r["check"] == "github.com API reachable"][0]["ok"] is False
+
+
+def test_a_missing_optional_tool_is_a_warning_not_a_blocker(setup_env, monkeypatch):
+    monkeypatch.setattr(github._validators, "available", lambda *a: {"terraform": True, "tflint": False, "cfn-lint": False})
+    final = run_setup(setup_env, repo=REPO, base=BASE, reviewers=["alice"])
+    assert final["writes_enabled"] and "[warn] cfn-lint installed" in "\n".join(setup_env["lines"])
+
+
+def test_with_no_development_branch_setup_prints_the_exact_admin_command(setup_env):
+    del setup_env["gh"].refs[BASE]
+    final = run_setup(setup_env, repo=REPO, reviewers=["alice"])
+    text = "\n".join(setup_env["lines"])
+    assert final["state"] == "Blocked" and final["step"] == "development branch"
+    assert f"gh api repos/{REPO}/git/refs -f ref=refs/heads/dev" in final["next"] and "administrator" in text and not (github.home() / "policy.json").exists()
+
+
+def test_missing_protection_is_shown_and_writes_stay_off(setup_env):
+    setup_env["gh"].rules = {}
+    final = run_setup(setup_env, repo=REPO, base=BASE, reviewers=["alice"])
+    text = "\n".join(setup_env["lines"])
+    assert not final["writes_enabled"] and "[fail] development base requires a reviewed PR" in text
+    assert "Writes enabled: no." in text and "Next step: Fix on GitHub" in text and "deploy/github" in text
+    assert final["state"].startswith("Connected")
+
+
+def test_setup_refuses_a_production_base_an_unselected_repository_and_bot_reviewers(setup_env):
+    with pytest.raises(github.Denied, match="production or default branch"):
+        run_setup(setup_env, repo=REPO, base="main", reviewers=["alice"])
+    with pytest.raises(github.Denied, match="not selected in the App installation"):
+        run_setup(setup_env, repo="evil/repo", base=BASE, reviewers=["alice"])
+    with pytest.raises(github.Denied, match="humans"):
+        run_setup(setup_env, repo=REPO, base=BASE, reviewers=["ci-bot"])
+    with pytest.raises(github.Denied, match="at least one human reviewer"):
+        run_setup(setup_env, repo=REPO, base=BASE, reviewers=[])
+    assert not (github.home() / "policy.json").exists()                              # a refused setup leaves no policy behind
+
+
+def test_several_choices_without_flags_never_guess(setup_env):
+    with pytest.raises(github.Denied, match="several repositories are selected"):
+        run_setup(setup_env, reviewers=["alice"])
+
+
+def test_setup_is_operator_only_never_reachable_by_the_agent():
+    assert "setup" not in server.GITHUB_OPS and "setup" not in __import__("importlib").import_module("rgtriage.server").GITHUB_OPS
+    assert server.execute(["github", "setup"])["rc"] == 2
+
+
+# ================================================================ proof that GitHub rejects what the adapter never sends
+
+def test_the_probe_attempts_the_forbidden_operations_and_passes_when_github_rejects_all(connected):
+    publish_ref(connected, {"terraform/main.tf": TF + b"# fix\n"})                        # an open, blocked PR to try the merge on
+    lines = []
+    out = github.probe_protections(new_client(connected), REPO, say=lines.append)
+    assert out["ok"] and len(out["results"]) == 7 and all(r["result"] == "REJECTED (pass)" for r in out["results"])
+    names = " | ".join(r["attempt"] for r in out["results"])
+    for expected in ("update main directly", "force-push main", "delete main", "update dev directly", "force-push dev", "delete dev", "merge PR #1"):
+        assert expected in names
+    assert connected.refs[DEFAULT] and connected.refs[BASE] and connected.pulls[0]["state"] == "open"      # nothing actually changed
+    sent = [x for x in connected.requests if x[0] in ("PATCH", "DELETE", "PUT") and "/git/refs/heads/" in x[2] or x[0] == "PUT"]
+    assert any(x[0] == "DELETE" for x in sent) and any(x[3] and x[3].get("force") for x in sent if x[3])   # it really tried, with the write token
+
+
+def test_the_probe_fails_loudly_when_github_would_accept(connected):
+    publish_ref(connected, {"terraform/main.tf": TF + b"# fix\n"})
+    connected.enforce = False
+    out = github.probe_protections(new_client(connected), REPO, say=lambda m: None)
+    assert out["ok"] is False and "ACCEPTED (FAIL)" in {r["result"] for r in out["results"]} and out["note"].startswith("FAIL")
+
+
+def test_the_merge_probe_is_skipped_not_passed_when_there_is_no_blocked_pr(connected):
+    out = github.probe_protections(new_client(connected), REPO, say=lambda m: None)
+    skipped = [r for r in out["results"] if r["result"].startswith("SKIPPED")]
+    assert out["ok"] and len(skipped) == 1 and "not run" in skipped[0]["result"] and len(out["results"]) == 7
+    publish_ref(connected, {"terraform/main.tf": TF + b"# fix\n"})
+    connected.pulls[0]["mergeable_state"] = "clean"                                              # a merge here would really merge: never attempted
+    out = github.probe_protections(new_client(connected), REPO, say=lambda m: None)
+    assert [r for r in out["results"] if r["attempt"] == "merge probe"][0]["result"].startswith("SKIPPED") and connected.pulls[0]["state"] == "open"
+
+
+def test_the_probe_refuses_without_the_repository_confirmation_or_with_failing_protection(connected):
+    with pytest.raises(github.Denied, match="--confirm-disposable"):
+        github.probe_protections(new_client(connected), "", say=lambda m: None)
+    with pytest.raises(github.Denied, match="--confirm-disposable"):
+        github.probe_protections(new_client(connected), "acme/other", say=lambda m: None)
+    connected.rules = {}
+    with pytest.raises(github.Denied, match="protection check does not pass"):
+        github.probe_protections(new_client(connected), REPO, say=lambda m: None)
+    assert not [x for x in connected.requests if x[0] in ("PATCH", "DELETE", "PUT")]               # refused before any attempt
+
+
+def test_the_probe_is_operator_only():
+    assert "probe" not in server.GITHUB_OPS and server.execute(["github", "probe", "--confirm-disposable", "a/b"])["rc"] == 2

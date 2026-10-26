@@ -122,3 +122,37 @@ def write_example(path: Path, *, name: str, region: str, account_id: str, profil
     text = EXAMPLE.format(name=name, region=region, account_name=name, account_id=account_id,
                           profile=profile or "default")
     path.write_text(text, encoding="utf-8")
+
+
+def proposals_dir() -> Path:
+    """Where the agent saves proposals (the same path on the host and inside the agent container)."""
+    for candidate in (os.environ.get("RGTRIAGE_PROPOSALS"), "/opt/data/proposals", str(home() / "proposals")):
+        if candidate and Path(candidate).is_dir():
+            return Path(candidate)
+    return home() / "proposals"
+
+
+def iac_roots(profile: dict | None = None) -> list[Path]:
+    """The only folders the agent may point validation at: the profile's iac_paths, the GitHub mirror, and RGTRIAGE_IAC_ROOTS."""
+    if profile is None:
+        try:
+            profile = load()
+        except (FileNotFoundError, SystemExit):  # no profile yet: only the explicit environment roots apply
+            profile = {}
+    raw = [*profile.get("iac_paths", []), os.environ.get("RGGITHUB_IAC_DIR", ""), *os.environ.get("RGTRIAGE_IAC_ROOTS", "").split(os.pathsep)]
+    roots = []
+    for item in raw:
+        if item:
+            try:
+                roots.append(Path(item).expanduser().resolve())
+            except OSError:
+                continue
+    return roots
+
+
+def inside(path: Path, roots: list[Path]) -> bool:
+    try:
+        resolved = Path(path).expanduser().resolve()
+    except OSError:
+        return False
+    return any(resolved == r or r in resolved.parents for r in roots)

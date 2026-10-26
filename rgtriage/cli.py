@@ -327,6 +327,7 @@ def cmd_fix(args):
     scan = _latest_or_exit()
     f = _ref_or_exit(scan, args.ref)
     paths = args.iac or config.load().get("iac_paths", [])
+    paths = [str(p) for p in paths if not iac.is_credential_path(p)]  # the agent names these folders; never the GitHub key folder
     _out(f"# Fix context for {f['key']}: {f['title']}")
     _out(f"{f['priority']} · {f['product']} {f['severity']} · control/type {f.get('control_id') or f.get('type')} · "
          f"resource {f['resource'].get('type')} `{f['resource'].get('id')}` · account {f['account']} / {f['region']}")
@@ -566,50 +567,38 @@ def cmd_aws(args):
 
 
 def cmd_validate(args):
-    """Overlay proposed files on a copy of a Terraform module and run init/validate/fmt. Never plans or applies."""
-    import shutil
-    import subprocess
-    import tempfile
-    from pathlib import Path
+    """Overlay proposed files on a copy of a Terraform module and run init/validate/fmt. Never plans or applies.
 
-    terraform = shutil.which("terraform")
-    if not terraform:
-        sys.exit("terraform is not on PATH; cannot validate. Ask the operator to run `terraform validate`.")
+    The agent chooses the arguments, so they are treated as untrusted: proposed files must be regular files in the proposals folder, the
+    module must be inside an approved IaC folder, every destination must stay inside the scratch copy, and the Terraform run happens in
+    the validation service (its own OS user, no access to the GitHub key or instance credentials) when one is configured."""
+    from . import validators
+
     module = Path(args.module).expanduser()
     if not module.is_dir():
         sys.exit(f"module folder not found: {module}")
-    with tempfile.TemporaryDirectory(prefix="rgtriage-validate-") as tmp:
-        work = Path(tmp) / "module"
-        shutil.copytree(module, work, ignore=shutil.ignore_patterns(".terraform", "*.tfstate*", ".git", "*.tfvars", "*.tfvars.json"))
+    roots = config.iac_roots()
+    if not config.inside(module, roots):
+        sys.exit("DENIED: the module must be inside an approved IaC folder (the profile's iac_paths or the GitHub mirror); "
+                 f"approved: {', '.join(str(r) for r in roots) or 'none configured'}")
+    try:
+        files = validators.snapshot_dir(module.resolve())
+        proposals = config.proposals_dir().resolve()
         for spec in args.file:
             source, _, name = spec.partition("=")
             source_path = Path(source).expanduser()
-            if not source_path.is_file():
+            if source_path.is_symlink() or not source_path.is_file():
                 sys.exit(f"proposed file not found: {source_path}")
-            shutil.copy2(source_path, work / (name or source_path.name))
-        env = {k: v for k, v in __import__("os").environ.items() if not k.startswith("AWS_")}
-        env["TF_IN_AUTOMATION"] = "1"
-        if env.get("TF_PLUGIN_CACHE_DIR"):  # reuse downloaded providers across validations
-            Path(env["TF_PLUGIN_CACHE_DIR"]).mkdir(parents=True, exist_ok=True)
-        steps = [("init", [terraform, "init", "-backend=false", "-input=false", "-no-color"]),
-                 ("validate", [terraform, "validate", "-no-color"]),
-                 ("fmt", [terraform, "fmt", "-check", "-diff", "-no-color"])]
-        ok = True
-        for label, cmd in steps:
-            proc = subprocess.run(cmd, cwd=work, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
-            text = (proc.stdout + proc.stderr).strip()
-            if label == "init" and proc.returncode == 0:
-                _out("init: ok (no backend, providers downloaded)")
-                continue
-            status = "ok" if proc.returncode == 0 else ("formatting differences" if label == "fmt" else "FAILED")
-            ok = ok and (proc.returncode == 0 or label == "fmt")
-            _out(f"{label}: {status}")
-            if text and (proc.returncode != 0 or label == "validate"):
-                _out(text[-3000:])
-            if label == "init" and proc.returncode != 0:
-                break
-    _out("Result: " + ("VALID — syntax and provider schema check passed (this is not a plan; review `terraform plan` before applying)."
-                       if ok else "NOT VALID — fix the errors above and validate again."))
+            if proposals not in source_path.resolve().parents:
+                sys.exit(f"DENIED: proposed files must be in the proposals folder ({proposals}), not {source_path}")
+            if source_path.stat().st_size > validators.MAX_MODULE_FILE_BYTES:
+                sys.exit(f"proposed file is too large: {source_path}")
+            files[validators.safe_relative(name or source_path.name)] = source_path.read_bytes()
+    except ValueError as exc:
+        sys.exit(f"DENIED: {exc}")
+    ok, lines = validators.check_module(files)
+    for line in lines:
+        _out(line)
 
 
 def cmd_github(args):
@@ -627,6 +616,15 @@ def cmd_github(args):
         elif args.op in ("status", "verify"):
             _github_status_out(github.status(verify=args.op == "verify"), args.json)
             _out("Validation tools: " + ", ".join(f"{k} {'yes' if v else 'MISSING'}" for k, v in validators.available().items()))
+        elif args.op == "setup":
+            github.setup(repo=args.repo or "", base=args.base or "", reviewers=args.reviewer or [], org=args.org or "", port=args.port,
+                         interactive=not args.yes and sys.stdin.isatty(), open_browser=not args.no_browser, reconnect=args.reconnect)
+        elif args.op == "probe":
+            _out("Attempting operations the adapter never sends, with the App's own token, to see whether GitHub rejects them:")
+            out = github.probe_protections(github.Client(), args.confirm_disposable or "", say=_out)
+            _out(("PASS: " if out["ok"] else "FAIL: ") + out["note"])
+            if not out["ok"]:
+                sys.exit(1)
         elif args.op == "refresh":
             result = github.refresh()
             _out(f"Repository {result['repo']} refreshed from {result['branch']} @ {result['commit'][:10]}: {result['files']} files mirrored read-only, "
@@ -681,6 +679,13 @@ def _github_pr_out(info: dict) -> None:
     _out(f"PR #{info['number']} {info['state']} {info['url']} ({info['head']} -> {info['base']})")
     _out("  Human reviews: " + (", ".join(f"{u}: {s}" for u, s in info["human_reviews"].items()) or "none yet"))
     _out("  Checks: " + (", ".join(f"{n}: {c}" for n, c in info["checks"].items()) or "none reported") + f" (combined status: {info.get('status')})")
+
+
+def cmd_serve_validate(args):
+    from . import validators
+    if not hasattr(validators, "serve") or not hasattr(validators, "Server"):
+        sys.exit("serve-validate needs Unix sockets (it runs on the Spot host)")
+    validators.serve(args.socket, scratch=args.scratch, workers=args.workers, group=args.group)
 
 
 def cmd_serve(args):
@@ -1064,10 +1069,12 @@ def main(argv=None):
     p.add_argument("--file", action="append", required=True, help="proposed file, optionally =target-name (repeatable)")
     p.set_defaults(func=cmd_validate)
     p = sub.add_parser("github", help="GitHub App connection and development PRs (connect, configure, disconnect: operator only)")
-    p.add_argument("op", choices=["status", "verify", "refresh", "connect", "configure", "disconnect", "publish", "pr-status"])
+    p.add_argument("op", choices=["status", "verify", "refresh", "setup", "probe", "connect", "configure", "disconnect", "publish", "pr-status"])
     p.add_argument("--org", help="connect: create the App under this organization instead of your account")
     p.add_argument("--port", type=int, default=8743, help="connect: local port for GitHub's redirect")
     p.add_argument("--no-browser", action="store_true")
+    p.add_argument("--confirm-disposable", metavar="OWNER/REPO", help="probe: name the DISPOSABLE test repository to run real forbidden-operation attempts against")
+    p.add_argument("--yes", action="store_true", help="setup: never prompt; use the flags (and the only choice when there is one)")
     p.add_argument("--reconnect", action="store_true", help="connect: create a new App even if one is connected")
     p.add_argument("--repo"); p.add_argument("--base"); p.add_argument("--prefix"); p.add_argument("--reviewer", action="append")
     p.add_argument("--keep-installation", action="store_true", help="disconnect: only delete local credentials, leave the installation")
@@ -1083,6 +1090,12 @@ def main(argv=None):
     p.add_argument("--spot", action="store_true", help="watch for EC2 Spot interruption notices")
     p.add_argument("--scan-every-hours", type=float, default=0, help="run scheduled scans (0 = off)")
     p.set_defaults(func=cmd_serve)
+    p = sub.add_parser("serve-validate", help="validation service on a Unix socket: runs Terraform, tflint and cfn-lint away from any credential")
+    p.add_argument("--socket", required=True)
+    p.add_argument("--scratch", help="folder for throwaway working copies")
+    p.add_argument("--workers", type=int, default=2)
+    p.add_argument("--group", type=int, help="group id that may connect to the socket")
+    p.set_defaults(func=cmd_serve_validate)
     p = sub.add_parser("durable", help="checkpoint or restore state homes (s3://bucket/prefix or a folder)")
     p.add_argument("action", choices=["checkpoint", "restore"])
     p.add_argument("--url", required=True)
