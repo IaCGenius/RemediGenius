@@ -188,3 +188,15 @@ def test_a_dispatcher_setting_that_never_sticks_fails_the_boot(host, monkeypatch
     monkeypatch.setattr(host.time, "sleep", lambda s: None)
     with pytest.raises(RuntimeError, match="Kanban dispatcher"):
         host.ensure_kanban_off()
+
+
+def test_the_pinned_host_packages_resolve_together(host):
+    """A conflicting pin only shows up on a fresh Spot boot (it did once: cfn-lint needs a newer PyYAML), so ask pip now."""
+    import subprocess
+    import sys
+    proc = subprocess.run([sys.executable, "-m", "pip", "install", "--dry-run", "--quiet", "--disable-pip-version-check", *host.PACKAGES],
+                          capture_output=True, text=True, timeout=300)
+    text = proc.stdout + proc.stderr
+    assert "ResolutionImpossible" not in text and "conflicting dependencies" not in text, text[-600:]
+    if proc.returncode != 0:
+        pytest.skip(f"pip could not reach the package index: {text[-200:]}")

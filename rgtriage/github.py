@@ -169,13 +169,23 @@ class Gate:
         self.reviewers = {r.lower() for r in policy.get("reviewers") or []}
 
     def _branch_ok(self, ref: str) -> bool:
-        return ref.startswith(self.prefix) and len(ref) > len(self.prefix) and ".." not in ref and not ref.endswith((".lock", "/", "."))
+        """A full branch name inside the feature prefix, spelled with safe characters only (no encodings, spaces, dot segments or .lock)."""
+        if not ref.startswith(self.prefix) or len(ref) <= len(self.prefix) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", ref):
+            return False
+        segments = ref.split("/")
+        return all(seg and not seg.startswith(".") and not seg.endswith(".lock") for seg in segments) and ".." not in ref and not ref.endswith(".")
 
     def check(self, method: str, path: str, body: dict | None = None, write_enabled: bool = True) -> None:
         method = method.upper()
         if "?" in path:
             path = path.split("?", 1)[0]
+        raw = path
         path = urllib.parse.unquote(path)
+        # The decoded text is what is checked and the original is what is sent, so they must mean the same thing: no double
+        # encoding, no control characters, spaces or backslashes, no empty or dot segments.
+        if ("%" in path or re.search(r"[\x00-\x20\x7f\\]", path) or "//" in path or not path.startswith("/")
+                or any(seg in (".", "..") for seg in path.split("/")) or any(seg in (".", "..") for seg in raw.split("/"))):
+            raise Denied("the request path is not in canonical form")
         if method not in ("GET", "POST", "PATCH"):
             raise Denied(f"{method} is never allowed (no deletes, no PUT: merges and protection changes are not available)")
         match = re.fullmatch(rf"/repos/({OWNER})/({REPO})(/.*)?", path)
@@ -572,9 +582,17 @@ def manifest(name: str, redirect_url: str, homepage: str) -> dict:
             "default_events": [], "description": "RemediGenius-CE: proposes IaC fixes as pull requests into a development branch. Never merges or approves."}
 
 
-def connect(owner: str = "", port: int = 8743, open_browser: bool = True, timeout: int = 900, transport=None, say=print) -> dict:
+def connect(owner: str = "", port: int = 8743, open_browser: bool = True, timeout: int = 900, transport=None, say=print,
+            reconnect: bool = False) -> dict:
     """Create the App through GitHub's manifest flow and wait for the installation. Runs on the host; the browser reaches
     http://localhost:<port> directly (or through an SSM port forward on Spot)."""
+    existing = load_app()
+    if existing.get("app_id") and key_path().is_file() and not reconnect:
+        if existing.get("installation_id"):
+            raise Denied(f"GitHub is already connected (App {existing.get('slug')}). To replace the connection run `rgtriage github disconnect` first, "
+                         "or pass --reconnect to create a new App (the old App stays installed until you remove it).")
+        say("An App was already created for this installation; resuming at the install step.")
+        return wait_for_installation(existing, timeout, transport=transport, say=say)
     state = secrets.token_urlsafe(24)
     redirect = f"http://localhost:{port}/created"
     app_name = f"RemediGenius-CE-{secrets.token_hex(3)}"
@@ -640,8 +658,12 @@ def connect(owner: str = "", port: int = 8743, open_browser: bool = True, timeou
             raise GitHubError(result["error"])
     finally:
         server.shutdown()
-    app = load_app()
-    say(f"App created: {app['slug']}. Install it and select the repository: https://github.com/apps/{app['slug']}/installations/new")
+    return wait_for_installation(load_app(), timeout, transport=transport, say=say)
+
+
+def wait_for_installation(app: dict, timeout: int, transport=None, say=print) -> dict:
+    """Poll GitHub until the App is installed somewhere, then remember the installation."""
+    say(f"App: {app['slug']}. Install it and select ONLY the repository RemediGenius may use: https://github.com/apps/{app['slug']}/installations/new")
     client = Client({}, app, transport=transport)
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -653,6 +675,8 @@ def connect(owner: str = "", port: int = 8743, open_browser: bool = True, timeou
                 app["installed_on"] = (installs[0].get("account") or {}).get("login")
                 _write_private(home() / "app.json", json.dumps(app, indent=1))
                 return {"connected": True, "app": app["slug"], "installation": app["installation_id"], "account": app["installed_on"]}
+        elif status_ == 401:
+            raise GitHubError(_explain(status_, raw, "reading the App's installations"), status_)
         time.sleep(3)
     raise GitHubError("the App was created but not installed in time; install it, then run `rgtriage github connect` again")
 
@@ -783,9 +807,16 @@ def branch_name(prefix: str, ref: str, topic: str) -> str:
     return f"{prefix}{slug(topic or ref)}-{hashlib.sha1(ref.encode()).hexdigest()[:6]}"
 
 
+def clean_text(text, limit: int = 4000) -> str:
+    """Text the agent wrote, made safe to publish: no 12-digit account ids, no tokens, and no @mentions that would notify people."""
+    text = _redact(str(text or ""), [])
+    text = re.sub(r"\b\d{12}\b", "************", text)
+    text = re.sub(r"(?<![\w`])@(?=[A-Za-z0-9])", "@\u200b", text)
+    return text[:limit]
+
+
 def pr_body(finding: dict, files: list[str], validation: list[dict], evidence: str, change: str, effect: str, risk: str, rollback: str) -> str:
-    def sanitize(text: str) -> str:
-        return re.sub(r"\b\d{12}\b", "************", _redact(str(text or ""), []))
+    sanitize = clean_text
     rows = "\n".join(f"- `{v['check']}`: **{v['result']}**" + (f" ({sanitize(v['detail'])[:160]})" if v.get("detail") else "") for v in validation) or "- not validated"
     return (f"## Finding\n{sanitize(finding.get('title') or finding.get('ref'))}\n\nRef: `{sanitize(finding.get('ref'))}`\n\n"
             f"## Evidence\n{sanitize(evidence) or 'See the RemediGenius board.'}\n\n## Proposed change\n{sanitize(change)}\n\nFiles:\n" +
@@ -844,7 +875,8 @@ def publish(ref: str, files: dict[str, bytes], title: str = "", client: Client |
     if existing and tree["sha"] == base_tree:
         return {"published": True, "changed": False, "branch": branch, "pr": (pulls[0]["html_url"] if pulls else None), "validation": validation,
                 "note": "the branch already contains exactly these changes"}
-    commit = client.call("POST", f"/repos/{repo}/git/commits", {"message": f"{title or 'RemediGenius fix'}\n\nRef: {ref}\nProposed by RemediGenius-CE; needs human review.",
+    title = clean_text(title, 200).replace("\n", " ").strip()
+    commit = client.call("POST", f"/repos/{repo}/git/commits", {"message": f"{title or 'RemediGenius fix'}\n\nRef: {clean_text(ref, 40)}\nProposed by RemediGenius-CE; needs human review.",
                                                                    "tree": tree["sha"], "parents": [parent]})
     if existing:
         try:

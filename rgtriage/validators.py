@@ -20,6 +20,12 @@ import subprocess
 from pathlib import Path
 
 TIMEOUT = 600
+
+
+def find_tool(name: str) -> str | None:
+    """A tool on PATH, or next to this interpreter (pip puts cfn-lint in the venv's bin, which a systemd service does not have on PATH)."""
+    import sys
+    return shutil.which(name) or shutil.which(name, path=str(Path(sys.executable).parent))
 SECRET_ENV = re.compile(r"^(AWS_|GITHUB_|GH_|RGGITHUB_|MODEL_API_KEY|.*(TOKEN|SECRET|PASSWORD|PRIVATE_KEY)).*", re.I)
 
 
@@ -49,7 +55,7 @@ def is_cloudformation(path: str, text: str) -> bool:
                                                                               ('"Resources"' in text and "AWS::" in text))
 
 
-def validate_overlay(tree: Path, changes: dict[str, bytes], which=shutil.which) -> list[dict]:
+def validate_overlay(tree: Path, changes: dict[str, bytes], which=find_tool) -> list[dict]:
     env, results = clean_env(), []
     changed = sorted(changes)
     for rel, data in changes.items():
@@ -115,6 +121,6 @@ def validate_overlay(tree: Path, changes: dict[str, bytes], which=shutil.which) 
     return results
 
 
-def available(which=shutil.which) -> dict:
+def available(which=find_tool) -> dict:
     """Which deterministic tools this desk can run (reported by `rgtriage github status` and doctor)."""
     return {name: bool(which(name)) for name in ("terraform", "tflint", "cfn-lint")}

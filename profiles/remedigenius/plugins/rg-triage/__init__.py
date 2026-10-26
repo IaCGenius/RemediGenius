@@ -330,7 +330,7 @@ def handle(params: dict, **_kwargs) -> str:
         if "failed" not in out[:80]:
             draft.unlink(missing_ok=True)
         return out
-    out = _run(args)
+    out = _run(args, timeout=840 if action == "github" else TIMEOUT)  # publish may download Terraform providers to validate
     if action in ("decide", "digest", "fixes"):  # a fix record may have moved: keep the cards in step
         notes = _sync_cards()
         if notes:

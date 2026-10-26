@@ -41,7 +41,7 @@ WEBUI_IMAGE = 'ghcr.io/nesquena/hermes-webui:0.52.492@sha256:e507cafa7b112de9abd
 SUBNET = '172.29.242.0/24'
 API_PORT = 8642
 PROFILE = 'remedigenius'
-PACKAGES = ['boto3==1.42.89', 'PyYAML==6.0.2', 'cfn-lint==1.57.2']  # cfn-lint: deterministic CloudFormation checks before a PR
+PACKAGES = ['boto3==1.42.89', 'PyYAML==6.0.3', 'cfn-lint==1.57.2']  # cfn-lint: deterministic CloudFormation checks before a PR
 TERRAFORM = ('1.12.2', '1eaed12ca41fcfe094da3d76a7e9aa0639ad3409c43be0103ee9f5a1ff4b7437')
 TFLINT = ('0.63.1', '8441a7d97df20431f19c9b9d27ff4c63e308c964e86660bc7cc0cf7bbe0725e8')
 # Inside the container the desk paths are identical, so no path translation is needed.

@@ -22,6 +22,9 @@ the desk CLI as the desk user, the only user that can read the App key. For the 
 computer first (a second terminal):
 `aws ssm start-session --target <instance> --document-name AWS-StartPortForwardingSession --parameters portNumber=8743,localPortNumber=8743`.
 
+**Shortcut:** from your computer, `python tools/github_connect_spot.py --stack <your stack name>` forwards the port and runs step 1 for you,
+so you only open the address it prints and do steps 2 and 3. Then continue at step 4 in an SSM session.
+
 1. `sudo rgdesk github connect --no-browser` (add `--org YOUR-ORG` to create the App under an organization you own).
 2. Open `http://localhost:8743/`. GitHub shows **Create GitHub App** with the definition pre-filled: click it once. GitHub hands the App
    key straight back to the desk; you never copy a secret.

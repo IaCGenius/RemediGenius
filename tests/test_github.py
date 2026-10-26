@@ -935,3 +935,144 @@ def test_operators_get_a_wrapper_that_runs_the_desk_cli_as_the_desk_user():
     script = _host().wrapper_script()
     assert script.startswith("#!/bin/sh") and "sudo -u '#10000'" in script and "RGGITHUB_HOME=/data/rggithub" in script
     assert "-m rgtriage" in script and '"$@"' in script
+
+
+# ---------------------------------------------------------------- what the agent writes into a PR is made safe
+
+def test_agent_text_cannot_notify_people_or_leak_ids_and_tokens():
+    out = github.clean_text("ping @org/team and @alice, mail a@b.c, acct 123456789012, `@code`, ghs_" + "x" * 30)
+    assert "@org" not in out.replace("@​org", "") and "@​alice" in out and "a@b.c" in out and "`@code`" in out
+    assert "123456789012" not in out and "ghs_" not in out
+    assert len(github.clean_text("x" * 10_000)) == 4000
+
+
+def test_titles_commit_messages_and_bodies_are_cleaned_before_publishing(connected):
+    github.publish("ab12cd34ef56", {"terraform/main.tf": TF + b"# m\n"}, title="Fix @org/security-team\nsecond line 123456789012", client=new_client(connected),
+                   validators=ok_validation, finding={"ref": "ab12cd34ef56", "title": "@everyone"}, evidence="see @bob", topic="mentions")
+    pr = connected.pulls[0]
+    assert "\n" not in pr["title"] and "@org" not in pr["title"].replace("@​org", "") and "123456789012" not in pr["title"]
+    assert "@everyone" not in pr["body"].replace("@​everyone", "") and "@bob" not in pr["body"].replace("@​bob", "")
+    commit = next(c for c in connected.requests if c[0] == "POST" and c[2].endswith("/git/commits"))[3]["message"]
+    assert "@org" not in commit.replace("@​org", "") and "123456789012" not in commit and commit.count("\n") == 3
+
+
+# ---------------------------------------------------------------- reconnecting
+
+def test_connect_refuses_to_replace_a_healthy_connection_unless_asked(connected):
+    with pytest.raises(github.Denied, match="already connected"):
+        github.connect(open_browser=False, timeout=1, transport=connected, say=lambda m: None)
+    assert github.load_app()["app_id"] == APP["app_id"]  # nothing was replaced
+
+
+def test_connect_resumes_at_the_install_step_when_the_app_exists_but_is_not_installed(gh, home, monkeypatch):  # noqa: F811
+    monkeypatch.setenv("RGGITHUB_HOME", str(home / "github"))
+    monkeypatch.setattr(github, "Client", SignedClient)
+    github._write_private(github.key_path(), "-----BEGIN PRIVATE KEY-----\n")
+    github._write_private(github.home() / "app.json", json.dumps({"app_id": 9, "slug": "remedigenius-ce-zzz", "owner": "acme"}))
+    messages = []
+
+    def transport(method, url, headers, body):
+        assert urllib.parse.urlparse(url).path == "/app/installations"
+        return 200, {}, json.dumps([{"id": 31, "account": {"login": "acme"}}]).encode()
+    result = github.connect(open_browser=False, timeout=5, transport=transport, say=messages.append)
+    assert result == {"connected": True, "app": "remedigenius-ce-zzz", "installation": 31, "account": "acme"}
+    assert any("resuming" in m for m in messages) and github.load_app()["installation_id"] == 31
+
+
+def test_a_rejected_app_key_stops_the_install_wait_with_a_clear_error(gh, home, monkeypatch):  # noqa: F811
+    monkeypatch.setenv("RGGITHUB_HOME", str(home / "github"))
+    monkeypatch.setattr(github, "Client", SignedClient)
+    github._write_private(github.key_path(), "-----BEGIN PRIVATE KEY-----\n")
+    github._write_private(github.home() / "app.json", json.dumps({"app_id": 9, "slug": "x", "owner": "acme"}))
+    with pytest.raises(github.GitHubError, match="reconnect"):
+        github.connect(open_browser=False, timeout=5, transport=lambda *a: (401, {}, b'{"message":"Bad credentials"}'), say=lambda m: None)
+
+
+def test_tools_installed_next_to_the_interpreter_are_found_without_being_on_path(tmp_path, monkeypatch):
+    import sys
+    fake_python = tmp_path / "venv" / "bin" / "python"
+    fake_python.parent.mkdir(parents=True)
+    exe = fake_python.parent / ("cfn-lint.exe" if __import__("os").name == "nt" else "cfn-lint")
+    exe.write_text("#!/bin/sh" + chr(10))
+    exe.chmod(0o755)
+    monkeypatch.setattr(sys, "executable", str(fake_python))
+    monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
+    assert validators.find_tool("cfn-lint") and not validators.find_tool("tflint")
+
+
+# ---------------------------------------------------------------- adversarial: nothing disguised gets through the gate
+
+def _decode_once(text):
+    return urllib.parse.unquote(text)
+
+
+def _disguises(path):
+    """The same request written the ways an attacker (or a confused model) might try to slip it past a string check."""
+    out = {path, path.replace("/", "//", 1), path + "/", path + "?x=1", path.upper(), path.replace("/repos/", "/repos/./", 1)}
+    out |= {urllib.parse.quote(path, safe=""), urllib.parse.quote(path, safe="/"), urllib.parse.quote(urllib.parse.quote(path, safe="/"), safe="/")}
+    out |= {path.replace("heads/", "heads/%2e%2e/heads/"), path.replace("/repos/", "/repos/%2e/"), path.replace("main", "ma%69n"),
+            path.replace("main", "main%00"), path.replace("main", "main "), path.replace("/", "\\"), path.replace("/", "%5c"), path.replace("/", "%2F", 3)}
+    out |= {"/repos/acme/infra/../infra" + path[len("/repos/acme/infra"):], "/repos/acme%2Finfra" + path[len("/repos/acme/infra"):],
+            "/repos/ACME/INFRA" + path[len("/repos/acme/infra"):], "/repos/acme/infra%20" + path[len("/repos/acme/infra"):]}
+    return out
+
+
+FORBIDDEN_REQUESTS = [
+    ("PUT", "/repos/acme/infra/pulls/1/merge", {}),
+    ("POST", "/repos/acme/infra/pulls/1/reviews", {"event": "APPROVE"}),
+    ("POST", "/repos/acme/infra/git/refs", {"ref": "refs/heads/main", "sha": "a" * 40}),
+    ("PATCH", "/repos/acme/infra/git/refs/heads/main", {"sha": "a" * 40, "force": True}),
+    ("PATCH", "/repos/acme/infra/git/refs/heads/dev", {"sha": "a" * 40}),
+    ("DELETE", "/repos/acme/infra/git/refs/heads/dev", None),
+    ("POST", "/repos/acme/infra/pulls", {"title": "t", "head": "feature/remedigenius/x", "base": "main"}),
+    ("PUT", "/repos/acme/infra/branches/main/protection", {}),
+    ("POST", "/repos/acme/infra/rulesets", {}),
+    ("POST", "/repos/acme/infra/pulls/1/auto-merge", {}),
+]
+
+
+@pytest.mark.parametrize("method,path,body", FORBIDDEN_REQUESTS)
+def test_no_disguised_form_of_a_forbidden_request_is_allowed(gh, method, path, body):
+    gate = make_client(gh).gate
+    for variant in _disguises(path):
+        with pytest.raises(github.Denied):
+            gate.check(method, variant, body)
+
+
+def test_every_allowed_write_is_inside_the_policy_whatever_the_spelling(gh):
+    """Generate many spellings of ref and PR requests; whenever the gate says yes, the decoded request must be inside the policy."""
+    gate = make_client(gh).gate
+    names = ["main", "dev", "master", "feature/remedigenius/ok", "feature/remedigenius/a/b", "feature/remedigenius/", "feature/remedigenius/../main",
+             "feature/remedigenius/x/../../main", "Feature/remedigenius/x", "feature/remedigenius", "feature/other/x", "release/1.0", "refs/heads/main",
+             "feature/remedigenius/x.lock", "feature/remedigenius/%2e%2e/main", "feature/remedigenius/x\n", "feature/remedigenius/x y", " feature/remedigenius/x"]
+    allowed = 0
+    for name in names:
+        for quote in (False, True):
+            ref = urllib.parse.quote(name, safe="/") if quote else name
+            attempts = [("POST", "/repos/acme/infra/git/refs", {"ref": "refs/heads/" + name, "sha": "a" * 40}),
+                        ("PATCH", f"/repos/acme/infra/git/refs/heads/{ref}", {"sha": "a" * 40, "force": False}),
+                        ("POST", "/repos/acme/infra/pulls", {"title": "t", "head": name, "base": "dev"}),
+                        ("POST", "/repos/acme/infra/pulls", {"title": "t", "head": "feature/remedigenius/ok", "base": name})]
+            for method, path, body in attempts:
+                try:
+                    gate.check(method, path, body)
+                except github.Denied:
+                    continue
+                allowed += 1
+                target = (body or {}).get("ref", "")[len("refs/heads/"):] or _decode_once(path).split("/git/refs/heads/")[-1] or body.get("head", "")
+                if path.endswith("/pulls"):
+                    assert body["base"] == "dev" and body["head"].startswith("feature/remedigenius/") and ".." not in body["head"]
+                else:
+                    assert target.startswith("feature/remedigenius/") and ".." not in target and "%" not in target and target.strip() == target
+    assert allowed >= 4  # the legitimate spellings still work
+
+
+def test_the_connect_helper_forwards_the_callback_port_and_runs_connect_as_the_desk_user():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gh_connect_spot", Path(__file__).resolve().parents[1] / "tools/github_connect_spot.py")
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    forward = helper.forward_command("aws", "us-east-1", "i-123")
+    assert "AWS-StartPortForwardingSession" in forward and "portNumber=8743,localPortNumber=8743" in forward[-1]
+    connect = helper.connect_command("aws", "us-east-1", "i-123", extra="--org acme")
+    assert "AWS-StartInteractiveCommand" in connect and "sudo rgdesk github connect --no-browser --port 8743 --org acme" in connect[-1]

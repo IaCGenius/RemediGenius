@@ -618,7 +618,7 @@ def cmd_github(args):
 
     try:
         if args.op == "connect":
-            result = github.connect(owner=args.org or "", port=args.port, open_browser=not args.no_browser)
+            result = github.connect(owner=args.org or "", port=args.port, open_browser=not args.no_browser, reconnect=args.reconnect)
             _out(f"Connected: App {result['app']} installed on {result['account']}. Next: rgtriage github configure --repo owner/name --base dev --reviewer <login>")
         elif args.op == "configure":
             if not args.repo or not args.base:
@@ -1068,6 +1068,7 @@ def main(argv=None):
     p.add_argument("--org", help="connect: create the App under this organization instead of your account")
     p.add_argument("--port", type=int, default=8743, help="connect: local port for GitHub's redirect")
     p.add_argument("--no-browser", action="store_true")
+    p.add_argument("--reconnect", action="store_true", help="connect: create a new App even if one is connected")
     p.add_argument("--repo"); p.add_argument("--base"); p.add_argument("--prefix"); p.add_argument("--reviewer", action="append")
     p.add_argument("--keep-installation", action="store_true", help="disconnect: only delete local credentials, leave the installation")
     p.add_argument("--ref"); p.add_argument("--file", action="append"); p.add_argument("--title"); p.add_argument("--topic")
