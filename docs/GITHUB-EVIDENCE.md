@@ -32,6 +32,29 @@ the administrator command is printed), human reviewers (bots refused), protectio
 `verify`, `refresh`, `disconnect` and `connect` (self-healing) cover the rest. Mock/Local: 12 tests (`tests/test_github.py`: "the guided setup command").
 Finishing setup prints that it is **not** proof of a working flow.
 
+## The GitHub tab in the web console (added after the review)
+
+You asked to connect GitHub from the console, not a terminal. The **GitHub** tab does the whole flow: Connect GitHub (two clicks on github.com, then back
+to the page), install wait, repository, development branch and reviewer choice, protection report, Check, Refresh, Change, Reconnect, Disconnect.
+
+- **How it stays safe:** the key never reaches the browser, the dashboard process or the agent. The page asks its backend, which asks the desk over the
+  socket. The setup operations are accepted only with an operator token regenerated at every boot that only the dashboard backend reads; the agent's tool
+  cannot name those operations, its file tool is blocked from the token, and it now sends people to the tab. GitHub's one-time code can only come back to a
+  loopback address (or an origin the operator lists); the pending state is stored hashed, single-use, one hour.
+- **Mock/Local** (`tests/test_github_console.py`, 70+ tests): begin (manifest, hashed state, return-address checks, healthy / deleted / uninstalled cases),
+  finish (wrong, replayed and expired state, malformed code, GitHub failures, network failure), install polling, repositories and branches limited to the
+  selected ones, the operator-token gate (exact comparison, fail-closed, only the console operations and flags), the backend through FastAPI's test client
+  (every field validated before the desk is asked, JSON bodies only, clean one-line errors with secrets redacted, the token sent to the socket), the plugin
+  files and the page (talks only to its backend, no token or key handling), and the boot wiring.
+- **Spot (deployed), 37 of 37 host checks** on a fresh instance, including: the setup token files are 0600 and identical; the tab's API refuses requests
+  without the dashboard login (401) and answers after login; **Connect GitHub** returns the github.com address and tells GitHub to return to this console;
+  a forged callback is refused and the page is shown with the reason; invalid input gets a 400; setup operations over the real socket work **only** with the
+  token (`0 2 2`); the agent's file tool is blocked from the token. A bug found only here (the status command printed a text line after its JSON, so the tab
+  could not read it) was fixed, and tests now run the actual commands the console calls.
+- **Not shown:** the page rendering in a browser and the GitHub consent round trip. They need a person (and the workstation ran out of memory for an
+  automated browser run). Unverified until that happens: GitHub accepting a loopback return address in the App definition (its documentation only says "a
+  full URL"). If it refuses, the page shows GitHub's message and the command-line setup remains available.
+
 ## Original evidence matrix
 
 | Area | Mock / Local | Spot | Real GitHub | Human |
