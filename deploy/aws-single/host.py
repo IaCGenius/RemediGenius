@@ -25,6 +25,7 @@ UID = 10000                               # Hermes container user; also the desk
 HERMES_HOME = Path('/data/hermes')
 WIKI = HERMES_HOME / 'rg-wiki'            # generated, read-only view of the knowledge bundle for the WebUI
 DESK = Path('/data/rgtriage')
+GITHUB = Path('/data/rggithub')           # GitHub App key and policy: desk-only, never mounted into the agent container
 IAC = Path('/data/iac')
 RUNDIR = Path('/run/rgtriage')
 SOCKET = RUNDIR / 'rgtriage.sock'
@@ -40,8 +41,9 @@ WEBUI_IMAGE = 'ghcr.io/nesquena/hermes-webui:0.52.492@sha256:e507cafa7b112de9abd
 SUBNET = '172.29.242.0/24'
 API_PORT = 8642
 PROFILE = 'remedigenius'
-PACKAGES = ['boto3==1.42.89', 'PyYAML==6.0.2']
+PACKAGES = ['boto3==1.42.89', 'PyYAML==6.0.2', 'cfn-lint==1.57.2']  # cfn-lint: deterministic CloudFormation checks before a PR
 TERRAFORM = ('1.12.2', '1eaed12ca41fcfe094da3d76a7e9aa0639ad3409c43be0103ee9f5a1ff4b7437')
+TFLINT = ('0.63.1', '8441a7d97df20431f19c9b9d27ff4c63e308c964e86660bc7cc0cf7bbe0725e8')
 # Inside the container the desk paths are identical, so no path translation is needed.
 PROPOSALS = '/opt/data/proposals'  # inside the Hermes home: Hermes only permits writes under /opt/data
 CONTAINER_MOUNTS = ['-v', f'{DESK.as_posix()}:{DESK.as_posix()}:ro',
@@ -76,18 +78,38 @@ def install_runtime():
     shutil.copytree(SOURCE / 'rgtriage', CODE / 'rgtriage', ignore=shutil.ignore_patterns('__pycache__'))
     for path in [CODE, *CODE.rglob('*')]:
         path.chmod(0o755 if path.is_dir() else 0o644)
-    version, digest = TERRAFORM
-    binary = Path('/usr/local/bin/terraform')
-    if binary.exists() and version in subprocess.run([str(binary), 'version'], capture_output=True, text=True).stdout:
+    install_wrapper()
+    install_zip_binary('terraform', *TERRAFORM, 'https://releases.hashicorp.com/terraform/{v}/terraform_{v}_linux_amd64.zip')
+    install_zip_binary('tflint', *TFLINT, 'https://github.com/terraform-linters/tflint/releases/download/v{v}/tflint_linux_amd64.zip')
+
+
+def wrapper_script() -> str:
+    """`sudo rgdesk <rgtriage args>`: run the desk CLI as the desk user with the desk environment (operator use over SSM)."""
+    return ("#!/bin/sh\n"
+            f"exec sudo -u '#{UID}' env PYTHONPATH={CODE.as_posix()} RGTRIAGE_HOME={DESK.as_posix()} RGGITHUB_HOME={GITHUB.as_posix()} "
+            f"RGGITHUB_IAC_DIR={IAC.as_posix()} RGTRIAGE_PROPOSALS=/opt/data/proposals HOME={DESK.as_posix()}/.home "
+            f"{(VENV / 'bin/python').as_posix()} -m rgtriage \"$@\"\n")
+
+
+def install_wrapper():
+    path = Path('/usr/local/bin/rgdesk')
+    path.write_text(wrapper_script())
+    path.chmod(0o755)
+
+
+def install_zip_binary(name, version, digest, url):
+    """A pinned, checksummed single-binary release zip into /usr/local/bin (skipped when that version is already there)."""
+    binary = Path('/usr/local/bin') / name
+    if binary.exists() and version in subprocess.run([str(binary), 'version' if name == 'terraform' else '--version'],
+                                                    capture_output=True, text=True).stdout:
         return
-    data = urllib.request.urlopen(f'https://releases.hashicorp.com/terraform/{version}/terraform_{version}_linux_amd64.zip',
-                                  timeout=120).read()
+    data = urllib.request.urlopen(url.format(v=version), timeout=120).read()
     if hashlib.sha256(data).hexdigest() != digest:
-        raise SystemExit('Terraform download checksum mismatch')
-    archive = Path('/tmp/terraform.zip')
+        raise SystemExit(f'{name} download checksum mismatch')
+    archive = Path(f'/tmp/{name}.zip')
     archive.write_bytes(data)
     with zipfile.ZipFile(archive) as z:
-        binary.write_bytes(z.read('terraform'))
+        binary.write_bytes(z.read(name))
     binary.chmod(0o755)
     archive.unlink()
 
@@ -102,14 +124,15 @@ def desk(*args, user=None, **kw):
 
 def restore_state(cfg):
     """Durable copy first: an empty disk (new Spot instance) is filled from the latest S3 checkpoints."""
-    for path in (HERMES_HOME, DESK):
+    for path in (HERMES_HOME, DESK, GITHUB):
         path.mkdir(parents=True, exist_ok=True)
     result = desk('durable', 'restore', '--url', durable_url(cfg), '--home', f'hermes={HERMES_HOME}',
-                  '--home', f'desk={DESK}', '--owner', f'{UID}:{UID}', capture_output=True)
+                  '--home', f'desk={DESK}', '--home', f'github={GITHUB}', '--owner', f'{UID}:{UID}', capture_output=True)
     print(result.stdout.strip())
-    for path in (HERMES_HOME, DESK, HERMES_HOME / 'proposals', DESK / '.home', DESK / '.lineage', IAC, HERMES_HOME / 'work'):
+    for path in (HERMES_HOME, DESK, GITHUB, HERMES_HOME / 'proposals', DESK / '.home', DESK / '.lineage', IAC, HERMES_HOME / 'work'):
         path.mkdir(parents=True, exist_ok=True)
         os.chown(path, UID, UID)
+    GITHUB.chmod(0o700)  # only the desk user; the folder is not mounted into the Hermes container
     for path in (DESK / '.lineage').iterdir():
         os.chown(path, UID, UID)
     # Same path on the host as in the container, so the desk can validate files the agent proposes.
@@ -285,11 +308,13 @@ def units(cfg: dict) -> dict:
            f'Environment=AWS_STS_REGIONAL_ENDPOINTS=regional\nEnvironment=TF_PLUGIN_CACHE_DIR={DESK.as_posix()}/.home/plugins\n'
            f'Environment=REMEDIGENIUS_MODEL_NAME={cfg.get("model_name") or ""}\n'
            f'Environment=REMEDIGENIUS_MODEL_BASE_URL={cfg.get("model_base_url") or ""}\n'
-           f'Environment=RGTRIAGE_WIKI_DIR={WIKI.as_posix()}\n')
+           f'Environment=RGTRIAGE_WIKI_DIR={WIKI.as_posix()}\n'
+           f'Environment=RGGITHUB_HOME={GITHUB.as_posix()}\n'
+           f'Environment=RGGITHUB_IAC_DIR={IAC.as_posix()}\n')
     harden = (f'User={UID}\nGroup={UID}\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\n'
-              f'ReadWritePaths={DESK.as_posix()} -{WIKI.as_posix()}\n')
+              f'ReadWritePaths={DESK.as_posix()} -{WIKI.as_posix()} {GITHUB.as_posix()} {IAC.as_posix()}\n')
     python = (VENV / 'bin/python').as_posix()
-    homes = f'--home hermes={HERMES_HOME.as_posix()} --home desk={DESK.as_posix()}'
+    homes = f'--home hermes={HERMES_HOME.as_posix()} --home desk={DESK.as_posix()} --home github={GITHUB.as_posix()}'
     store = durable_url(cfg)
     memory = int(cfg.get('container_memory_mb', 6144))
     mounts = ' '.join(CONTAINER_MOUNTS)
@@ -437,9 +462,37 @@ def enable_knowledge_tab():
     """The dashboard serves user plugins only when enabled: in the profile (tab list) and at its launch scope (API)."""
     in_container('python', '-c', ENABLE_PROFILE_PLUGIN)
     in_container('hermes', '-p', 'default', 'plugins', 'enable', 'rg-knowledge', capture_output=True)
-    # The gateway runs the Kanban dispatcher from the root config: cards are for people, never for worker agents.
-    for key in ('kanban.dispatch_in_gateway', 'kanban.auto_decompose'):
-        in_container('hermes', '-p', 'default', 'config', 'set', key, 'false', capture_output=True)
+
+
+KANBAN_OFF = ('kanban.dispatch_in_gateway', 'kanban.auto_decompose')
+
+
+def kanban_off() -> bool:
+    """True when the root config says the Kanban dispatcher and task splitting are off (read back, never assumed)."""
+    for key in KANBAN_OFF:
+        got = in_container('hermes', '-p', 'default', 'config', 'get', key, check=False, capture_output=True)
+        if got.returncode or got.stdout.strip().splitlines()[-1:] != ['false']:
+            return False
+    return True
+
+
+def ensure_kanban_off():
+    """The gateway runs the Kanban dispatcher from the root config: cards are for people, never for worker agents.
+
+    Hermes can rewrite its root config while it initializes, so the setting is applied after the last restart, read back, and the
+    gateway restarted only if it had to change. A setting that does not stick fails the boot instead of shipping a dispatcher."""
+    for _ in range(2):
+        if kanban_off():
+            return
+        for key in KANBAN_OFF:
+            in_container('hermes', '-p', 'default', 'config', 'set', key, 'false', capture_output=True)
+        run('docker', 'restart', CONTAINER)
+        for _ in range(60):
+            if in_container('hermes', '-p', 'default', 'config', 'get', KANBAN_OFF[0], check=False, capture_output=True).returncode == 0:
+                break
+            time.sleep(2)
+    if not kanban_off():
+        raise RuntimeError('could not turn the Kanban dispatcher off in the Hermes root config; refusing to finish the boot')
 
 
 def main():
@@ -489,6 +542,7 @@ def main():
     enable_knowledge_tab()
     in_container('hermes', 'profile', 'use', PROFILE)
     run('docker', 'restart', CONTAINER)
+    ensure_kanban_off()
     if cfg.get('webui', True):
         run('systemctl', 'enable', '--now', 'remedigenius-webui.service')
     else:

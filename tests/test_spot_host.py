@@ -139,3 +139,52 @@ def test_webui_is_pinned_disclosed_private_and_uses_the_profile_gateway(host):
     notice = (ROOT / "NOTICE").read_text(encoding="utf-8")
     assert "https://github.com/nesquena/hermes-webui" in notice and "MIT" in notice and "0.52.492" in notice
     assert 'variable "webui"' in (ROOT / "deploy/aws-single/main.tf").read_text(encoding="utf-8")
+
+
+class _Out:
+    def __init__(self, text="false\n", rc=0):
+        self.stdout, self.returncode = text, rc
+
+
+def _fake_hermes(state, sticks=True):
+    """A stand-in for `docker exec ... hermes -p default config get/set`: values live in `state`."""
+    log = []
+
+    def in_container(*args, check=True, **kw):
+        log.append(args)
+        if args[:4] == ("hermes", "-p", "default", "config") and args[4] == "get":
+            return _Out(f"{state.get(args[5], 'true')}\n")
+        if args[:4] == ("hermes", "-p", "default", "config") and args[4] == "set" and sticks:
+            state[args[5]] = args[6]
+        return _Out()
+    return in_container, log
+
+
+def test_kanban_dispatcher_is_turned_off_after_the_last_restart_and_read_back(host, monkeypatch):
+    state, restarts = {}, []
+    fake, log = _fake_hermes(state)
+    monkeypatch.setattr(host, "in_container", fake)
+    monkeypatch.setattr(host, "run", lambda *a, **k: restarts.append(a))
+    monkeypatch.setattr(host.time, "sleep", lambda s: None)
+    host.ensure_kanban_off()
+    assert state == {"kanban.dispatch_in_gateway": "false", "kanban.auto_decompose": "false"}
+    assert restarts == [("docker", "restart", "remedigenius")]  # restarted once, because the gateway reads the setting at start
+
+
+def test_kanban_already_off_changes_and_restarts_nothing(host, monkeypatch):
+    state = {"kanban.dispatch_in_gateway": "false", "kanban.auto_decompose": "false"}
+    fake, log = _fake_hermes(state)
+    restarts = []
+    monkeypatch.setattr(host, "in_container", fake)
+    monkeypatch.setattr(host, "run", lambda *a, **k: restarts.append(a))
+    host.ensure_kanban_off()
+    assert restarts == [] and not [c for c in log if c[4] == "set"]
+
+
+def test_a_dispatcher_setting_that_never_sticks_fails_the_boot(host, monkeypatch):
+    fake, _ = _fake_hermes({}, sticks=False)
+    monkeypatch.setattr(host, "in_container", fake)
+    monkeypatch.setattr(host, "run", lambda *a, **k: None)
+    monkeypatch.setattr(host.time, "sleep", lambda s: None)
+    with pytest.raises(RuntimeError, match="Kanban dispatcher"):
+        host.ensure_kanban_off()

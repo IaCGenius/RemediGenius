@@ -17,10 +17,13 @@ import urllib.request
 from pathlib import Path
 
 ALLOWED = {"digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "onboarding", "playbook", "report", "watch",
-           "knowledge", "knowledge-edit", "improve", "fixes", "card"}
+           "knowledge", "knowledge-edit", "improve", "fixes", "card", "github"}
+# Over the socket the agent may only ask for these GitHub operations; connect, configure and disconnect are operator-only on the host.
+GITHUB_OPS = {"status", "publish", "pr-status", "refresh"}
+GITHUB_FLAGS = {"--ref", "--file", "--title", "--topic", "--evidence", "--change", "--effect", "--risk", "--rollback", "--number", "--branch", "--json"}
 MAX_REQUEST = 64 * 1024
 MAX_OUTPUT = 400 * 1024
-TIMEOUT = {"scan": 900, "watch": 900, "validate": 600, "improve": 1200}
+TIMEOUT = {"scan": 900, "watch": 900, "validate": 600, "improve": 1200, "github": 900}
 
 
 CHECKPOINT = {"store": None, "homes": {}, "lock": threading.Lock()}
@@ -78,6 +81,10 @@ def execute(args: list) -> dict:
         return {"rc": 2, "stdout": "", "stderr": "request must be {\"args\": [\"subcommand\", ...]}"}
     if args[0] not in ALLOWED:
         return {"rc": 2, "stdout": "", "stderr": f"subcommand {args[0]!r} is not available over the socket"}
+    if args[0] == "github":
+        flags = [a for a in args[2:] if a.startswith("--")]
+        if len(args) < 2 or args[1] not in GITHUB_OPS or any(f not in GITHUB_FLAGS for f in flags):
+            return {"rc": 2, "stdout": "", "stderr": f"github {args[1] if len(args) > 1 else ''} is not available over the socket (allowed: {', '.join(sorted(GITHUB_OPS))})"}
     try:
         proc = subprocess.run([sys.executable, "-m", "rgtriage", *args], capture_output=True, text=True, encoding="utf-8",
                               errors="replace", timeout=TIMEOUT.get(args[0], 300), env=dict(os.environ, PYTHONIOENCODING="utf-8"))

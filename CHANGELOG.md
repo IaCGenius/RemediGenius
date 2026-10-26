@@ -1,5 +1,37 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
+## v0.4.0
+
+**New**
+- **Fixes as pull requests (Spot).** Connect a GitHub repository and the agent can turn a validated IaC fix into **one pull
+  request** from a `feature/remedigenius/...` branch into your configured development branch (`rg_triage action=github`,
+  operations `status`, `publish`, `pr_status`, `refresh`). It never merges, approves, force-pushes, deletes, touches `main` or
+  any production or release branch, or changes protections: those requests do not exist in the desk, and your GitHub
+  rulesets and a human review are the independent second layer. See [docs/GITHUB.md](docs/GITHUB.md).
+- **Per-installation GitHub App.** `rgtriage github connect` creates a GitHub App for your installation through GitHub's App
+  Manifest flow (one click on github.com, no secret to paste). You select only the repository it may use; its key stays in a
+  desk-only folder that is not mounted into the agent container, tokens last one hour and are narrowed to that repository.
+  Revoke at any time: `rgtriage github disconnect`, or uninstall the App on GitHub.
+- **Writes are off until GitHub shows the protections.** Login alone never enables PRs: the desk reads the effective rules on the
+  development and production branches (reviewed PR required, no force push or delete) and stays in read/proposal mode, with
+  the exact remedy, until they are there. Admin-applied rulesets are in `deploy/github`.
+- **Deterministic checks before any push**, on a copy of the repository with no credentials: `terraform fmt/validate`,
+  `tflint`, `cfn-lint`, YAML and JSON parsing. A failed check pushes nothing; a tool that is missing is reported as *not
+  validated*.
+- **The desk keeps its view of your repository current.** `rgtriage github refresh` (or "I updated the repo, refresh it")
+  mirrors the development branch read-only for `fix` (secrets, state files and `.tfvars` are left out) and writes a
+  **Repository** page into the Knowledge tab. Published PRs are linked to the fix record automatically.
+- `rgdesk`: operators run the desk CLI as the desk user over SSM (`sudo rgdesk github status`).
+
+**Changed**
+- Spot installs pinned `tflint` 0.63.1 and `cfn-lint` 1.57.2 for the checks above; the desk service can write `/data/iac`
+  (the mirror) and its own GitHub folder, which is part of the private durable checkpoint.
+- The `rg-iac-fix` skill gains one step (open a PR). Steps 1 to 8 and the protected rules are unchanged.
+
+**Not in this release**
+- GitHub on the Docker workstation and existing-Hermes installs (the key cannot be kept away from the agent there): it shows
+  `Blocked` with the reason. One repository per installation.
+
 ## v0.3.3
 
 **New**

@@ -10,6 +10,7 @@ its own. Self-hosting the application does not make inference local: that depend
 | Read-only API calls | AWS, from your account's read role | scans, `doctor`, the agent's live checks |
 | Conversations, decisions, knowledge, settings, model key | your S3 bucket (Spot) or a local folder (workstation) | checkpoints every 2 minutes |
 | Pull request lookups (optional, only if you configure a token) | GitHub | fix tracking |
+| Repository reads and pull requests (optional, only if you connect GitHub: [docs/GITHUB.md](GITHUB.md)) | GitHub (`api.github.com`, from the desk, never the agent) | repository files of the connected repo, the proposed change and a sanitized PR description |
 
 **Never leaves the desk:** AWS credentials (the agent has none), secret values, S3 object contents, decrypted data,
 CloudWatch log events. The desk's guard refuses those reads even with administrator credentials.

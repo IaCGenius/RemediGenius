@@ -21,6 +21,8 @@ Once an AWS account is connected, it:
    through your own PR and CI/CD; the desk tracks the fix until a proof-of-done read passes and the AWS finding is gone.
    Ask it to open a task and it files a card on the Hermes Kanban board with the exact AWS CLI fix, a paste-into-chat
    prompt for an IaC fix and the verify command. Cards are for people: no agent ever works on them.
+   With GitHub connected it can also open **one pull request** for the fix into your development branch (never your production
+   branch, and it cannot merge or approve: a person does). See [docs/GITHUB.md](docs/GITHUB.md).
 6. **Knows your organization.** One [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format)
    bundle holds who owns what, how critical it is, accepted risks, policies and runbooks, next to shipped guides on
    where to find evidence. Reviewed concepts change priorities, with a citation in every finding. The dashboard

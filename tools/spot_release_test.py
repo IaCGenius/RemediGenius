@@ -69,6 +69,26 @@ for i in $(seq 1 30); do b=$($D digest --limit 3 2>&1); echo "$b" | grep -qiE "P
 echo "$b" | grep -qiE "P[1-4]|no open findings"; check "first scan produced a board" $? "$(echo "$b" | head -1 | cut -c1-120)"
 c=$($H -p default config get kanban.dispatch_in_gateway 2>&1 | tail -1)
 check "Kanban dispatcher off" $([ "$c" = "false" ]; echo $?) "$c"
+if [ -x /usr/local/bin/rgdesk ]; then
+  g=$(rgdesk github status 2>&1)
+  check "GitHub starts Disconnected" $(echo "$g" | head -1 | grep -q "GitHub: Disconnected"; echo $?) "$(echo "$g" | head -1)"
+  check "validation tools installed (terraform, tflint, cfn-lint)" $(echo "$g" | grep -q "terraform yes, tflint yes, cfn-lint yes"; echo $?) "$(echo "$g" | tail -1)"
+  p=$(stat -c "%a %u" /data/rggithub 2>&1); check "GitHub key folder private to the desk user" $([ "$p" = "700 10000" ]; echo $?) "$p"
+  m=$(for c in remedigenius remedigenius-webui; do docker inspect $c --format '{{json .Mounts}}' 2>/dev/null; done | grep -c rggithub)
+  check "GitHub key folder is not mounted into any container" $([ "$m" = 0 ]; echo $?) "$m mounts"
+  r=$(docker exec --user 10000:10000 remedigenius ls /data/rggithub 2>&1 | head -1); check "agent container cannot see the GitHub key folder" $(echo "$r" | grep -qi "no such file"; echo $?) "$r"
+  s=$(docker exec --user 10000:10000 remedigenius python -c "
+import json,socket
+for args in (['github','connect'],['github','configure','--repo','a/b','--base','dev'],['github','disconnect'],['github','status','--org','x']):
+    c=socket.socket(socket.AF_UNIX); c.connect('/run/rgtriage/rgtriage.sock'); c.sendall((json.dumps({'args':args})+'\n').encode())
+    print(json.loads(c.makefile().readline())['rc'], end=' ')" 2>&1)
+  check "operator-only GitHub operations are refused over the agent socket" $([ "$s" = "2 2 2 2 " ]; echo $?) "$s"
+  t=$(docker exec --user 10000:10000 remedigenius python -c "
+import importlib.util as u
+s=u.spec_from_file_location('p','/opt/data/profiles/remedigenius/plugins/rg-triage/__init__.py');m=u.module_from_spec(s);s.loader.exec_module(m)
+print(m.handle({'action':'github','op':'publish','ref':'x','files':['/etc/passwd=main.tf']})[:70])" 2>&1)
+  check "agent publish without a connected repository is refused" $(echo "$t" | grep -qE "DENIED|Blocked|not enabled|GitHub is not connected|not a file"; echo $?) "$t"
+else check "rgdesk wrapper installed" 1 "missing"; fi
 ref=$($D list --limit 1 --json 2>/dev/null | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['key'])" 2>/dev/null)
 if [ -n "$ref" ]; then
   out=$(docker exec --user 10000:10000 remedigenius python -c "import importlib.util as u;s=u.spec_from_file_location('p','/opt/data/profiles/remedigenius/plugins/rg-triage/__init__.py');m=u.module_from_spec(s);s.loader.exec_module(m);print(m.handle({'action':'card','ref':'$ref'}))" 2>&1)

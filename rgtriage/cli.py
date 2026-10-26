@@ -612,6 +612,77 @@ def cmd_validate(args):
                        if ok else "NOT VALID — fix the errors above and validate again."))
 
 
+def cmd_github(args):
+    """GitHub App connection and development PRs. connect/configure/disconnect are operator-only (never over the socket)."""
+    from . import github, validators
+
+    try:
+        if args.op == "connect":
+            result = github.connect(owner=args.org or "", port=args.port, open_browser=not args.no_browser)
+            _out(f"Connected: App {result['app']} installed on {result['account']}. Next: rgtriage github configure --repo owner/name --base dev --reviewer <login>")
+        elif args.op == "configure":
+            if not args.repo or not args.base:
+                sys.exit("configure needs --repo owner/name and --base <development branch>")
+            _github_status_out(github.configure(args.repo, args.base, args.prefix or github.DEFAULT_PREFIX, args.reviewer or []), args.json)
+        elif args.op in ("status", "verify"):
+            _github_status_out(github.status(verify=args.op == "verify"), args.json)
+            _out("Validation tools: " + ", ".join(f"{k} {'yes' if v else 'MISSING'}" for k, v in validators.available().items()))
+        elif args.op == "refresh":
+            result = github.refresh()
+            _out(f"Repository {result['repo']} refreshed from {result['branch']} @ {result['commit'][:10]}: {result['files']} files mirrored read-only, "
+                 f"IaC found: {', '.join(result['iac']) or 'none'}; knowledge: {result['knowledge']}")
+        elif args.op == "disconnect":
+            for note in github.disconnect(uninstall=not args.keep_installation)["notes"]:
+                _out(note)
+        elif args.op == "publish":
+            if not args.ref or not args.file:
+                sys.exit("publish needs --ref and at least one --file proposal=repo/path")
+            files = github.read_proposals(args.file, github.proposals_dir())
+            result = github.publish(args.ref, files, title=args.title or "", evidence=args.evidence or "", change=args.change or "",
+                                    effect=args.effect or "", risk=args.risk or "", rollback=args.rollback or "", topic=args.topic or "")
+            _github_publish_out(result, args.json)
+        elif args.op == "pr-status":
+            _json(github.pr_status(number=args.number, branch=args.branch or "")) if args.json else _github_pr_out(github.pr_status(number=args.number, branch=args.branch or ""))
+    except github.Denied as exc:
+        sys.exit(f"DENIED (nothing was sent to GitHub): {exc}")
+    except github.GitHubError as exc:
+        sys.exit(str(exc))
+
+
+def _github_status_out(st: dict, as_json: bool = False) -> None:
+    if as_json:
+        return _json(st)
+    _out(f"GitHub: {st['state']}")
+    for label, key in (("Identity", "identity"), ("Repository", "repo"), ("Development base", "base"), ("Feature branches", "branch_prefix")):
+        _out(f"  {label}: {st.get(key) or 'not set'}")
+    _out(f"  Designated reviewers: {', '.join(st.get('reviewers') or []) or 'not set'}")
+    _out(f"  Writes enabled: {'yes' if st.get('writes_enabled') else 'no'}")
+    for c in (st.get("protection") or {}).get("checks", []):
+        _out(f"  [{c['result']}] {c['check']}: {c['detail']}")
+    if st.get("remedy"):
+        _out(f"  Next step: {st['remedy']}")
+
+
+def _github_publish_out(result: dict, as_json: bool = False) -> None:
+    if as_json:
+        return _json(result)
+    for v in result.get("validation", []):
+        _out(f"  [{v['result']}] {v['check']}" + (f": {v['detail'][:200]}" if v.get("detail") and v["result"] in ("fail", "skipped") else ""))
+    if not result.get("published"):
+        return _out(f"NOT PUBLISHED: {result.get('reason')}")
+    if not result.get("changed", True):
+        return _out(f"No new commit: {result.get('note')}. PR: {result.get('pr') or 'none open'}")
+    _out(f"PR {result['action']}: {result['pr']} (branch {result['branch']}, into the development base). A human reviewer must approve and merge; the desk never does.")
+
+
+def _github_pr_out(info: dict) -> None:
+    if not info.get("found"):
+        return _out("No pull request found.")
+    _out(f"PR #{info['number']} {info['state']} {info['url']} ({info['head']} -> {info['base']})")
+    _out("  Human reviews: " + (", ".join(f"{u}: {s}" for u, s in info["human_reviews"].items()) or "none yet"))
+    _out("  Checks: " + (", ".join(f"{n}: {c}" for n, c in info["checks"].items()) or "none reported") + f" (combined status: {info.get('status')})")
+
+
 def cmd_serve(args):
     from . import durable, server
     try:
@@ -992,6 +1063,17 @@ def main(argv=None):
     p.add_argument("--module", required=True, help="Terraform module folder the change belongs to")
     p.add_argument("--file", action="append", required=True, help="proposed file, optionally =target-name (repeatable)")
     p.set_defaults(func=cmd_validate)
+    p = sub.add_parser("github", help="GitHub App connection and development PRs (connect, configure, disconnect: operator only)")
+    p.add_argument("op", choices=["status", "verify", "refresh", "connect", "configure", "disconnect", "publish", "pr-status"])
+    p.add_argument("--org", help="connect: create the App under this organization instead of your account")
+    p.add_argument("--port", type=int, default=8743, help="connect: local port for GitHub's redirect")
+    p.add_argument("--no-browser", action="store_true")
+    p.add_argument("--repo"); p.add_argument("--base"); p.add_argument("--prefix"); p.add_argument("--reviewer", action="append")
+    p.add_argument("--keep-installation", action="store_true", help="disconnect: only delete local credentials, leave the installation")
+    p.add_argument("--ref"); p.add_argument("--file", action="append"); p.add_argument("--title"); p.add_argument("--topic")
+    p.add_argument("--evidence"); p.add_argument("--change"); p.add_argument("--effect"); p.add_argument("--risk"); p.add_argument("--rollback")
+    p.add_argument("--number", type=int); p.add_argument("--branch"); p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_github)
     p = sub.add_parser("serve", help="desk API on a Unix socket for the containerized agent; checkpoints state")
     p.add_argument("--socket", required=True)
     p.add_argument("--durable", default="", help="s3://bucket/prefix or a folder for durable checkpoints")

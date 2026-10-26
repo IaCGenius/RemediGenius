@@ -223,7 +223,8 @@ def _card_status() -> str:
 # ------------------------------------------------------------------ tool
 
 ACTIONS = ("digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "onboarding", "playbook", "report",
-           "knowledge", "remember", "fixes", "card", "cards")
+           "knowledge", "remember", "fixes", "card", "cards", "github")
+GITHUB_OPS = ("status", "publish", "pr_status", "refresh")
 KNOWLEDGE_VIEWS = ("overview", "search", "show", "for", "gaps", "review", "validate")
 
 
@@ -289,6 +290,26 @@ def handle(params: dict, **_kwargs) -> str:
         args = ["knowledge", view] + ([arg] if arg else []) + (["--limit", str(p.get("limit", 8))] if view == "search" else [])
     elif action == "fixes":
         args = ["fixes"]
+    elif action == "github":
+        # Structured, narrow GitHub access. The desk holds the credentials and enforces repository, branch and PR-base policy;
+        # connecting, configuring and disconnecting are operator commands on the host, not available here.
+        op = p.get("op") or "status"
+        if op not in GITHUB_OPS:
+            return f"github op must be one of: {', '.join(GITHUB_OPS)} (connect and configure are done by the operator on the host)"
+        args = ["github", op.replace("_", "-")]
+        if op == "publish":
+            if not p.get("ref") or not p.get("files"):
+                return "github publish needs ref and files (each saved proposal as path=repo/relative/target-path, from the proposals folder)"
+            args += ["--ref", p["ref"]]
+            for f in p["files"]:
+                args += ["--file", f]
+            for key in ("title", "topic", "evidence", "change", "effect", "risk", "rollback"):
+                if p.get(key):
+                    args += [f"--{key}", str(p[key])]
+        elif op == "pr_status":
+            if not p.get("number") and not p.get("branch"):
+                return "github pr_status needs number or branch"
+            args += (["--number", str(int(p["number"]))] if p.get("number") else []) + (["--branch", str(p["branch"])] if p.get("branch") else [])
     elif action == "card":
         refs = [r for r in (p.get("refs") or []) + [p.get("ref")] if r]
         if not refs:
@@ -341,7 +362,11 @@ SCHEMA = {
         "fixed by the same change; optional board): the desk writes exact AWS CLI fix commands from a live read, a chat "
         "prompt for an IaC fix and the verify command, and files it in triage with no assignee, so no agent ever works "
         "on it. cards = the cards the desk filed and their fix status (comments are added as fixes move). "
-        "Never changes AWS resources or code."),
+        "github = the connected GitHub repository, through the desk only: op=refresh (re-read the development branch into the desk's read-only copy and knowledge page, after the user changed their repository), op=status (state, repository, development branch, "
+        "whether PRs can be opened), op=publish (ref + files as saved-proposal=repo/path: validates, pushes to a RemediGenius feature "
+        "branch and opens or updates ONE PR into the configured development branch, with title/evidence/change/effect/risk/rollback; "
+        "needs the user's approval; it never merges or approves, a human does), op=pr_status (number or branch: reviews, checks). "
+        "Never changes AWS resources. Code changes only ever leave as a reviewed pull request."),
     "parameters": {
         "type": "object",
         "properties": {
@@ -375,6 +400,16 @@ SCHEMA = {
             "owner": {"type": "string", "description": "decide fixing: owner (team or person)"},
             "refs": {"type": "array", "items": {"type": "string"}, "description": "card: several refs fixed by one change"},
             "board": {"type": "string", "description": "card: Kanban board slug (default: the current board)"},
+            "op": {"type": "string", "enum": list(GITHUB_OPS), "description": "github: status | publish | pr_status | refresh"},
+            "title": {"type": "string", "description": "github publish: PR title"},
+            "topic": {"type": "string", "description": "github publish: short task name for the feature branch"},
+            "evidence": {"type": "string", "description": "github publish: sanitized evidence for the PR (no secrets, no account ids)"},
+            "change": {"type": "string", "description": "github publish: what the change does"},
+            "effect": {"type": "string", "description": "github publish: expected effect in AWS"},
+            "risk": {"type": "string", "description": "github publish: operational risk"},
+            "rollback": {"type": "string", "description": "github publish: how to roll back"},
+            "number": {"type": "integer", "description": "github pr_status: PR number"},
+            "branch": {"type": "string", "description": "github pr_status: feature branch name"},
         },
         "required": ["action"],
         "additionalProperties": False,
@@ -452,6 +487,11 @@ def on_pre_tool_call(tool_name: str = "", args: dict | None = None, **_kwargs):
         a = args or {}
         return {"action": "approve", "rule_key": "rg_triage:decide",
                 "message": f"Record '{a.get('status')}' for finding {a.get('ref')}{' (whole issue)' if a.get('issue') else ''}: {a.get('reason')}"}
+    if tool_name == "rg_triage" and (args or {}).get("action") == "github" and (args or {}).get("op") == "publish":
+        a = args or {}
+        return {"action": "approve", "rule_key": "rg_triage:github-publish",
+                "message": f"Push the proposed change for finding {a.get('ref')} to a RemediGenius feature branch and open a pull request into the development "
+                           f"branch (a human still has to review and merge it): {', '.join(a.get('files') or [])}"}
     if tool_name not in WRITE_TOOLS:
         return None
     target = (args or {}).get("path") or (args or {}).get("file_path") or ""
