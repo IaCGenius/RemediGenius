@@ -618,8 +618,12 @@ def cmd_github(args):
                 sys.exit("configure needs --repo owner/name and --base <development branch>")
             _github_status_out(github.configure(args.repo, args.base, args.prefix or github.DEFAULT_PREFIX, args.reviewer or []), args.json)
         elif args.op in ("status", "verify"):
-            _github_status_out(github.status(verify=args.op == "verify"), args.json)
-            _out("Validation tools: " + ", ".join(f"{k} {'yes' if v else 'MISSING'}" for k, v in validators.available().items()))
+            report = github.status(verify=args.op == "verify")
+            tools = validators.available()
+            if args.json:  # pure JSON: the web console parses this output
+                return _github_status_out({**report, "validation_tools": tools}, True)
+            _github_status_out(report, False)
+            _out("Validation tools: " + ", ".join(f"{k} {'yes' if v else 'MISSING'}" for k, v in tools.items()))
         elif args.op == "setup":
             github.setup(repo=args.repo or "", base=args.base or "", reviewers=args.reviewer or [], org=args.org or "", port=args.port,
                          interactive=not args.yes and sys.stdin.isatty(), open_browser=not args.no_browser, reconnect=args.reconnect)

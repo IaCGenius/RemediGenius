@@ -474,3 +474,22 @@ def test_boot_installs_and_enables_the_github_tab_next_to_the_knowledge_tab():
     assert "'rg-github'" in source and "dashboard-plugins/rg-github" in source and "OPERATOR_TOKEN_IN_CONTAINER" in source
     assert "for name in ('rg-knowledge', 'rg-github')" in source
     assert "= 3 ]" in (ROOT / "tools/spot_release_test.py").read_text(encoding="utf-8")                # the release test expects three RemediGenius plugins
+
+
+# ---------------------------------------------------------------- the console parses the desk's output: it must be pure JSON
+
+@pytest.mark.parametrize("argv", [["github", "status", "--json"], ["github", "verify", "--json"], ["github", "web-install", "--json"]])
+def test_the_commands_the_console_calls_print_nothing_but_json(argv, home, monkeypatch, capsys):  # noqa: F811
+    from rgtriage import cli
+    monkeypatch.setenv("RGGITHUB_HOME", str(home / "github"))
+    cli.main(argv)
+    out = capsys.readouterr().out
+    assert isinstance(json.loads(out), dict)                                                       # one JSON document, no extra lines
+
+
+def test_status_json_carries_the_tool_availability_for_the_page(home, monkeypatch, capsys):  # noqa: F811
+    from rgtriage import cli
+    monkeypatch.setenv("RGGITHUB_HOME", str(home / "github"))
+    cli.main(["github", "status", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["state"] == "Disconnected" and set(data["validation_tools"]) == {"terraform", "tflint", "cfn-lint"}

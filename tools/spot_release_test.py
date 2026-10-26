@@ -94,16 +94,17 @@ if [ -x /usr/local/bin/rgdesk ]; then
   tk=/data/rggithub/operator.token; tc=/data/hermes/.rg-operator-token
   check "console setup token: both copies private to the desk user and identical" $( [ "$(stat -c '%a %u' $tk)" = "600 10000" ] && [ "$(stat -c '%a %u' $tc)" = "600 10000" ] && cmp -s $tk $tc; echo $?) "$(stat -c '%a' $tk) $(stat -c '%a' $tc)"
   tab=/data/hermes/plugins/rg-github/dashboard; check "GitHub tab plugin installed" $([ -s $tab/dist/index.js ] && [ -s $tab/plugin_api.py ] && [ -s $tab/manifest.json ]; echo $?) "$(ls $tab 2>&1 | tr '\n' ' ')"
-  UP=$(python3 -c "import json;d=json.load(open('/data/hermes/remedigenius-login.json'));print(d['username']+':'+d['password'])")
+  JAR=$(mktemp); python3 -c "import json;d=json.load(open('/data/hermes/remedigenius-login.json'));print(json.dumps({'provider':'basic','username':d['username'],'password':d['password'],'next':''}))" > $JAR.body
+  curl -s -c $JAR -H 'Content-Type: application/json' -X POST --data @$JAR.body http://127.0.0.1:9120/auth/password-login > /dev/null; rm -f $JAR.body
   a=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9120/api/plugins/rg-github/status)
   check "GitHub tab API requires the dashboard login" $([ "$a" = 401 ] || [ "$a" = 403 ]; echo $?) "without login: http $a"
-  b=$(curl -s -u "$UP" http://127.0.0.1:9120/api/plugins/rg-github/status)
-  check "GitHub tab API returns the connection status" $(echo "$b" | grep -q '"state": *"Disconnected"'; echo $?) "$(echo "$b" | cut -c1-90)"
-  c=$(curl -s -u "$UP" -H 'Content-Type: application/json' -X POST -d '{}' http://127.0.0.1:9120/api/plugins/rg-github/begin)
+  b=$(curl -s -b $JAR http://127.0.0.1:9120/api/plugins/rg-github/status)
+  check "GitHub tab API returns the connection status (after login)" $(echo "$b" | grep -q '"state": *"Disconnected"'; echo $?) "$(echo "$b" | cut -c1-90)"
+  c=$(curl -s -b $JAR -H 'Content-Type: application/json' -X POST -d '{}' http://127.0.0.1:9120/api/plugins/rg-github/begin)
   check "Connect GitHub starts: github.com target, and GitHub is told to return to this console" $( (echo "$c" | grep -q 'https://github.com/settings/apps/new?state=' && echo "$c" | grep -q '127.0.0.1:9120/api/plugins/rg-github/callback' && ! echo "$c" | grep -qi 'BEGIN'); echo $?) "$(echo "$c" | cut -c1-70)"
-  d=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -u "$UP" "http://127.0.0.1:9120/api/plugins/rg-github/callback?code=abcdefgh1234&state=forged")
+  d=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -b $JAR "http://127.0.0.1:9120/api/plugins/rg-github/callback?code=abcdefgh1234&state=forged")
   check "a forged GitHub callback is refused and the page is shown with the reason" $(echo "$d" | grep -q '^303 .*github?error='; echo $?) "$(echo "$d" | cut -c1-110)"
-  e=$(curl -s -o /dev/null -w '%{http_code}' -u "$UP" -H 'Content-Type: application/json' -X POST -d '{"repo":"a/b; rm","base":"dev","reviewers":["x"]}' http://127.0.0.1:9120/api/plugins/rg-github/configure)
+  e=$(curl -s -o /dev/null -w '%{http_code}' -b $JAR -H 'Content-Type: application/json' -X POST -d '{"repo":"a/b; rm","base":"dev","reviewers":["x"]}' http://127.0.0.1:9120/api/plugins/rg-github/configure)
   check "the GitHub tab validates what it is given" $([ "$e" = 400 ]; echo $?) "http $e"
   s2=$(docker exec --user 10000:10000 remedigenius python -c "
 import json,socket
@@ -117,6 +118,7 @@ import importlib.util as u
 s=u.spec_from_file_location('p','/opt/data/profiles/remedigenius/plugins/rg-triage/__init__.py');m=u.module_from_spec(s);s.loader.exec_module(m)
 print(m.on_pre_tool_call('read_file',{'path':'/opt/data/.rg-operator-token'}).get('action'))" 2>&1)
   check "the agent's file tool is blocked from reading the setup token" $([ "$r2" = block ]; echo $?) "$r2"
+  rm -f $JAR
   # --- the untrusted-tools boundary (PR #19 finding 1): validation runs as its own user, away from the key and policy
   vs=$(systemctl is-active remedigenius-validate); vpid=$(systemctl show -p MainPID --value remedigenius-validate); vuid=$(ps -o uid= -p "$vpid" 2>/dev/null | tr -d ' ')
   check "validation service runs as its own user (10002)" $([ "$vs" = active ] && [ "$vuid" = 10002 ]; echo $?) "$vs uid=$vuid"

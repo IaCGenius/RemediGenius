@@ -172,7 +172,11 @@
         h("dt", null, "Development branch"), h("dd", null, st.base || "not chosen yet"),
         h("dt", null, "Feature branches"), h("dd", null, st.branch_prefix || "feature/remedigenius/"),
         h("dt", null, "Human reviewers"), h("dd", null, (st.reviewers || []).join(", ") || "not set"),
-        h("dt", null, "Can create pull requests"), h("dd", null, st.writes_enabled ? "Yes" : "No")),
+        h("dt", null, "Can create pull requests"), h("dd", null, st.writes_enabled ? "Yes" : "No"),
+        st.validation_tools ? h("dt", null, "Checks before a PR") : null,
+        st.validation_tools ? h("dd", null, Object.keys(st.validation_tools).map(function (k) {
+          return k + (st.validation_tools[k] ? "" : " (missing: changes touching those files are reported as not validated)");
+        }).join(", ")) : null),
       st.remedy ? h(Notice, { tone: s.key === "ready" ? "info" : "warn", text: "Next step: " + st.remedy }) : null,
       h(Checks, { protection: st.protection }),
       h("div", { className: "rgg-row rgg-wrap" },
