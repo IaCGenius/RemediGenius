@@ -55,7 +55,7 @@ check "services active" $(echo "$s" | grep -qv -e inactive -e failed; echo $?) "
 v=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' /opt/rgtriage/src/rgtriage/__init__.py)
 check "rgtriage version" $([ "$v" = "__VERSION__" ]; echo $?) "$v"
 p=$( ($H -p remedigenius plugins list; $H -p default plugins list) 2>&1 | grep -oE "rg-[a-z-]+ +│ +enabled +│ +[0-9.]+" | sed -E 's/[^a-z0-9.-]+/ /g' | sort -u | tr '\n' ';')
-check "plugins enabled at release version" $([ "$(echo "$p" | grep -o "enabled __VERSION__" | wc -l)" = 2 ]; echo $?) "$p"
+check "plugins enabled at release version" $([ "$(echo "$p" | grep -o "enabled __VERSION__" | wc -l)" = 3 ]; echo $?) "$p"
 k=$($H -p remedigenius skills list 2>&1 | grep -oE "rg-[a-z-]+" | sort -u | tr '\n' ' ')
 check "skills load" $([ "$k" = "__SKILLS__ " ]; echo $?) "$k"
 c=$(grep -h _config_version /data/hermes/profiles/remedigenius/config.yaml)
@@ -90,6 +90,33 @@ print(m.handle({'action':'github','op':'publish','ref':'x','files':['/etc/passwd
   check "agent publish without a connected repository is refused" $(echo "$t" | grep -qE "DENIED|Blocked|not enabled|GitHub is not connected|not a file"; echo $?) "$t"
 else check "rgdesk wrapper installed" 1 "missing"; fi
 if [ -x /usr/local/bin/rgdesk ]; then
+  # --- the GitHub tab (web console): setup goes through the dashboard, which holds a setup token the agent never has
+  tk=/data/rggithub/operator.token; tc=/data/hermes/.rg-operator-token
+  check "console setup token: both copies private to the desk user and identical" $( [ "$(stat -c '%a %u' $tk)" = "600 10000" ] && [ "$(stat -c '%a %u' $tc)" = "600 10000" ] && cmp -s $tk $tc; echo $?) "$(stat -c '%a' $tk) $(stat -c '%a' $tc)"
+  tab=/data/hermes/plugins/rg-github/dashboard; check "GitHub tab plugin installed" $([ -s $tab/dist/index.js ] && [ -s $tab/plugin_api.py ] && [ -s $tab/manifest.json ]; echo $?) "$(ls $tab 2>&1 | tr '\n' ' ')"
+  UP=$(python3 -c "import json;d=json.load(open('/data/hermes/remedigenius-login.json'));print(d['username']+':'+d['password'])")
+  a=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9120/api/plugins/rg-github/status)
+  check "GitHub tab API requires the dashboard login" $([ "$a" = 401 ] || [ "$a" = 403 ]; echo $?) "without login: http $a"
+  b=$(curl -s -u "$UP" http://127.0.0.1:9120/api/plugins/rg-github/status)
+  check "GitHub tab API returns the connection status" $(echo "$b" | grep -q '"state": *"Disconnected"'; echo $?) "$(echo "$b" | cut -c1-90)"
+  c=$(curl -s -u "$UP" -H 'Content-Type: application/json' -X POST -d '{}' http://127.0.0.1:9120/api/plugins/rg-github/begin)
+  check "Connect GitHub starts: github.com target, and GitHub is told to return to this console" $( (echo "$c" | grep -q 'https://github.com/settings/apps/new?state=' && echo "$c" | grep -q '127.0.0.1:9120/api/plugins/rg-github/callback' && ! echo "$c" | grep -qi 'BEGIN'); echo $?) "$(echo "$c" | cut -c1-70)"
+  d=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -u "$UP" "http://127.0.0.1:9120/api/plugins/rg-github/callback?code=abcdefgh1234&state=forged")
+  check "a forged GitHub callback is refused and the page is shown with the reason" $(echo "$d" | grep -q '^303 .*github?error='; echo $?) "$(echo "$d" | cut -c1-110)"
+  e=$(curl -s -o /dev/null -w '%{http_code}' -u "$UP" -H 'Content-Type: application/json' -X POST -d '{"repo":"a/b; rm","base":"dev","reviewers":["x"]}' http://127.0.0.1:9120/api/plugins/rg-github/configure)
+  check "the GitHub tab validates what it is given" $([ "$e" = 400 ]; echo $?) "http $e"
+  s2=$(docker exec --user 10000:10000 remedigenius python -c "
+import json,socket
+t=open('/opt/data/.rg-operator-token').read().strip()
+for tok in (t,'x'*43,''):
+    c=socket.socket(socket.AF_UNIX); c.connect('/run/rgtriage/rgtriage.sock'); c.sendall((json.dumps({'args':['github','web-install','--json'],'operator':tok})+'\n').encode())
+    print(json.loads(c.makefile().readline())['rc'], end=' ')" 2>&1)
+  check "setup operations work over the real socket only with the setup token" $([ "$s2" = "0 2 2 " ]; echo $?) "$s2"
+  r2=$(docker exec --user 10000:10000 remedigenius python -c "
+import importlib.util as u
+s=u.spec_from_file_location('p','/opt/data/profiles/remedigenius/plugins/rg-triage/__init__.py');m=u.module_from_spec(s);s.loader.exec_module(m)
+print(m.on_pre_tool_call('read_file',{'path':'/opt/data/.rg-operator-token'}).get('action'))" 2>&1)
+  check "the agent's file tool is blocked from reading the setup token" $([ "$r2" = block ]; echo $?) "$r2"
   # --- the untrusted-tools boundary (PR #19 finding 1): validation runs as its own user, away from the key and policy
   vs=$(systemctl is-active remedigenius-validate); vpid=$(systemctl show -p MainPID --value remedigenius-validate); vuid=$(ps -o uid= -p "$vpid" 2>/dev/null | tr -d ' ')
   check "validation service runs as its own user (10002)" $([ "$vs" = active ] && [ "$vuid" = 10002 ]; echo $?) "$vs uid=$vuid"

@@ -28,6 +28,8 @@ DESK = Path('/data/rgtriage')
 VUID = 10002                              # validation service user: runs Terraform, tflint and cfn-lint; no access to the GitHub key
 VALIDATE_HOME = Path('/var/lib/rgvalidate')
 VALIDATE_SOCKET = Path('/run/rgvalidate/validate.sock')
+OPERATOR_TOKEN = Path('/data/rggithub/operator.token')   # the desk's copy of the web console's setup secret (desk-only)
+OPERATOR_TOKEN_IN_CONTAINER = '/opt/data/.rg-operator-token'  # the dashboard backend reads this one; the agent's tools have no way to call the setup routes
 GITHUB = Path('/data/rggithub')           # GitHub App key and policy: desk-only, never mounted into the agent container
 IAC = Path('/data/iac')
 RUNDIR = Path('/run/rgtriage')
@@ -152,6 +154,17 @@ def restore_state(cfg):
     link = Path('/opt/data')
     if not link.is_symlink():
         link.symlink_to(HERMES_HOME)
+
+
+def write_operator_token():
+    """A fresh secret every boot for the web console's GitHub setup. The desk accepts the connect, configure and disconnect operations over
+    its socket only from a caller that presents it; the agent's own tool never does, and nothing the agent can call reaches the dashboard's
+    routes. Both copies are 0600 and owned by the desk and container user."""
+    token = secrets.token_urlsafe(32)
+    for path in (OPERATOR_TOKEN, HERMES_HOME / '.rg-operator-token'):
+        path.write_text(token)
+        path.chmod(0o600)
+        os.chown(path, UID, UID)
 
 
 def member_accounts(cfg) -> list[dict]:
@@ -313,6 +326,12 @@ def sync_profile(source: Path, hermes_home: Path):
                                                 'inbox': '/opt/data/knowledge-inbox', 'files': '/opt/data/knowledge-files',
                                                 'profile': PROFILE, 'improve': '/opt/data/rg-improve',
                                                 'package': '/opt/remedigenius-package'}))
+    # GitHub tab (dashboard plugin): setup steps go to the desk through its socket with the operator token (read from the file below).
+    github_tab = hermes_home / 'plugins' / 'rg-github'
+    if github_tab.exists():
+        shutil.rmtree(github_tab)
+    shutil.copytree(package / 'dashboard-plugins/rg-github', github_tab, ignore=shutil.ignore_patterns('__pycache__', 'local.json'))
+    (github_tab / 'local.json').write_text(json.dumps({'socket': SOCKET.as_posix(), 'operator_token_file': OPERATOR_TOKEN_IN_CONTAINER}))
     folders = [hermes_home / 'proposals' / 'knowledge', hermes_home / 'knowledge-inbox', hermes_home / 'knowledge-files',
                hermes_home / 'rg-improve', hermes_home / 'rg-traces', hermes_home / WIKI.name]
     for folder in folders:
@@ -321,7 +340,7 @@ def sync_profile(source: Path, hermes_home: Path):
     sys.path.insert(0, str(tab))
     from improve.runner import apply_approved
     print(f"approved skill improvements: {json.dumps(apply_approved(hermes_home / 'rg-improve', package / 'skills', profile / 'skills'))}")
-    for path in [profile, *profile.rglob('*'), hermes_home / 'plugins', tab, *tab.rglob('*'), *folders]:
+    for path in [profile, *profile.rglob('*'), hermes_home / 'plugins', tab, *tab.rglob('*'), github_tab, *github_tab.rglob('*'), *folders]:
         if hasattr(os, 'lchown'):
             os.lchown(path, UID, UID)
         if not path.is_symlink():
@@ -337,7 +356,8 @@ def units(cfg: dict) -> dict:
            f'Environment=RGTRIAGE_WIKI_DIR={WIKI.as_posix()}\n'
            f'Environment=RGGITHUB_HOME={GITHUB.as_posix()}\n'
            f'Environment=RGGITHUB_IAC_DIR={IAC.as_posix()}\n'
-           f'Environment=RGVALIDATE_SOCKET={VALIDATE_SOCKET.as_posix()}\n')
+           f'Environment=RGVALIDATE_SOCKET={VALIDATE_SOCKET.as_posix()}\n'
+           f'Environment=RGTRIAGE_OPERATOR_TOKEN_FILE={OPERATOR_TOKEN.as_posix()}\n')
     harden = (f'User={UID}\nGroup={UID}\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\n'
               f'ReadWritePaths={DESK.as_posix()} -{WIKI.as_posix()} {GITHUB.as_posix()} {IAC.as_posix()}\n')
     python = (VENV / 'bin/python').as_posix()
@@ -510,8 +530,12 @@ from ruamel.yaml import YAML
 yaml, path = YAML(), Path('/opt/data/profiles/%s/config.yaml')
 data = yaml.load(path.read_text())
 enabled = data.setdefault('plugins', {}).setdefault('enabled', [])
-if 'rg-knowledge' not in enabled:
-    enabled.append('rg-knowledge')
+changed = False
+for name in ('rg-knowledge', 'rg-github'):
+    if name not in enabled:
+        enabled.append(name)
+        changed = True
+if changed:
     with path.open('w') as f:
         yaml.dump(data, f)
 ''' % PROFILE
@@ -520,7 +544,8 @@ if 'rg-knowledge' not in enabled:
 def enable_knowledge_tab():
     """The dashboard serves user plugins only when enabled: in the profile (tab list) and at its launch scope (API)."""
     in_container('python', '-c', ENABLE_PROFILE_PLUGIN)
-    in_container('hermes', '-p', 'default', 'plugins', 'enable', 'rg-knowledge', capture_output=True)
+    for name in ('rg-knowledge', 'rg-github'):
+        in_container('hermes', '-p', 'default', 'plugins', 'enable', name, capture_output=True)
 
 
 KANBAN_OFF = ('kanban.dispatch_in_gateway', 'kanban.auto_decompose')
@@ -558,6 +583,7 @@ def main():
     cfg = json.loads((ROOT / 'config.json').read_text())
     install_runtime()
     restore_state(cfg)
+    write_operator_token()
     write_desk_profile(cfg)
     network()
     WIKI.mkdir(parents=True, exist_ok=True)  # before the desk starts: its ReadWritePaths names this folder

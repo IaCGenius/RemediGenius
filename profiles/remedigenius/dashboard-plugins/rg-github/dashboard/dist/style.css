@@ -1,0 +1,65 @@
+/* RemediGenius-CE GitHub tab. Uses the dashboard's theme tokens so it follows the active theme. */
+.rgg-page {
+  --rgg-card: var(--color-card, #12181d);
+  --rgg-fg: var(--color-card-foreground, var(--color-foreground, #e8e6df));
+  --rgg-muted: var(--color-muted-foreground, #9aa3a8);
+  --rgg-line: var(--color-border, rgba(127, 127, 127, 0.28));
+  --rgg-accent: var(--color-primary, #4aa3df);
+  --rgg-accent-fg: var(--color-primary-foreground, #08131a);
+  --rgg-bad: var(--color-destructive, #e5534b);
+  --rgg-ok: var(--color-success, #3fb67f);
+  --rgg-warn: var(--color-warning, #d4a72c);
+  --rgg-soft: color-mix(in srgb, var(--rgg-fg) 6%, transparent);
+  color: var(--rgg-fg);
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 8px 4px 40px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.rgg-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.rgg-header h1 { font-size: 22px; margin: 0 0 2px; }
+.rgg-header p { margin: 0; max-width: 640px; }
+.rgg-stack { display: flex; flex-direction: column; gap: 14px; }
+.rgg-card { background: var(--rgg-card); border: 1px solid var(--rgg-line); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+.rgg-card h2 { margin: 0 0 8px; font-size: 16px; }
+.rgg-card h3 { margin: 14px 0 6px; font-size: 14px; }
+.rgg-card p { margin: 6px 0; }
+.rgg-muted { color: var(--rgg-muted); }
+.rgg-small { font-size: 12px; }
+.rgg-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.rgg-between { justify-content: space-between; margin-top: 0; }
+.rgg-wrap { flex-wrap: wrap; }
+.rgg-steps, .rgg-facts { margin: 8px 0; padding-left: 22px; }
+.rgg-steps li, .rgg-facts li { margin: 4px 0; }
+.rgg-form { display: flex; flex-direction: column; gap: 12px; }
+.rgg-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--rgg-muted); margin-top: 10px; }
+.rgg-form .rgg-field { margin-top: 0; }
+.rgg-check { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.rgg-input { background: var(--rgg-soft); color: var(--rgg-fg); border: 1px solid var(--rgg-line); border-radius: 6px; padding: 7px 9px; font: inherit; max-width: 520px; }
+.rgg-input:focus { outline: 2px solid var(--rgg-accent); outline-offset: 1px; }
+.rgg-btn { display: inline-block; background: var(--rgg-soft); color: var(--rgg-fg); border: 1px solid var(--rgg-line); border-radius: 6px; padding: 7px 14px; font: inherit; cursor: pointer; text-decoration: none; }
+.rgg-btn:hover:not(:disabled) { border-color: var(--rgg-accent); }
+.rgg-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.rgg-btn-primary { background: var(--rgg-accent); color: var(--rgg-accent-fg); border-color: var(--rgg-accent); font-weight: 600; }
+.rgg-btn-danger { color: var(--rgg-bad); border-color: var(--rgg-bad); }
+.rgg-pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; white-space: nowrap; }
+.rgg-pill-ok { color: var(--rgg-ok); }
+.rgg-pill-warn { color: var(--rgg-warn); }
+.rgg-pill-bad { color: var(--rgg-bad); }
+.rgg-pill-muted { color: var(--rgg-muted); }
+.rgg-notice { border: 1px solid var(--rgg-line); border-left-width: 4px; border-radius: 6px; padding: 10px 12px; margin: 12px 0; background: var(--rgg-soft); }
+.rgg-notice-error { border-left-color: var(--rgg-bad); }
+.rgg-notice-warn { border-left-color: var(--rgg-warn); }
+.rgg-notice-ok { border-left-color: var(--rgg-ok); }
+.rgg-notice-info { border-left-color: var(--rgg-accent); }
+.rgg-dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 10px 0; }
+.rgg-dl dt { color: var(--rgg-muted); }
+.rgg-dl dd { margin: 0; overflow-wrap: anywhere; }
+.rgg-checks ul { list-style: none; margin: 0; padding: 0; }
+.rgg-checks li { margin: 4px 0; }
+.rgg-dot { display: inline-block; width: 18px; text-align: center; font-weight: 700; }
+.rgg-dot-ok { color: var(--rgg-ok); }
+.rgg-dot-bad { color: var(--rgg-bad); }
+.rgg-dot-warn { color: var(--rgg-warn); }
+@media (max-width: 640px) { .rgg-dl { grid-template-columns: 1fr; } }

@@ -64,8 +64,11 @@ answer that (rg-triage) and offer the fix.
      `title`, `topic` (a short task name), `evidence`, `change`, `effect`, `risk` and `rollback`. Hermes asks the user to
      approve the call. Use the full-file proposals you saved in step 5, not the `.patch`, and the repository path the
      `fix` output showed. Put only sanitized evidence in the PR: no secrets, no 12-digit account ids.
-   - Any other state: tell the user the state and the remedy from `status`, and keep the proposal as files (step 5).
-     Never try another route to GitHub.
+   - `Disconnected`: tell the user to open the **GitHub tab** in this console (left menu) and click **Connect GitHub**: two clicks on
+     github.com, then pick the repository, development branch and reviewers on that page. You cannot connect GitHub yourself and must
+     not ask for tokens, keys or passwords in chat. Keep the proposal as files (step 5) meanwhile.
+   - Any other state: tell the user the state and the remedy from `status` (the GitHub tab shows the same, with buttons), and keep the
+     proposal as files (step 5). Never try another route to GitHub.
    - The desk validates the change on a copy of the repository (Terraform, CloudFormation and YAML/JSON checks), pushes to
      a `feature/remedigenius/...` branch and opens or updates ONE PR into the configured development branch. If validation
      fails, nothing is pushed: show the errors, fix the proposal and publish again. A check marked `skipped` was NOT run;

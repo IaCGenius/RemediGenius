@@ -629,12 +629,27 @@ def cmd_github(args):
             _out(("PASS: " if out["ok"] else "FAIL: ") + out["note"])
             if not out["ok"]:
                 sys.exit(1)
+        elif args.op == "web-begin":  # the web console's connect flow: operator-only, JSON in and out
+            _json(github.begin_connect(args.redirect or "", args.setup_url or "", owner=args.org or "", reconnect=args.reconnect))
+        elif args.op == "web-finish":
+            _json(github.finish_connect(args.code or "", args.state or ""))
+        elif args.op == "web-install":
+            _json(github.install_status())
+        elif args.op == "web-repos":
+            _json(github.web_repos())
+        elif args.op == "web-branches":
+            _json(github.web_branches(args.repo or ""))
         elif args.op == "refresh":
             result = github.refresh()
+            if args.json:
+                return _json(result)
             _out(f"Repository {result['repo']} refreshed from {result['branch']} @ {result['commit'][:10]}: {result['files']} files mirrored read-only, "
                  f"IaC found: {', '.join(result['iac']) or 'none'}; knowledge: {result['knowledge']}")
         elif args.op == "disconnect":
-            for note in github.disconnect(uninstall=not args.keep_installation)["notes"]:
+            outcome = github.disconnect(uninstall=not args.keep_installation)
+            if args.json:
+                return _json(outcome)
+            for note in outcome["notes"]:
                 _out(note)
         elif args.op == "publish":
             if not args.ref or not args.file:
@@ -1073,10 +1088,12 @@ def main(argv=None):
     p.add_argument("--file", action="append", required=True, help="proposed file, optionally =target-name (repeatable)")
     p.set_defaults(func=cmd_validate)
     p = sub.add_parser("github", help="GitHub App connection and development PRs (connect, configure, disconnect: operator only)")
-    p.add_argument("op", choices=["status", "verify", "refresh", "setup", "probe", "connect", "configure", "disconnect", "publish", "pr-status"])
+    p.add_argument("op", choices=["status", "verify", "refresh", "setup", "probe", "connect", "configure", "disconnect", "publish", "pr-status",
+                                "web-begin", "web-finish", "web-install", "web-repos", "web-branches"])
     p.add_argument("--org", help="connect: create the App under this organization instead of your account")
     p.add_argument("--port", type=int, default=8743, help="connect: local port for GitHub's redirect")
     p.add_argument("--no-browser", action="store_true")
+    p.add_argument("--redirect"); p.add_argument("--setup-url"); p.add_argument("--code"); p.add_argument("--state")
     p.add_argument("--confirm-disposable", metavar="OWNER/REPO", help="probe: name the DISPOSABLE test repository to run real forbidden-operation attempts against")
     p.add_argument("--yes", action="store_true", help="setup: never prompt; use the flags (and the only choice when there is one)")
     p.add_argument("--reconnect", action="store_true", help="connect: create a new App even if one is connected")

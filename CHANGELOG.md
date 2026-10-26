@@ -22,6 +22,10 @@
   mirrors the development branch read-only for `fix` (secrets, state files and `.tfvars` are left out) and writes a
   **Repository** page into the Knowledge tab. Published PRs are linked to the fix record automatically.
 - `rgdesk`: operators run the desk CLI as the desk user over SSM (`sudo rgdesk github status`).
+- **A GitHub tab in the web console** (Spot): Connect GitHub (two clicks on github.com, then back to the page), choose the repository, development
+  branch and human reviewers from drop-downs, see each protection as present or missing with the next step, and Check, Refresh, Change,
+  Reconnect and Disconnect, all from the browser. The agent cannot use it: the setup operations need a secret regenerated every boot that only
+  the dashboard backend reads, and the agent now tells people to use the tab when GitHub is not connected.
 - **One guided setup command**: `python tools/github_connect_spot.py --stack <name>` runs `sudo rgdesk github setup`: prerequisites,
   App creation and installation (your two clicks on github.com), repository, development branch and reviewers, and a protection report with
   the next step. It resumes if interrupted; `connect` self-heals after an uninstall or a deleted App.

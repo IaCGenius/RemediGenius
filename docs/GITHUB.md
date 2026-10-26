@@ -7,7 +7,28 @@ Available on the **Spot** deployment (the App key lives where the agent containe
 an existing Hermes the desk's state folder is readable by the agent, so GitHub shows `Blocked` and explains why; proposals and Kanban
 cards still work there.
 
-## Set it up: one command
+## Set it up in the web console
+
+Open the console and click the **GitHub** tab (next to Knowledge). Everything happens on that page:
+
+1. **Connect GitHub.** Click the button (add your organization's name first if the App should belong to it). You go to github.com.
+2. **Create GitHub App:** GitHub shows a pre-filled page; click the green button once. GitHub brings you back to the console by itself.
+3. **Install:** the page shows an **Open GitHub to install** button. On GitHub choose **Only select repositories**, pick just the repository
+   RemediGenius may use, and click **Install**. The page notices on its own and moves on.
+4. **Choose the repository, development branch and human reviewers** from the drop-downs (reviewers by GitHub name, or `org/team`; bots are
+   refused). **Save and check.**
+5. The page shows the result: whether pull requests can be created, and each protection on your development and production branches as present
+   or missing, with the next step. **Check protection now**, **Refresh repository**, **Change repository, branch or reviewers**,
+   **Reconnect** and **Disconnect** are buttons on the same page.
+
+Steps 2 and 3 are your consent on github.com; nothing secret is shown or copied. GitHub sends the App's key straight to the desk on the host,
+never to the browser, the dashboard process or the agent. The page is for people only: the agent cannot connect, change or disconnect GitHub
+(if you ask it to, it points you to this tab). If the repository has no development branch yet, the page shows the one command an
+administrator runs, with their own login, to create it. If it has no protections, apply [`deploy/github`](../deploy/github/README.md) as a
+repository administrator and press **Check protection now**.
+
+## Set it up from the command line (alternative)
+
 
 From your computer (needs the AWS CLI with the Session Manager plugin and your AWS credentials for the stack):
 
@@ -84,6 +105,7 @@ GitHub App permissions cannot separate "open a PR" from "approve or merge a PR",
 | Workflows, CODEOWNERS, `.git`, state files and keys cannot be changed | The desk refuses those paths in a proposal |
 | Reviewers | Users by login and teams by slug within the repository's organization, as separate allowlists |
 | The agent never holds a token | The App key is in `/data/rggithub` (mode 0700, desk user only, not mounted into any container); installation tokens last one hour, are narrowed to the one repository and the needed permission, and are never stored |
+| Only a person can connect, change or disconnect GitHub | The setup steps run through the dashboard, behind its login, and the desk accepts them over its socket only with a secret regenerated at every boot that only the dashboard's backend reads (the file tool is blocked from it). The agent's tool names a fixed set of operations that excludes them, and has no HTTP or shell tool to reach the page |
 | Untrusted checking tools never run next to the key | A separate validation service with its own OS user cannot read or modify the key or policy, and cannot reach the instance credentials. The agent-facing `validate` command also only accepts proposals from the proposals folder, modules from approved IaC folders, and destinations inside its scratch copy |
 | Instructions inside repository files, issues or PR comments | Treated as data. Repository, branch and reviewers come only from the operator's policy file |
 
@@ -97,7 +119,7 @@ You can revoke at any time: `sudo rgdesk github disconnect` removes the installa
 (`--keep-installation` only deletes the local files), and prints the link to delete the App itself. Or on GitHub: Settings, Applications,
 Installed GitHub Apps, **Uninstall** (or suspend). After revoking, writes stop immediately.
 
-**The recovery command is always the same:** `sudo rgdesk github connect --no-browser` (or run the setup command again). It first asks GitHub
+**The recovery is always the same:** press **Reconnect GitHub** on the GitHub tab (or `sudo rgdesk github connect --no-browser`, or the setup command again). It first asks GitHub
 what became of the App, then does the right thing:
 
 | What happened | What `connect` does |

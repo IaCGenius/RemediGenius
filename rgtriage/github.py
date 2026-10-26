@@ -20,6 +20,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import html
+import hmac
 import http.server
 import json
 import os
@@ -530,7 +531,8 @@ def status(client: Client | None = None, verify: bool = False) -> dict:
     out = {"state": "Disconnected", "writes_enabled": False, "identity": None, "repo": policy.get("repo"), "base": policy.get("base"),
            "branch_prefix": policy.get("branch_prefix"), "reviewers": policy.get("reviewers", []), "remedy": ""}
     if not app.get("app_id") or not (key_path().is_file() or client is not None):
-        out["remedy"] = "Run the guided setup: `sudo rgdesk github setup` on the instance (from your computer: `python tools/github_connect_spot.py --stack <name>`)."
+        out["remedy"] = ("Open the GitHub tab in the console and click Connect GitHub. (Command line instead: `sudo rgdesk github setup` on the instance, or from your "
+                         "computer `python tools/github_connect_spot.py --stack <name>`.)")
         return out
     out["identity"] = f"{app.get('slug')}[bot] (App {app.get('app_id')}, owner {app.get('owner')})"
     if not app.get("installation_id"):
@@ -629,31 +631,193 @@ def disconnect(uninstall: bool = True, transport=None, sign=None) -> dict:
 
 # ------------------------------------------------------------------ connect: App Manifest flow
 
-def manifest(name: str, redirect_url: str, homepage: str) -> dict:
-    return {"name": name, "url": homepage, "redirect_url": redirect_url, "public": False, "default_permissions": APP_PERMISSIONS,
+def manifest(name: str, redirect_url: str, homepage: str, setup_url: str = "") -> dict:
+    data = {"name": name, "url": homepage, "redirect_url": redirect_url, "public": False, "default_permissions": APP_PERMISSIONS,
             "default_events": [], "description": "RemediGenius-CE: proposes IaC fixes as pull requests into a development branch. Never merges or approves."}
+    if setup_url:
+        data["setup_url"] = setup_url
+    return data
+
+
+def app_install_url(slug_: str) -> str:
+    return f"https://github.com/apps/{slug_}/installations/new"
+
+
+def create_app_from_code(code: str, owner: str = "", post=None) -> str:
+    """Exchange GitHub's one-time manifest code for the App, save its key and identity (0600, desk-only) and return the App's slug.
+    Used by the command line and the web console alike. Every failure is a GitHubError with a sanitized, actionable message and leaves
+    nothing half-saved; the message never contains the key or the code."""
+    post = post or _http
+    try:
+        status_, _, raw = post("POST", f"{API}/app-manifests/{code}/conversions", {"Accept": "application/vnd.github+json", "User-Agent": "RemediGenius-CE"}, None)
+    except (urllib.error.URLError, TimeoutError, OSError, GitHubError) as exc:
+        raise GitHubError(f"could not reach GitHub to finish creating the App ({type(exc).__name__}); nothing was saved, connect again") from None
+    if status_ != 201:
+        raise GitHubError(_redact(_explain(status_, raw, "creating the App from the manifest"), []))
+    try:
+        data = json.loads(raw)
+        app_id, app_slug, pem = int(data["id"]), str(data["slug"]), str(data["pem"])
+        if not re.fullmatch(r"[A-Za-z0-9-]{1,80}", app_slug) or not pem.startswith("-----BEGIN"):
+            raise ValueError("unexpected shape")
+    except (ValueError, KeyError, TypeError):
+        raise GitHubError("GitHub's answer was not what a created App looks like, so nothing was saved. If an App named RemediGenius-CE-... "
+                          "was created, delete it at https://github.com/settings/apps and connect again") from None
+    try:
+        _write_private(key_path(), pem)
+        _write_private(home() / "app.json", json.dumps({"app_id": app_id, "slug": app_slug, "owner": (data.get("owner") or {}).get("login", owner or "personal"),
+                                                        "html_url": data.get("html_url")}, indent=1))
+    except OSError as exc:
+        for name in ("app.pem", "app.json"):
+            try:
+                (home() / name).unlink(missing_ok=True)  # leave no half-saved connection behind
+            except OSError:
+                pass
+        raise GitHubError(f"the App '{app_slug}' was created, but its key could not be saved ({exc.strerror or type(exc).__name__}). Delete the App at "
+                          f"https://github.com/settings/apps/{app_slug}/advanced and connect again") from None
+    return app_slug
+
+
+def plan_connection(reconnect: bool = False, transport=None) -> dict:
+    """What `connect` should do given what became of any existing App: create | resume | healthy | unreachable (see probe_connection)."""
+    existing = load_app()
+    if not (existing.get("app_id") and key_path().is_file()):
+        return {"action": "create", "message": ""}
+    verdict = probe_connection(existing, transport)
+    if verdict["state"] == "unreachable":
+        return {"action": "unreachable", "detail": verdict["detail"]}
+    if verdict["state"] == "healthy" and not reconnect:
+        return {"action": "healthy", "app": existing}
+    if verdict["state"] in ("not_installed", "reinstalled") and not reconnect:
+        return {"action": "resume", "app": existing, "message": "The App exists on GitHub but is not installed" +
+                (" any more" if existing.get("installation_id") else "") + "; resuming at the install step."}
+    message = ("The App no longer exists on GitHub (deleted, or its key was rejected): creating a replacement. Its old installation went away with it."
+               if verdict["state"] == "app_gone" else
+               "Creating a new App as asked; the previous App and its installation stay on GitHub until you remove them.")
+    return {"action": "create", "message": message, "forget": True}
+
+
+def _already_connected(app: dict) -> Denied:
+    return Denied(f"GitHub is already connected (App {app.get('slug')}). To replace it, run `rgtriage github disconnect` first, or "
+                  "`rgtriage github connect --reconnect` to create a new App (the old App and its installation stay on GitHub until you remove them).")
+
+
+# ---------------------------------------------------------------- the web console flow (the browser does what the CLI's local page does)
+
+PENDING_TTL = 3600
+CALLBACK_PATH = "/api/plugins/rg-github/callback"
+PAGE_PATH = "/github"
+
+
+def allowed_origin(origin: str) -> bool:
+    """The web console may only receive GitHub's redirect at a loopback address (the SSM tunnel) or an origin the operator listed in
+    RGGITHUB_ALLOWED_ORIGINS: GitHub's one-time code must never be sent to a host the operator did not choose."""
+    parsed = urllib.parse.urlparse(origin)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password or parsed.path not in ("", "/"):
+        return False
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    listed = [o.strip().rstrip("/") for o in os.environ.get("RGGITHUB_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+    return parsed.hostname in ("127.0.0.1", "localhost", "::1") or base in listed
+
+
+def _check_return_urls(redirect_url: str, setup_url: str) -> None:
+    red, setup = urllib.parse.urlparse(redirect_url), urllib.parse.urlparse(setup_url)
+    origin = f"{red.scheme}://{red.netloc}"
+    if (not allowed_origin(origin) or red.path != CALLBACK_PATH or red.query or red.fragment or f"{setup.scheme}://{setup.netloc}" != origin
+            or setup.path != PAGE_PATH or setup.fragment):
+        raise Denied("the return addresses must be this console's own loopback address (or an origin in RGGITHUB_ALLOWED_ORIGINS) and its GitHub page")
+
+
+def begin_connect(redirect_url: str, setup_url: str, owner: str = "", reconnect: bool = False, transport=None) -> dict:
+    """Step 1 of connecting from the console: returns what the browser posts to GitHub. Nothing secret leaves the desk."""
+    _check_return_urls(redirect_url, setup_url)
+    if owner and not re.fullmatch(OWNER, owner):
+        raise Denied("the organization name is not valid")
+    plan = plan_connection(reconnect, transport)
+    if plan["action"] == "unreachable":
+        raise GitHubError(f"cannot check the existing connection ({plan['detail']}); fix the network and try again")
+    if plan["action"] == "healthy":
+        raise _already_connected(plan["app"])
+    if plan["action"] == "resume":
+        app = plan["app"]
+        app.pop("installation_id", None)
+        app.pop("installed_on", None)
+        _write_private(home() / "app.json", json.dumps(app, indent=1))
+        return {"resume": True, "message": plan["message"], "slug": app["slug"], "install_url": app_install_url(app["slug"])}
+    if plan.get("forget"):
+        forget_connection()
+    state = secrets.token_urlsafe(24)
+    name = f"RemediGenius-CE-{secrets.token_hex(3)}"
+    _write_private(home() / "pending.json", json.dumps({"state_sha256": hashlib.sha256(state.encode()).hexdigest(), "owner": owner, "created": time.time(),
+                                                        "redirect_url": redirect_url}))
+    target = f"https://github.com/organizations/{urllib.parse.quote(owner)}/settings/apps/new" if owner else "https://github.com/settings/apps/new"
+    return {"resume": False, "message": plan.get("message", ""), "target": f"{target}?state={state}",
+            "manifest": manifest(name, redirect_url, "https://github.com/IaCGenius/RemediGenius", setup_url)}
+
+
+def finish_connect(code: str, state: str, transport=None) -> dict:
+    """Step 2: GitHub sent the browser back with a code. The state must be the one issued by step 1 (once, within an hour)."""
+    pending = _read_json(home() / "pending.json")
+    (home() / "pending.json").unlink(missing_ok=True)  # single use, whatever happens next
+    expected = pending.get("state_sha256", "")
+    if (not expected or not hmac.compare_digest(expected, hashlib.sha256(str(state).encode()).hexdigest())
+            or time.time() - float(pending.get("created", 0)) > PENDING_TTL):
+        raise Denied("this connection attempt expired or did not start here; start again with Connect GitHub")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,128}", str(code)):
+        raise Denied("GitHub did not send a valid code; start again")
+    slug_ = create_app_from_code(code, pending.get("owner", ""), transport)
+    return {"slug": slug_, "install_url": app_install_url(slug_)}
+
+
+def install_status(transport=None, sign=None) -> dict:
+    """Is the App installed yet? When it is, remember the installation. Called repeatedly by the console while the person installs."""
+    app = load_app()
+    if not (app.get("app_id") and key_path().is_file()):
+        return {"app": False, "installed": False}
+    client = Client({}, app, transport=transport, sign=sign)
+    status_, _, raw = client._raw("GET", "/app/installations", client.jwt(), None)
+    if status_ != 200:
+        raise GitHubError(_redact(_explain(status_, raw, "checking the installation"), []), status_)
+    installs = json.loads(raw)
+    if not installs:
+        return {"app": True, "installed": False, "slug": app["slug"], "install_url": app_install_url(app["slug"])}
+    if app.get("installation_id") not in [i["id"] for i in installs]:
+        app["installation_id"], app["installed_on"] = installs[0]["id"], (installs[0].get("account") or {}).get("login")
+        _write_private(home() / "app.json", json.dumps(app, indent=1))
+    return {"app": True, "installed": True, "slug": app["slug"], "account": app.get("installed_on")}
+
+
+def web_repos(transport=None, sign=None) -> dict:
+    return {"repos": installation_repos(load_app(), transport, sign)}
+
+
+def web_branches(repo: str, transport=None, sign=None) -> dict:
+    app = load_app()
+    if repo.lower() not in {r.lower() for r in installation_repos(app, transport, sign)}:
+        raise Denied(f"{repo} is not selected in the App installation")
+    branches, default = candidate_bases(repo, app, transport, sign)
+    return {"branches": branches, "default": default, "suggested": "dev" if "dev" in branches else (branches[0] if len(branches) == 1 else ""),
+            "admin_command": admin_branch_command(repo, "dev", default or "main") if not branches else ""}
 
 
 def connect(owner: str = "", port: int = 8743, open_browser: bool = True, timeout: int = 900, transport=None, say=print,
             reconnect: bool = False) -> dict:
     """Create the App through GitHub's manifest flow and wait for the installation. Runs on the host; the browser reaches
     http://localhost:<port> directly (or through an SSM port forward on Spot)."""
-    existing = load_app()
-    if existing.get("app_id") and key_path().is_file():
-        verdict = probe_connection(existing, transport)
-        if verdict["state"] == "unreachable":
-            raise GitHubError(f"cannot check the existing connection ({verdict['detail']}); fix the network and run connect again")
-        if verdict["state"] == "healthy" and not reconnect:
-            raise Denied(f"GitHub is already connected (App {existing.get('slug')}). To replace it, run `rgtriage github disconnect` first, or "
-                         "`rgtriage github connect --reconnect` to create a new App (the old App and its installation stay on GitHub until you remove them).")
-        if verdict["state"] in ("not_installed", "reinstalled") and not reconnect:
-            say("The App exists on GitHub but is not installed" + (" any more" if existing.get("installation_id") else "") + "; resuming at the install step.")
-            existing.pop("installation_id", None)
-            existing.pop("installed_on", None)
-            _write_private(home() / "app.json", json.dumps(existing, indent=1))
-            return wait_for_installation(existing, timeout, transport=transport, say=say)
-        say("The App no longer exists on GitHub (deleted, or its key was rejected): creating a replacement. Its old installation went away with it."
-            if verdict["state"] == "app_gone" else "Creating a new App as asked; the previous App and its installation stay on GitHub until you remove them.")
+    plan = plan_connection(reconnect, transport)
+    if plan["action"] == "unreachable":
+        raise GitHubError(f"cannot check the existing connection ({plan['detail']}); fix the network and run connect again")
+    if plan["action"] == "healthy":
+        raise _already_connected(plan["app"])
+    if plan["action"] == "resume":
+        say(plan["message"])
+        existing = plan["app"]
+        existing.pop("installation_id", None)
+        existing.pop("installed_on", None)
+        _write_private(home() / "app.json", json.dumps(existing, indent=1))
+        return wait_for_installation(existing, timeout, transport=transport, say=say)
+    if plan.get("message"):
+        say(plan["message"])
+    if plan.get("forget"):
         forget_connection()
     state = secrets.token_urlsafe(24)
     redirect = f"http://localhost:{port}/created"
@@ -692,32 +856,9 @@ def connect(owner: str = "", port: int = 8743, open_browser: bool = True, timeou
             if not re.fullmatch(r"[A-Za-z0-9_-]{8,128}", code):
                 return self._page("Missing code.", 400)
             try:
-                status_, _, raw = post("POST", f"{API}/app-manifests/{code}/conversions",
-                                       {"Accept": "application/vnd.github+json", "User-Agent": "RemediGenius-CE"}, None)
-            except (urllib.error.URLError, TimeoutError, OSError, GitHubError) as exc:
-                return self._fail(f"could not reach GitHub to finish creating the App ({type(exc).__name__}); nothing was saved, run connect again")
-            if status_ != 201:
-                return self._fail(_redact(_explain(status_, raw, "creating the App from the manifest"), []))
-            try:
-                data = json.loads(raw)
-                app_id, app_slug, pem = int(data["id"]), str(data["slug"]), str(data["pem"])
-                if not re.fullmatch(r"[A-Za-z0-9-]{1,80}", app_slug) or not pem.startswith("-----BEGIN"):
-                    raise ValueError("unexpected shape")
-            except (ValueError, KeyError, TypeError):
-                return self._fail("GitHub's answer was not what a created App looks like, so nothing was saved. If an App named RemediGenius-CE-... "
-                                  "was created, delete it at https://github.com/settings/apps and run connect again")
-            try:
-                _write_private(key_path(), pem)
-                _write_private(home() / "app.json", json.dumps({"app_id": app_id, "slug": app_slug, "owner": (data.get("owner") or {}).get("login", owner or "personal"),
-                                                                "html_url": data.get("html_url")}, indent=1))
-            except OSError as exc:
-                for name in ("app.pem", "app.json"):
-                    try:
-                        (home() / name).unlink(missing_ok=True)  # leave no half-saved connection behind
-                    except OSError:
-                        pass
-                return self._fail(f"the App '{app_slug}' was created, but its key could not be saved ({exc.strerror or type(exc).__name__}). Delete the App at "
-                                  f"https://github.com/settings/apps/{app_slug}/advanced and run connect again")
+                app_slug = create_app_from_code(code, owner, post)
+            except GitHubError as exc:
+                return self._fail(str(exc))
             result["created"] = app_slug
             done.set()
             return self._page(f"The App was created. Next: <a href=\"https://github.com/apps/{html.escape(app_slug)}/installations/new\">install it</a> "

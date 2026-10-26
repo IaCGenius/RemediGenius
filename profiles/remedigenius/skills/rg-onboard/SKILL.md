@@ -55,6 +55,16 @@ Ask once: "Are these all your accounts and regions that matter?" Record the answ
 (`knowledge/notes/scope.md`: what is in scope, what is deliberately out, who confirmed, the date) and call
 `rg_triage action=remember path=<draft>`. If they want more regions, show the `regions:` change for `triage.yaml`.
 
+## 2b. Connect a code repository (so fixes can become pull requests)
+If the user wants fixes opened as pull requests, or asks to connect their repo or GitHub: call `rg_triage action=github op=status`, then send
+them to the **GitHub tab** in this console (left menu) and say what they will do there: click **Connect GitHub** (two clicks on github.com:
+create the app, then install it on only the repository they choose), then pick the repository, the development branch and the human
+reviewers. The page shows which protections are in place and what is still missing, and has Reconnect and Disconnect buttons.
+- You cannot connect GitHub for them, and never ask for tokens, keys or passwords in chat; the connection is made on that page.
+- Pull requests need branch protection on GitHub (a required review, no force push). On a repository that cannot have it (for example a
+  private repository on GitHub's free plan) the page says so and the desk stays read-and-propose only.
+- Once connected, `op=refresh` re-reads their development branch after they change the repository.
+
 ## 3. Business context in ten minutes (changes priorities)
 When the board says "Business context: N of 5 basics set", offer this. Prefill from read-only evidence, then ask the
 user to confirm in a few short answers; each confirmed fact becomes a draft plus `remember` (one click each):

@@ -295,7 +295,7 @@ def handle(params: dict, **_kwargs) -> str:
         # connecting, configuring and disconnecting are operator commands on the host, not available here.
         op = p.get("op") or "status"
         if op not in GITHUB_OPS:
-            return f"github op must be one of: {', '.join(GITHUB_OPS)} (connect and configure are done by the operator on the host)"
+            return f"github op must be one of: {', '.join(GITHUB_OPS)} (a person connects and configures GitHub in the console's GitHub tab)"
         args = ["github", op.replace("_", "-")]
         if op == "publish":
             if not p.get("ref") or not p.get("files"):
@@ -366,6 +366,7 @@ SCHEMA = {
         "whether PRs can be opened), op=publish (ref + files as saved-proposal=repo/path: validates, pushes to a RemediGenius feature "
         "branch and opens or updates ONE PR into the configured development branch, with title/evidence/change/effect/risk/rollback; "
         "needs the user's approval; it never merges or approves, a human does), op=pr_status (number or branch: reviews, checks). "
+        "If GitHub is not connected, tell the user to use the GitHub tab in the console; you cannot connect it. "
         "Never changes AWS resources. Code changes only ever leave as a reviewed pull request."),
     "parameters": {
         "type": "object",
@@ -449,7 +450,7 @@ def on_pre_llm_call(is_first_turn: bool = False, **_kwargs):
 
 
 SECRET_DIRS = {".aws", ".ssh", ".gnupg", ".azure", ".kube", ".docker", ".config/gcloud"}
-SECRET_NAMES = ("credentials", "auth.json", "id_rsa", "id_ed25519", ".netrc", ".pgpass", ".git-credentials")
+SECRET_NAMES = ("credentials", "auth.json", "id_rsa", "id_ed25519", ".netrc", ".pgpass", ".git-credentials", ".rg-operator-token", "operator.token")
 SECRET_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".tfstate", ".tfstate.backup")
 
 
