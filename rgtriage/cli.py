@@ -606,6 +606,10 @@ def cmd_github(args):
     from . import github, validators
 
     try:
+        sys.stdout.reconfigure(line_buffering=True)  # setup and connect print as they go, also when output is piped or the command is stopped
+    except (AttributeError, ValueError):
+        pass
+    try:
         if args.op == "connect":
             result = github.connect(owner=args.org or "", port=args.port, open_browser=not args.no_browser, reconnect=args.reconnect)
             _out(f"Connected: App {result['app']} installed on {result['account']}. Next: rgtriage github configure --repo owner/name --base dev --reviewer <login>")

@@ -106,7 +106,12 @@ if [ -x /usr/local/bin/rgdesk ]; then
   check "the key cannot be copied out through validate (absolute destination, key as source, key folder as module)" $( (echo "$o1" | grep -q DENIED && echo "$o2" | grep -q "safe relative" && echo "$o3" | grep -q DENIED && [ ! -e /data/rgtriage/stolen.pem ] && [ ! -e /data/rgtriage/stolen.tf ]); echo $?) "$o1 | $o2"
   o4=$(rgdesk validate --module /data/iac/_rgtest --file /opt/data/proposals/_t.tf=extra.tf 2>&1 | tail -1 | cut -c1-80)
   check "normal proposal validation works through the validation service" $(echo "$o4" | grep -q "VALID"; echo $?) "$o4"
-  rm -rf /data/iac/_rgtest /opt/data/proposals/_t.tf /data/rggithub/app.pem /data/rggithub/policy.json
+  printf 'module "steal" {\n  source = "/data/rggithub"\n}\n' > /opt/data/proposals/_h.tf; chown 10000:10000 /opt/data/proposals/_h.tf
+  printf 'SYNTHETIC-BROKER-KEY-DO-NOT-LEAK' > /data/rggithub/app.pem; chown 10000:10000 /data/rggithub/app.pem; chmod 600 /data/rggithub/app.pem
+  o5=$(rgdesk validate --module /data/iac/_rgtest --file /opt/data/proposals/_h.tf=evil.tf 2>&1 | tr '\n' ' ' | cut -c1-160)
+  leak=$(grep -rl "SYNTHETIC-BROKER-KEY" /data/rgtriage /data/hermes /data/iac /var/lib/rgvalidate 2>/dev/null | head -1)
+  check "a hostile module pointing at the key folder cannot read it, and the key text appears nowhere the agent can read" $(echo "$o5" | grep -q "NOT VALID" && [ -z "$leak" ]; echo $?) "$o5 leak=[$leak]"
+  rm -rf /data/iac/_rgtest /opt/data/proposals/_t.tf /opt/data/proposals/_h.tf /data/rggithub/app.pem /data/rggithub/policy.json
   fw=$(iptables -S OUTPUT | grep -c "uid-owner 10002.*REJECT"); check "firewall blocks the validation user from metadata and private networks" $([ "$fw" -ge 3 ]; echo $?) "$fw rules"
 fi
 ref=$($D list --limit 1 --json 2>/dev/null | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['key'])" 2>/dev/null)

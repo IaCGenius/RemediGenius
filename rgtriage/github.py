@@ -530,7 +530,7 @@ def status(client: Client | None = None, verify: bool = False) -> dict:
     out = {"state": "Disconnected", "writes_enabled": False, "identity": None, "repo": policy.get("repo"), "base": policy.get("base"),
            "branch_prefix": policy.get("branch_prefix"), "reviewers": policy.get("reviewers", []), "remedy": ""}
     if not app.get("app_id") or not (key_path().is_file() or client is not None):
-        out["remedy"] = "Run `rgtriage github connect` to create and install the GitHub App."
+        out["remedy"] = "Run the guided setup: `sudo rgdesk github setup` on the instance (from your computer: `python tools/github_connect_spot.py --stack <name>`)."
         return out
     out["identity"] = f"{app.get('slug')}[bot] (App {app.get('app_id')}, owner {app.get('owner')})"
     if not app.get("installation_id"):

@@ -1695,3 +1695,9 @@ def test_the_probe_refuses_without_the_repository_confirmation_or_with_failing_p
 
 def test_the_probe_is_operator_only():
     assert "probe" not in server.GITHUB_OPS and server.execute(["github", "probe", "--confirm-disposable", "a/b"])["rc"] == 2
+
+
+def test_the_disconnected_status_points_to_the_guided_setup(home, monkeypatch):  # noqa: F811
+    monkeypatch.setenv("RGGITHUB_HOME", str(home / "github"))
+    st = github.status()
+    assert st["state"] == "Disconnected" and "rgdesk github setup" in st["remedy"] and "github_connect_spot.py" in st["remedy"]

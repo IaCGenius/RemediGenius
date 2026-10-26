@@ -1,79 +1,93 @@
-# GitHub integration: verification evidence (v0.4.0)
+# GitHub integration: verification evidence (v0.4.0, after the PR #19 review)
 
-Final state: **READY_FOR_HUMAN_SETUP**. Everything that can be proven without GitHub consent and without a protection-capable
-repository is proven below. The remaining checks need two things only a person can provide (see "Pending").
+**State: READY_FOR_HUMAN_SETUP.** All ten review findings are fixed and verified locally and on a real Spot. The live GitHub checks need
+things only a person can supply (GitHub consent, a protection-capable test repository, a human reviewer) and are marked **PENDING**:
+nothing marked pending was run, and nothing here claims the integration is fully ready until they pass.
 
-How to read the columns: **Mock** = automated tests against an in-memory fake of the GitHub API that records every request, so the
-tests can show what was *not* sent (`tests/test_github.py`). **Spot** = checked on a real, freshly replaced Spot instance running this
-build (`tools/spot_release_test.py`, 23 checks). **Real GitHub** = an actual repository. **Human** = needs a person's session.
-Nothing marked pending was run.
+Evidence layers, kept apart: **Mock** = automated tests against an in-memory fake of the GitHub API that records every request, so they can
+prove what was *not* sent (`tests/test_github.py`, `tests/test_validation_isolation.py`). **Local** = other automated tests on a workstation.
+**Spot** = checks on a real, freshly built Spot instance running this build (`tools/spot_release_test.py`). **Real GitHub** = an actual
+repository. **Human** = needs a person's own GitHub session.
 
-## Environment
+## Review findings: disposition
 
-- Implementation branch `feat/github-integration`, release v0.4.0, on top of v0.3.3 (`main` at `9d9d8ef`).
-- Hermes: the pinned `nousresearch/hermes-agent:stable@sha256:444b4259…` (0.21.7). No Hermes GitHub feature is used at runtime (see below).
-- Local suite: 345 passed, 2 skipped (186 existing tests plus 159 new). Spot: all 23 release checks passed on an instance that was
-  replaced from the same data bucket (the first replacement failed to boot and led to defect 2 below; state survived the later ones).
-
-## Reuse decision
-
-| Hermes provides | Used? | Why |
-|---|---|---|
-| `github` skill (`gh` CLI, PAT or SSH, includes merge and auto-merge) | Only its read-only text (PR template ideas) | Needs a terminal toolset and a token; RemediGenius has neither, and its workflows merge. |
-| `mcp_servers` with the GitHub MCP server and `tools.include` allowlist | No | Token and server sit inside the agent container and Hermes cannot restrict repository, branch or PR base, so it cannot be the enforcement layer. |
-| Community plugins (`githermes`, `my-github`) | No | Desktop panes that run the user's own `gh` login. |
-| Hermes approval prompt (`pre_tool_call` hook) | **Yes** | Each `github publish` needs the user's approval, like `decide`. |
-| Hermes Kanban, knowledge, skills, plugin and socket pattern of the desk | **Yes** | Unchanged; GitHub is one more desk subcommand behind the existing plugin tool. |
-
-Custom code added because nothing upstream enforces the policy: `rgtriage/github.py` (gate, App auth, operations), `rgtriage/validators.py`
-(deterministic checks), one plugin action, a socket allowlist, and Spot packaging. It is not an agent runtime.
-
-## Evidence matrix
-
-| Area | Mock (automated) | Spot (real host) | Real GitHub | Human |
+| # | Finding | Disposition | Code | Evidence |
 |---|---|---|---|---|
-| Fresh setup, correct actor and repository | PASS: manifest connect flow (forged redirect refused, state checked, key written 0600), `configure`, identity `<app>[bot]` in `status` | PASS: boots `Disconnected`, tools installed, key folder 700 | **PENDING** | Create and install the App |
-| Allowed workflow: validate, push to feature branch, one PR into dev | PASS: opens one PR, base = dev, reviewers requested, sanitized body, fix record linked | PASS: real terraform, tflint, cfn-lint on the host (good change passes, bad reference and bad property are caught, formatting only warns) | **PENDING** (needs protections) | |
-| Protected refs: update, force-push, delete, `HEAD:main`, API ref mutations, PR to main | PASS: 36 parametrized refusals plus 10 forbidden requests in many disguised spellings (encoded, double-encoded, dot segments, case, backslash); refused before anything is sent; every allowed write is inside the policy | n/a | **PENDING** (GitHub-side rejection needs rulesets) | |
-| Repository boundaries: other remotes, other repositories, invalid destinations | PASS: other owner or repo, forks, `/user`, `/orgs`, `/graphql` refused; no git remotes exist because writes use the REST API | n/a | PENDING | |
-| PR approval | PASS: no approve operation exists; `POST .../reviews` refused by the gate and absent from the agent tool; bot approvals are not counted as human reviews | PASS: agent socket refuses operator operations | **PENDING** | |
-| Merge, auto-merge, merge queue, before and after approval | PASS: `PUT .../merge`, auto-merge and GraphQL refused; the whole workflow sends no merge or review request | n/a | **PENDING** | A person merges |
-| Human path: review and merge in their own session, renewed review after new commits | n/a | n/a | **PENDING** | Required |
-| Alternate access: raw API, extra tools, credential helpers, env, shell | PASS: agent tool offers only `status`, `publish`, `pr_status`, `refresh`; `repo`, `base`, `connect`, `configure` are not model inputs; toolsets still have no terminal | PASS: operator operations refused over the socket (4 of 4); key folder not mounted into any container; agent container cannot see it | n/a | |
-| Credential handling | PASS: tokens never written; errors and logs redacted; key and policy files hold no secrets; validators run with `AWS_*`, `GITHUB_*` and token variables removed; PR text cleaned of account ids, tokens and @mentions | PASS: `/data/rggithub` is 0700, owned by the desk user, not mounted | PENDING: scan a real run's transcripts and logs | |
-| Failure behavior: revoked credentials, removed access, missing protection, enforcement unavailable | PASS: each gives `Blocked` with a remedy and no write; a failed protection read denies the publish | n/a | PENDING | |
-| Recovery: expiry, restart, timeout, retry | PASS: retries with backoff, no duplicate PR or commit, same branch reused, non-fast-forward is never forced, someone else's branch is never overwritten, restart keeps the policy | PASS: state carried over the instance replacements (fix record, owner, PR link, Kanban card, knowledge, plugins, skills) | PENDING: connection carried over | |
-| Regression: AWS read-only, proposal validation, remediation tracking | PASS: 186 existing tests unchanged | PASS: first scan, Kanban card, dashboard Knowledge tab, 11 WebUI menus | n/a | |
+| 1 | P1: host validation could copy the App key | **Fixed** | `validate` takes proposals only from the proposals folder, modules only from approved IaC folders, destinations only inside the scratch copy (`validators.safe_join`, no absolute paths, traversal or links); Terraform, tflint and cfn-lint run in a separate validation service (`validators.serve`, `host.py`) under its own OS user for both `validate` and `publish`; `fix` is never pointed at the key folder | Reproduced first (key copied to the desk folder), then refused: Mock/Local `tests/test_validation_isolation.py` (34 cases, 31 run on a Windows workstation and 3 need symlinks or Unix sockets; incl. the exact exploit, 11 destination variants, symlinks, hostile archives, fail-closed). **Spot:** see "Spot results" |
+| 2 | P1: verification token lacked Administration read | **Fixed** | `VERIFY_PERMISSIONS`, `token_kind()`: only protection and ruleset reads use a token with Administration: **read**; no token has Administration write; a 403 is reported as "Permissions, not protection" | Mock: a permission-aware fake rejects the old token and passes the corrected one; missing protection is distinct from missing permission. **Real GitHub: PENDING** |
+| 3 | P2: existing PR base not rechecked | **Fixed** | `_task_branch`, `_require_workflow_pr`: the existing PR (repository, head, base, state) is resolved and checked before any mutation | Mock: retargeting to `main` stops the next publish with zero writes (refs, commits and requests unchanged); fork head, two open PRs refused; a matching PR is still updated |
+| 4 | P2: validated tree differed from committed tree | **Fixed** | `publish` resolves the parent (branch head, or the development branch) first, validates parent + proposal, commits on that parent; the result names the parent that was validated | Mock: two successive publishes validated together; a conflicting combination is rejected though each file passes against the development branch |
+| 5 | P2: partial failure left no PR | **Fixed** | An unchanged tree only skips the commit and ref update; the PR, reviewer request and fix record are reconciled; partial success is reported as `published: false, partial: true` | Mock: failure injected after branch creation, identical retry yields one PR, no second commit, correct fix-record link |
+| 6 | P2: unstable branch/PR identity | **Fixed** | Branch is `feature/remedigenius/fix-<finding ref>`; title and topic are presentation only; closed-unmerged PR replaced, merged PR starts `-r2`, `-r3`... from the development branch | Mock: title and topic changes never create another PR; closed and merged cases |
+| 7 | P2: team reviewers rejected after PR creation | **Fixed** | `split_reviewers`: separate user and team-slug allowlists; the team's org must equal the repository owner; a reviewer-request failure never hides the PR or loses its link | Mock: user and team through the whole flow; unauthorized and wrong-org requests refused; failure keeps the PR, and the retry asks only for the missing reviewers |
+| 8 | P2: refresh overwrote human knowledge | **Fixed** | `merge_repository_page`: only the generated block and the `remedigenius` facts change; owner, notes, other fields and review history are kept; a page without markers keeps all its text; a changed repository, base or IaC kind sets `stale_after` for re-confirmation | Mock/Local: owner, notes and review survive a refresh; stale marking only for material changes |
+| 9 | P2: callback failure waited out the timeout | **Fixed** | Callback handler catches network, parsing and persistence failures, ends the command within seconds with a sanitized reason, removes partial files | Mock/Local: network error, bad answers, disk failure; all under 8 s, no secrets in messages, setup recoverable |
+| 10 | P3: revoked-credential recovery did not work | **Fixed** | `connect` first asks GitHub what became of the App (`probe_connection`): healthy, uninstalled (resume with the same App), reinstalled (adopt), deleted or key rejected (replacement App), unreachable (changes nothing); status, docs and behavior now name the same command | Mock: the displayed recovery leads to a working reconnection in each case |
 
-## Which layer rejects what
+## Easy setup (acceptance criteria)
 
-| Request | Rejected by |
-|---|---|
-| Wrong repository, wrong ref, wrong PR base, force update, delete, review, merge, protection change | The adapter, before sending (tested above) |
-| Direct push to `dev` or `main`, merge without review or failing checks | GitHub rulesets (templates in `deploy/github`), **not yet exercised against GitHub** |
-| Approval by the PR author | GitHub (the author is the bot, so any human can approve) |
+One starting command: `python tools/github_connect_spot.py --stack <name>` runs `sudo rgdesk github setup`: prerequisites with remedies,
+connect or resume, repository (only those selected at install), development branch (production and default branches refused; if none exists
+the administrator command is printed), human reviewers (bots refused), protection report and the next step; safe to re-run; `status`,
+`verify`, `refresh`, `disconnect` and `connect` (self-healing) cover the rest. Mock/Local: 12 tests (`tests/test_github.py`: "the guided setup command").
+Finishing setup prints that it is **not** proof of a working flow.
 
-GitHub App permissions cannot separate "open a PR" from "approve or merge a PR", so the adapter's refusal is the primary control and
-GitHub's rules are the independent second layer.
+## Original evidence matrix
 
-## Defects found by testing, and fixed in this release
+| Area | Mock / Local | Spot | Real GitHub | Human |
+|---|---|---|---|---|
+| Fresh setup, correct actor and repository | PASS: manifest flow, setup, status identity | see Spot results | **PENDING** | Create and install the App |
+| Allowed workflow | PASS: one PR, base dev, reviewers, sanitized body, fix link, idempotent retries | real terraform, tflint, cfn-lint run through the service | **PENDING** (needs protections) | |
+| Protected refs: update, force-push, delete, `HEAD:main`, API ref mutations, PR to main | PASS: gate refuses all before sending (36 + 10 disguised forms) | n/a | **PENDING**: run `sudo rgdesk github probe --confirm-disposable OWNER/REPO` | |
+| Repository boundaries | PASS: other repos, forks, `/user`, `/orgs`, GraphQL; no git remotes exist (REST only) | n/a | PENDING | |
+| PR approval | PASS: no approve operation exists; refused by the gate and absent from the agent tool; bot reviews are not counted | operator operations refused over the socket | **PENDING** | |
+| Merge, auto-merge, merge queue | PASS: refused by the gate, never sent by the workflow | n/a | **PENDING** (probe merges only a blocked PR) | A person merges |
+| Human path, renewed review after new commits | n/a | n/a | **PENDING** | Required |
+| Alternate access | PASS: agent tool ops fixed; `repo` and `base` are not model inputs; no terminal toolset; `setup`, `probe`, `connect`, `configure` operator-only | key folder 0700, not mounted, agent cannot see it | n/a | |
+| Credential handling | PASS: tokens never stored, errors redacted, files hold no secrets, PR text cleaned, validators run with credentials stripped **and now in another OS user** | see Spot results | PENDING: scan a real run's logs and transcripts | |
+| Failure behavior | PASS: revoked, removed, missing or unreadable protection, enforcement unavailable, validation service down: all safe | n/a | PENDING | |
+| Recovery | PASS: expiry, restart, timeout, retry, partial failure, replacement App | state carried over instance replacements | PENDING: connection carried over | |
+| Regression | PASS: 186 existing tests unchanged | release checks, Kanban, dashboard, WebUI | n/a | |
 
-1. The Kanban dispatcher was **not** off in the default profile on a v0.3.3 Spot (the setting did not survive start-up). The boot now sets
-   it after the last restart, reads it back and fails the boot if it does not stick.
-2. `cfn-lint` conflicted with the pinned PyYAML on the host (found only by booting a real Spot). Pins corrected, and a test now asks pip.
-3. `cfn-lint` was installed but not found by the desk service (not on `PATH`). Tools are now looked up next to the interpreter.
-4. Branch names with unusual characters inside the feature prefix were accepted. Destination refs now use a strict character set.
-5. The gate decoded a path once and sent the original; double-encoded paths are now refused as non-canonical.
-6. The first connect run on an existing connection would have silently created a second App. It now refuses, or resumes at the install step.
+## Spot results
+
+A fresh Spot stack was built from this branch's v0.4.0 archive (`tools/package_release.py --release 0.4.0`, checksums verified). Deployed, not mocked.
+
+- **27 of 27 host-side checks passed** (the host half of `tools/spot_release_test.py`, run over SSM): boot, services, version, plugins, skills,
+  first scan, Kanban dispatcher off, GitHub starts Disconnected, tools installed (terraform, tflint, cfn-lint), key folder 0700 and not
+  mounted into any container, the agent container cannot see it, operator-only operations refused over the agent socket, and the new isolation
+  checks below.
+- **Finding 1 on a real host.** The validation service runs as its own user (uid 10002). As that user: reading the synthetic GitHub key is
+  `Permission denied`; appending to the policy file is `Permission denied` (content unchanged); even listing the key folder is
+  `Permission denied`; the instance metadata service is unreachable (`http 000`); the firewall has the 5 blocking rules. The exploit and its
+  variants through `validate` (key as source, key folder as module, absolute destination) are all refused and no file appears in the
+  agent-readable desk folder. A normal proposal still validates through the service with real Terraform.
+- **A hostile module.** A proposal whose Terraform module `source` points at the key folder (so that `terraform init` itself would try to copy the
+  key) fails with `Unreadable module directory`, because `init` ran as the validation user; the synthetic key text appears nowhere under the
+  desk, Hermes, IaC or validator folders. (Added as a permanent check in `tools/spot_release_test.py`.)
+
+Not shown by this run, stated plainly:
+- The **browser checks** (dashboard Knowledge tab, WebUI menus) were **not run on this build**: the workstation ran out of memory during the run and
+  the tool was stopped. They passed on the previous build of this branch, and nothing in the dashboard or WebUI changed since.
+- Three small fixes were made **after** this Spot run and are covered by unit tests only, not yet re-verified on a Spot: `setup` flushes its output as
+  it prints (it printed nothing when stopped while piped), the Disconnected status now points to the guided setup, and the hostile-module Spot
+  check above (the hostile-module result itself came from a one-off run of the same commands).
+- `rgdesk github setup` was not exercised past the prerequisites on the host (the next step needs the browser consent).
 
 ## Pending: exact next steps
 
-1. **GitHub consent (human):** `python tools/github_connect_spot.py --stack <stack>`, open the printed `http://localhost:8743/` address,
-   click **Create GitHub App**, then **Install** on only the test repository.
-2. **A protection-capable repository (human decision):** the test organization is on GitHub's Free plan, where a *private* repository cannot
-   have rulesets or branch protection at all. That is the "protection unavailable" case and the desk correctly stays read/proposal-only
-   there, but the allowed-workflow and GitHub-side-rejection checks need either a public disposable repository or a paid plan. Then apply
-   `deploy/github` as an administrator, and run `sudo rgdesk github configure ...` and `verify`.
-3. **Human review and merge:** a designated person reviews and merges the test PR in their own session, then pushes a change and confirms the
-   renewed review is required.
-4. Re-run the matrix rows marked PENDING and update this page. A check that cannot run stays PENDING, never PASS.
+1. **GitHub consent (human):** `python tools/github_connect_spot.py --stack <stack>`, open the printed address, **Create GitHub App**, **Install** on
+   only the test repository, then answer the prompts.
+2. **A protection-capable repository (human decision):** the test organization is on GitHub's Free plan, where a private repository cannot have
+   rulesets or branch protection. The desk correctly stays in read/proposal mode there, but the allowed workflow, protection verification and
+   GitHub-side rejection need a public disposable repository or a paid plan. Then, as administrator, apply `deploy/github`.
+3. **Run the live sequence** (each step recorded by the command shown): `status` and `verify` (protection verification with the corrected token);
+   an agent publish (initial PR into the development branch); a second publish (updates the same PR); an identical publish (no change); a publish
+   for another repository or base (refused before sending: Mock-proven, repeat live); `probe` (GitHub rejects direct updates, force-push, delete
+   and a blocked merge); revoke (uninstall the App on GitHub) then `connect` (recovery); **a person** approves and merges in their own session,
+   then pushes a change and confirms the renewed review is required.
+4. Re-run the PENDING rows and update this page. A check that cannot run stays PENDING, never PASS.
+
+Not exercised live, and why: a retry after a *real* partial failure (it cannot be produced without changing product code; the Mock test injects
+it and a live identical republish shows the no-op path), and a bot approval of someone else's PR (GitHub's App permissions would allow the call;
+only the code-owner requirement stops it counting, and the adapter has no such operation, so it is not attempted).
