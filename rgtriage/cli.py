@@ -148,23 +148,7 @@ def run_scan(sources=None, progress=None) -> dict:
     store.cap_findings(scan, int(profile["max_stored_findings"]))
     store.save_scan(scan)
     write_outputs(scan)
-    export_wiki_view()
     return scan
-
-
-def export_wiki_view() -> dict:
-    """Refresh the read-only wiki view the Hermes WebUI shows (Insights -> LLM Wiki), when a destination is set.
-
-    A failure is logged and never stops a scan or a knowledge change: the view is only a copy of the bundle.
-    """
-    dest = knowledge.wiki_dir()
-    if not dest:
-        return {}
-    try:
-        return knowledge.export_wiki(dest)
-    except Exception as exc:
-        print(f"wiki export failed: {type(exc).__name__}: {exc}"[:240], file=sys.stderr)
-        return {}
 
 
 FOOTPRINT_MAX_AGE = 24 * 3600
@@ -896,7 +880,6 @@ def rescore() -> dict:
     scan["knowledge"] = knowledge.scan_summary(scan, known)
     store.write_latest(scan)
     write_outputs(scan)
-    export_wiki_view()
     changed = sum(1 for f in findings if before.get(f["key"]) != f["priority"])
     return {"findings": len(findings), "changed_priority": changed}
 

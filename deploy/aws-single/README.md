@@ -49,7 +49,6 @@ terraform apply -var-file=local.tfvars
 | `running` | `true` | `false` scales to zero; state stays in S3 |
 | `spot_instance_types` / `container_memory_mb` | `t3.large, t3a.large` / `6144` | |
 | `public_ip` | `true` | `false` for a private subnet with NAT |
-| `webui` | `true` | also run the community Hermes WebUI (MIT, pinned) behind the same tunnel and login |
 | `delete_data_on_destroy` | `false` | `true` lets `terraform destroy` delete the bucket and all checkpoints |
 
 First boot takes about 5 minutes: packages, the pinned Hermes image, the desk runtime and a pinned, checksum-verified
@@ -67,27 +66,6 @@ desk knows about your organization ([docs/KNOWLEDGE.md](../../docs/KNOWLEDGE.md)
 in S3. Importing PDF or Office files installs markitdown into the Hermes home on first use (HTTPS egress, about 350 MB,
 reinstalled after an instance replacement).
 
-### Optional: the Hermes WebUI
-
-The stack also runs [Hermes WebUI](https://github.com/nesquena/hermes-webui), a lightweight browser chat for Hermes.
-It is a **separate community project** (MIT License), pinned by version and digest (0.52.492), and not maintained by
-RemediGenius or Nous Research. Its code is taken unmodified from that image and run with the pinned Hermes image's own
-Python (the WebUI's documented manual launch), so its Skills, Kanban, Tasks and Insights views match the agent. It uses the same password as the dashboard and sends chat through the Hermes gateway
-of the `remedigenius` profile, so skills, plugin guards and approval prompts work as in the dashboard.
-
-```sh
-bash tools/open-remedigenius.sh --webui      # PowerShell: tools\open-remedigenius.ps1 -WebUI
-```
-
-Then open `http://127.0.0.1:9126/`. To leave it out, set `webui = false` and apply. The Hermes API server it uses
-listens only on the private container network, with its own key (`/data/hermes/.remedigenius-api-key`).
-
-Its **Insights → LLM Wiki** card shows a read-only, generated view of the desk's knowledge bundle (`/data/hermes/rg-wiki`
-on the host, `/opt/data/rg-wiki` in the containers): organization concepts under `entities/`, shipped guides and
-playbooks under `concepts/`, imported documents under `raw/`, with an index and the knowledge change log. The desk
-refreshes it after every scan and knowledge change; edits there are overwritten, so change knowledge in the dashboard
-Knowledge tab ([docs/KNOWLEDGE.md](../../docs/KNOWLEDGE.md)).
-
 ## What the stack creates
 
 - **S3 bucket** (private, versioned, TLS-only, SSE-S3). `state/` holds checkpoints (old versions expire after 30 days);
@@ -104,12 +82,14 @@ Knowledge tab ([docs/KNOWLEDGE.md](../../docs/KNOWLEDGE.md)).
 | Unit | Role |
 | --- | --- |
 | `remedigenius-desk.service` | `rgtriage serve` as uid 10000 with systemd sandboxing; Unix socket API; S3 checkpoints; Spot interruption watcher |
+| `remedigenius-validate.service` | `rgtriage serve-validate` as its own user (uid 10002, no access to the GitHub key, blocked from instance metadata): runs Terraform, tflint and cfn-lint for `publish` and `validate` ([docs/GITHUB.md](../../docs/GITHUB.md)) |
 | `remedigenius-scan.timer` | scheduled scan (3 minutes after boot, then every `scan_interval_hours`) |
 | `remedigenius-hermes.service` | the pinned Hermes container: profile `remedigenius`, dashboard on `127.0.0.1:9120`, egress limited to HTTPS (no metadata, no private ranges) |
 
 Desk state is in `/data/rgtriage`, the Hermes home in `/data/hermes`, and proposals the agent saves in `/opt/data/proposals`
 (inside the Hermes home). IaC repositories go in `/data/iac` (clone them through an SSM session), mounted
-read-only into the agent. Logs: `journalctl -u remedigenius-desk -u remedigenius-scan -u remedigenius-hermes`.
+read-only into the agent. Logs: `journalctl -u remedigenius-desk -u remedigenius-validate -u remedigenius-scan -u remedigenius-hermes`.
+The GitHub App key is kept apart in `/data/rggithub`; operators run the desk CLI with `sudo rgdesk ...`.
 
 ## Member accounts
 
@@ -144,7 +124,7 @@ python tools/spot_release_test.py v0.3.2 --settings path/to/settings.json
 
 It downloads the release and checks `SHA256SUMS`, deploys this Terraform as a separate stack named `rgce-release-test`
 (your real installation is not touched), checks the instance over SSM (version, services, skills, plugins, config,
-warnings, the served Knowledge tab) and the dashboard and WebUI in headless Chrome, asks the agent "hi" once, then
+warnings, the served Knowledge tab, the GitHub isolation checks) and the dashboard's Knowledge and GitHub tabs in headless Chrome, asks the agent "hi" once, then
 destroys everything, bucket included. `settings.json` holds your Terraform variables (`account_id`, `subnet_id`,
 `model_secret_arn`, ...); keep it outside the repository. The PASS/FAIL report and screenshots are written to
 `.rgce/release-test-<tag>/`. Use `--local dist/vX.Y.Z` to test a build before publishing it, `--keep` to leave the stack up for manual testing, `--skip-chat` to spend no model

@@ -7,8 +7,8 @@
    touches a real installation, with delete_data_on_destroy=true and no data from earlier runs.
 3. Waits for the instance, then checks it over SSM: version, services, skills, plugins, config schema, warnings,
    and that the dashboard serves the release's Knowledge tab code.
-4. Opens SSM tunnels and checks the dashboard Knowledge tab and every Hermes WebUI menu in headless Chrome
-   (needs `pip install playwright`); browser errors and failed API calls fail the run.
+4. Opens an SSM tunnel and checks, in headless Chrome, the dashboard Knowledge tab and the GitHub tab (the page renders, shows the
+   connect step, makes no failing API call). Needs `pip install playwright`; browser errors and failed API calls fail the run.
 5. Asks the agent "hi" once and saves the answer in the report (model output is recorded, not judged).
 6. Always destroys the whole stack, bucket included, unless --keep is given.
 
@@ -50,7 +50,7 @@ H="docker exec --user 10000:10000 remedigenius hermes"
 log=/var/log/cloud-init-output.log
 n=$(grep -cE "Traceback|^ERROR" $log); check "boot without errors" $([ "$n" = 0 ]; echo $?) "$n error lines"
 grep -q "RemediGenius-CE ready" $log; check "boot finished" $? "$(grep -o 'Up [0-9.]* seconds' $log | tail -1)"
-s=$(systemctl is-active remedigenius-desk remedigenius-hermes remedigenius-scan.timer remedigenius-webui | tr '\n' ' ')
+s=$(systemctl is-active remedigenius-desk remedigenius-hermes remedigenius-validate remedigenius-scan.timer | tr '\n' ' ')
 check "services active" $(echo "$s" | grep -qv -e inactive -e failed; echo $?) "$s"
 v=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' /opt/rgtriage/src/rgtriage/__init__.py)
 check "rgtriage version" $([ "$v" = "__VERSION__" ]; echo $?) "$v"
@@ -71,10 +71,16 @@ c=$($H -p default config get kanban.dispatch_in_gateway 2>&1 | tail -1)
 check "Kanban dispatcher off" $([ "$c" = "false" ]; echo $?) "$c"
 if [ -x /usr/local/bin/rgdesk ]; then
   g=$(rgdesk github status 2>&1)
+  ghost=$(systemctl list-unit-files 2>/dev/null | grep -c remedigenius-webui; docker ps -a --format '{{.Names}}' | grep -c webui; ss -ltn 2>/dev/null | grep -cE ':(8787|8642)\b')
+  check "no WebUI, no WebUI container and nothing listening on its ports (8787) or the agent API server (8642)" $([ "$(echo $ghost | tr -d ' 0')" = "" ]; echo $?) "unit/container/port counts: $(echo $ghost | tr '\n' ' ')"
+  api=$(docker exec --user 10000:10000 remedigenius python -c "import socket;s=socket.socket();s.settimeout(3);print(s.connect_ex(('127.0.0.1',8642)))" 2>&1 | tail -1)
+  check "the agent's API server (port 8642) is not running inside the agent container" $([ "$api" != 0 ] && [ -n "$api" ]; echo $?) "connect_ex=$api"
+  left=$( [ -e /data/hermes/.remedigenius-api-key ] && echo key; [ -e /data/hermes/rg-wiki ] && echo wiki; grep -l API_SERVER_KEY /data/hermes/.env /data/hermes/profiles/remedigenius/.env 2>/dev/null | head -1; true )
+  check "nothing is left from an earlier release's WebUI (API key, wiki view, API server key in .env)" $([ -z "$left" ]; echo $?) "left: [$(echo $left)] (the WebUI's own /data/hermes/webui folder is kept on purpose)"
   check "GitHub starts Disconnected" $(echo "$g" | head -1 | grep -q "GitHub: Disconnected"; echo $?) "$(echo "$g" | head -1)"
   check "validation tools installed (terraform, tflint, cfn-lint)" $(echo "$g" | grep -q "terraform yes, tflint yes, cfn-lint yes"; echo $?) "$(echo "$g" | tail -1)"
   p=$(stat -c "%a %u" /data/rggithub 2>&1); check "GitHub key folder private to the desk user" $([ "$p" = "700 10000" ]; echo $?) "$p"
-  m=$(for c in remedigenius remedigenius-webui; do docker inspect $c --format '{{json .Mounts}}' 2>/dev/null; done | grep -c rggithub)
+  m=$(for c in remedigenius; do docker inspect $c --format '{{json .Mounts}}' 2>/dev/null; done | grep -c rggithub)
   check "GitHub key folder is not mounted into any container" $([ "$m" = 0 ]; echo $?) "$m mounts"
   r=$(docker exec --user 10000:10000 remedigenius ls /data/rggithub 2>&1 | head -1); check "agent container cannot see the GitHub key folder" $(echo "$r" | grep -qi "no such file"; echo $?) "$r"
   s=$(docker exec --user 10000:10000 remedigenius python -c "
@@ -245,7 +251,7 @@ def tunnel(aws: str, region: str, instance: str, remote: int, local: int):
             proc.terminate()
 
 
-def browser_checks(dashboard: str, webui: str, login: dict, out: Path) -> list[tuple[str, bool, str]]:
+def browser_checks(dashboard: str, login: dict, out: Path) -> list[tuple[str, bool, str]]:
     from playwright.sync_api import sync_playwright
     results = []
     with sync_playwright() as p:
@@ -283,31 +289,20 @@ def browser_checks(dashboard: str, webui: str, login: dict, out: Path) -> list[t
 
         errors.clear()
         failures.clear()
-        page = browser.new_page(viewport={"width": 1440, "height": 950})
-        page.on("pageerror", lambda e: errors.append(str(e)[:200]))
-        page.on("response", lambda r: failures.append(f"{r.status} {r.url.split('/', 3)[-1][:100]}")
-                if "/api/" in r.url and r.status >= 400 else None)
-        page.goto(webui, wait_until="domcontentloaded")
-        if page.locator("input[type=password]").count():
-            page.fill("input[type=password]", login["password"])
-            page.keyboard.press("Enter")
-        page.wait_for_timeout(6000)
-        if page.locator("button:visible", has_text="Skip setup").count():
-            page.locator("button:visible", has_text="Skip setup").first.click()
-            page.wait_for_timeout(1500)
-        items = page.evaluate("""() => [...document.querySelectorAll('button, a, [role=tab], [data-panel], [data-view]')]
-            .filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.left < 90 && r.top > 40 && r.top < 900; })
-            .map(e => ({label: (e.getAttribute('aria-label') || e.title || e.dataset.panel || e.innerText || '').trim(),
-                        x: Math.round(e.getBoundingClientRect().left + 5), y: Math.round(e.getBoundingClientRect().top + 5)}))""")
-        labels = []
-        for item in items:
-            if item["label"] and item["label"] not in labels:
-                labels.append(item["label"])
-                page.mouse.click(item["x"], item["y"])
-                page.wait_for_timeout(2500)
-        page.screenshot(path=str(out / "webui-last-menu.png"))
-        results.append(("WebUI menus open", len(labels) >= 5, f"{len(labels)} menus"))
-        results.append(("WebUI without browser errors or failed API calls", not errors and not failures,
+        try:  # the GitHub tab: it renders, offers Connect GitHub on a fresh install, and its API calls succeed
+            for _ in range(3):
+                with contextlib.suppress(Exception):
+                    page.goto(f"{dashboard}/github?profile=remedigenius", wait_until="domcontentloaded")
+                    break
+                page.wait_for_timeout(3000)
+            page.wait_for_selector(".rgg-page", timeout=60000)
+            page.wait_for_selector("button:has-text('Connect GitHub')", timeout=30000)
+            heading = page.locator(".rgg-header h1").inner_text()
+            results.append(("dashboard GitHub tab renders and offers Connect GitHub", heading == "GitHub", f"heading {heading!r}"))
+        except Exception as exc:
+            results.append(("dashboard GitHub tab renders and offers Connect GitHub", False, str(exc).splitlines()[0]))
+        page.screenshot(path=str(out / "dashboard-github.png"))
+        results.append(("GitHub tab without browser errors or failed API calls", not errors and not failures,
                         "; ".join((errors + failures)[:3]) or "none"))
         browser.close()
     return results
@@ -321,7 +316,7 @@ def main():
     ap.add_argument("--workdir", type=Path, help="default: .rgce/release-test-TAG")
     ap.add_argument("--local", type=Path, help="test a local build (tools/package_release.py --release) instead of downloading")
     ap.add_argument("--keep", action="store_true", help="leave the stack running for manual testing (destroy it yourself)")
-    ap.add_argument("--skip-browser", action="store_true", help="skip the dashboard/WebUI browser checks")
+    ap.add_argument("--skip-browser", action="store_true", help="skip the dashboard browser checks (they need Chrome and memory)")
     ap.add_argument("--skip-chat", action="store_true", help="do not ask the agent anything (no model tokens)")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -366,8 +361,8 @@ def main():
                 results.append((name, status == "PASS", detail.strip()))
         if not args.skip_browser:
             login = json.loads(re.search(r"\{.*\}", instance.shell("cat /data/hermes/remedigenius-login.json"), re.S).group(0))
-            with tunnel(aws, region, instance.id, 9120, 9125) as dashboard, tunnel(aws, region, instance.id, 8787, 9126) as webui:
-                results += browser_checks(dashboard, webui, login, work)
+            with tunnel(aws, region, instance.id, 9120, 9125) as dashboard:
+                results += browser_checks(dashboard, login, work)
         if not args.skip_chat:
             say("asking the agent 'hi' (model output is recorded, not judged) ...")
             briefing = instance.shell("timeout 600 docker exec --user 10000:10000 remedigenius "

@@ -6,15 +6,12 @@ https://github.com/NousResearch/hermes-agent
 Copyright (c) 2025 Nous Research. MIT License.
 Upstream licences and dependency notices remain in its image.
 
-Hermes WebUI (optional, Spot deployment): separate community project, pinned by version and image digest
-(0.52.492), pulled at deployment time; not vendored, not modified, not maintained by RemediGenius or Nous Research.
-https://github.com/nesquena/hermes-webui
-MIT License (see the project's LICENSE). Set `webui = false` in the Spot Terraform to leave it out.
-
 Python dependencies are installed separately, not vendored:
 PyYAML (MIT); boto3/botocore (Apache-2.0).
 Terraform (HashiCorp, Business Source License 1.1) is downloaded at deployment time, pinned by
 version and SHA-256, and used only to validate proposed configuration; it is not redistributed.
+tflint (Mozilla Public License 2.0) and cfn-lint (Apache-2.0) are downloaded or installed at deployment time, pinned (tflint by version and
+SHA-256), and used only to check proposed changes before a pull request; they are not redistributed.
 
 Remediation playbooks (rgtriage/playbooks) reference public AWS documentation and CIS AWS Foundations
 Benchmark control descriptions; filter patterns and settings are restated, not copied text.

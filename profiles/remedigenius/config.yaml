@@ -23,7 +23,6 @@ platform_toolsets:
   telegram: [skills, clarify, file, rg_triage]
   discord: [skills, clarify, file, rg_triage]
   slack: [skills, clarify, file, rg_triage]
-  api_server: [skills, clarify, file, rg_triage]
 # Kanban board: a to-do list for people. The desk files cards (rg_triage action=card) in triage without an assignee;
 # Hermes never starts worker agents on the board, and the agent has no kanban toolset of its own.
 kanban:

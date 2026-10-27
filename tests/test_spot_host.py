@@ -38,8 +38,8 @@ def test_desk_service_is_hardened_checkpoints_to_s3_and_watches_spot(host):
                       "ReadWritePaths=/data/rgtriage", "RuntimeDirectoryPreserve=yes", "PYTHONPATH=/opt/rgtriage/src"):
         assert directive in desk
     assert "serve --socket /run/rgtriage/rgtriage.sock --durable s3://bucket-x/state" in desk
-    assert "Environment=RGTRIAGE_WIKI_DIR=/data/hermes/rg-wiki" in desk  # generated wiki view for the WebUI
-    assert "ReadWritePaths=/data/rgtriage -/data/hermes/rg-wiki" in desk  # optional path: never blocks the desk
+    assert "RGTRIAGE_WIKI_DIR" not in desk and "rg-wiki" not in desk  # the WebUI and its wiki view are gone
+    assert "ReadWritePaths=/data/rgtriage /data/rggithub /data/iac" in desk
     assert "--home hermes=/data/hermes --home desk=/data/rgtriage" in desk and "--spot" in desk
     assert "ExecStopPost=" in desk and "durable checkpoint" in desk  # final checkpoint on shutdown
     assert "OnUnitActiveSec=4h" in units["remedigenius-scan.timer"]
@@ -69,7 +69,7 @@ def test_sync_profile_writes_socket_mode_and_watch_script(host, tmp_path, monkey
     local = json.loads((profile / "plugins/rg-triage/local.json").read_text())
     assert local == {"socket": "/run/rgtriage/rgtriage.sock", "home": "/data/rgtriage", "proposals": "/opt/data/proposals"}
     assert (profile / "skills/rg-iac-fix/SKILL.md").exists()
-    assert (tmp_path / "rg-wiki").is_dir()  # the desk writes the WebUI's wiki view here
+    assert not (tmp_path / "rg-wiki").exists()  # no wiki view any more
     script = (profile / "scripts/rgtriage-watch.py").read_text()
     compile(script, "rgtriage-watch.py", "exec")
     assert '"watch"' in script and "/run/rgtriage/rgtriage.sock" in script
@@ -124,21 +124,60 @@ def test_org_wide_member_role_is_limited_to_the_organization():
     assert '"aws:ResourceOrgID" = "$${aws:PrincipalOrgID}"' in iam
 
 
-def test_webui_is_pinned_disclosed_private_and_uses_the_profile_gateway(host):
-    webui = host.units(CFG)["remedigenius-webui.service"]
-    assert "ghcr.io/nesquena/hermes-webui:0.52.492@sha256:" in host.WEBUI_IMAGE and host.WEBUI_IMAGE in webui
-    assert "--entrypoint /opt/hermes/.venv/bin/python" in webui and CFG["image"] in webui  # Hermes's own Python
-    assert ":/webui:ro" in webui and "--user 10000:10000" in webui
-    assert "-p 127.0.0.1:8787:8787" in webui and "0.0.0.0:8787" not in webui.split("HERMES_WEBUI_HOST")[0]
-    assert "HERMES_WEBUI_CHAT_BACKEND=gateway" in webui and "/p/remedigenius" in webui
-    assert "-e WIKI_PATH=/opt/data/rg-wiki" in webui  # Insights -> LLM Wiki reads the desk's generated view
-    assert "--env-file /run/remedigenius/webui.env" in webui and "PASSWORD=" not in webui  # secrets only in the env file
-    assert "MIT" in webui and "nesquena/hermes-webui" in webui
-    hermes = host.units(CFG)["remedigenius-hermes.service"]
-    assert "8642" not in hermes  # the API server is not published on the host
-    notice = (ROOT / "NOTICE").read_text(encoding="utf-8")
-    assert "https://github.com/nesquena/hermes-webui" in notice and "MIT" in notice and "0.52.492" in notice
-    assert 'variable "webui"' in (ROOT / "deploy/aws-single/main.tf").read_text(encoding="utf-8")
+def test_the_webui_and_the_agents_api_server_are_gone(host):
+    units = host.units(CFG)
+    assert "remedigenius-webui.service" not in units and not hasattr(host, "WEBUI_IMAGE") and not hasattr(host, "WEBUI_CONTAINER")
+    assert "8642" not in units["remedigenius-hermes.service"] and "8787" not in units["remedigenius-hermes.service"]
+    assert not hasattr(host, "set_api_key") and not hasattr(host, "API_PORT")
+    source = (ROOT / "deploy/aws-single/host.py").read_text(encoding="utf-8")
+    assert "API_SERVER_ENABLED" not in source and "HERMES_WEBUI" not in source and "webui.env" not in source.split("def retire_webui")[0]
+    assert 'variable "webui"' not in (ROOT / "deploy/aws-single/main.tf").read_text(encoding="utf-8")
+    assert "nesquena" not in (ROOT / "NOTICE").read_text(encoding="utf-8")
+    config = (ROOT / "profiles/remedigenius/config.yaml").read_text(encoding="utf-8")
+    assert "api_server" not in config  # no toolset for a platform nothing starts
+    assert "--webui" not in (ROOT / "tools/open-remedigenius.sh").read_text(encoding="utf-8") and "WebUI" not in (ROOT / "tools/open-remedigenius.ps1").read_text(encoding="utf-8")
+
+
+def test_the_agent_container_still_gets_its_dashboard_and_no_api_server(host, tmp_path, monkeypatch):
+    monkeypatch.setattr(host, "HERMES_HOME", tmp_path / "hermes")
+    (tmp_path / "hermes").mkdir()
+    monkeypatch.setattr(host.os, "chown", lambda *a, **k: None, raising=False)
+    real_path = host.Path
+    monkeypatch.setattr(host, "LOGIN", tmp_path / "hermes" / "login.json")
+    run_dir = tmp_path / "run"
+
+    def fake_path(*parts):
+        text = str(parts[0]) if parts else ""
+        return real_path(run_dir) if text == "/run/remedigenius" else real_path(*parts)
+    monkeypatch.setattr(host, "Path", fake_path)
+    host.hermes_env({"webui": True}, "model-key")      # the old setting is ignored: there is no WebUI to enable
+    env = (run_dir / "hermes.env").read_text()
+    assert "HERMES_DASHBOARD=1" in env and "HERMES_DASHBOARD_PORT=9120" in env and "MODEL_API_KEY=model-key" in env
+    assert "API_SERVER" not in env and "WEBUI" not in env and not (run_dir / "webui.env").exists()
+    assert not (tmp_path / "hermes" / ".remedigenius-api-key").exists()
+
+
+def test_retiring_the_webui_cleans_a_host_that_ran_it_and_keeps_the_persons_data(host, tmp_path, monkeypatch):
+    home = tmp_path / "hermes"
+    (home / "rg-wiki").mkdir(parents=True)
+    (home / "rg-wiki" / "index.md").write_text("generated")
+    (home / "webui").mkdir()
+    (home / "webui" / "settings.json").write_text("{}")             # the WebUI's own folder: the person's data
+    (home / ".remedigenius-api-key").write_text("secret")
+    (home / "profiles" / "remedigenius").mkdir(parents=True)
+    (home / ".env").write_text("KEEP=1\nAPI_SERVER_KEY=secret\n")
+    (home / "profiles" / "remedigenius" / ".env").write_text("API_SERVER_KEY=secret\n")
+    monkeypatch.setattr(host, "HERMES_HOME", home)
+    monkeypatch.setattr(host.os, "chown", lambda *a, **k: None, raising=False)
+    calls = []
+    monkeypatch.setattr(host.subprocess, "run", lambda args, **k: calls.append(args))
+    host.retire_webui()
+    assert not (home / "rg-wiki").exists() and not (home / ".remedigenius-api-key").exists()
+    assert (home / ".env").read_text() == "KEEP=1\n" and (home / "profiles" / "remedigenius" / ".env").read_text() == ""
+    assert (home / "webui" / "settings.json").exists()
+    flat = [" ".join(c) for c in calls]
+    assert any("disable --now remedigenius-webui.service" in c for c in flat) and any("rm -f remedigenius-webui" in c for c in flat)
+    host.retire_webui()                                             # running it again on a clean host is harmless
 
 
 class _Out:

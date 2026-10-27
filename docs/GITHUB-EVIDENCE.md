@@ -70,7 +70,7 @@ to the page), install wait, repository, development branch and reviewer choice, 
 | Credential handling | PASS: tokens never stored, errors redacted, files hold no secrets, PR text cleaned, validators run with credentials stripped **and now in another OS user** | see Spot results | PENDING: scan a real run's logs and transcripts | |
 | Failure behavior | PASS: revoked, removed, missing or unreadable protection, enforcement unavailable, validation service down: all safe | n/a | PENDING | |
 | Recovery | PASS: expiry, restart, timeout, retry, partial failure, replacement App | state carried over instance replacements | PENDING: connection carried over | |
-| Regression | PASS: 186 existing tests unchanged | release checks, Kanban, dashboard, WebUI | n/a | |
+| Regression | PASS: 186 existing tests unchanged | release checks, Kanban, dashboard | n/a | |
 
 ## Spot results
 
@@ -90,8 +90,8 @@ A fresh Spot stack was built from this branch's v0.4.0 archive (`tools/package_r
   desk, Hermes, IaC or validator folders. (Added as a permanent check in `tools/spot_release_test.py`.)
 
 Not shown by this run, stated plainly:
-- The **browser checks** (dashboard Knowledge tab, WebUI menus) were **not run on this build**: the workstation ran out of memory during the run and
-  the tool was stopped. They passed on the previous build of this branch, and nothing in the dashboard or WebUI changed since.
+- The **browser checks** (dashboard Knowledge tab) were **not run on this build**: the workstation ran out of memory during the run and
+  the tool was stopped. They passed on the previous build of this branch.
 - Three small fixes were made **after** this Spot run and are covered by unit tests only, not yet re-verified on a Spot: `setup` flushes its output as
   it prints (it printed nothing when stopped while piped), the Disconnected status now points to the guided setup, and the hostile-module Spot
   check above (the hostile-module result itself came from a one-off run of the same commands).

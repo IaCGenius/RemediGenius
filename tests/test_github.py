@@ -883,10 +883,10 @@ def test_spot_keeps_the_app_key_out_of_the_agent_container_but_in_durable_state(
     units = host.units(HOST_CFG)
     assert str(host.GITHUB) == str(Path("/data/rggithub")) or host.GITHUB.as_posix() == "/data/rggithub"
     hermes, desk = units["remedigenius-hermes.service"], units["remedigenius-desk.service"]
-    webui = units["remedigenius-webui.service"] if "remedigenius-webui.service" in units else ""
-    assert "rggithub" not in hermes and "rggithub" not in webui  # never mounted into an agent-facing container
+    assert "remedigenius-webui.service" not in units
+    assert "rggithub" not in hermes  # never mounted into an agent-facing container
     assert "/data:" not in hermes.replace("/data/hermes:/opt/data", "")  # no broad /data mount that would include it
-    assert "Environment=RGGITHUB_HOME=/data/rggithub" in desk and "ReadWritePaths=/data/rgtriage -/data/hermes/rg-wiki /data/rggithub /data/iac" in desk and "RGGITHUB_IAC_DIR=/data/iac" in desk
+    assert "Environment=RGGITHUB_HOME=/data/rggithub" in desk and "ReadWritePaths=/data/rgtriage /data/rggithub /data/iac" in desk and "RGGITHUB_IAC_DIR=/data/iac" in desk
     assert "--home github=/data/rggithub" in desk  # checkpointed to the private bucket: a rebuild keeps the connection
 
 

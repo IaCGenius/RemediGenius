@@ -40,6 +40,14 @@
 - Refreshing the repository knowledge page keeps the owner, notes and review history a person added, and marks the page stale when the
   repository, branch or kind of IaC changes.
 
+**Removed**
+- **The community Hermes WebUI** (`nesquena/hermes-webui`) and everything that existed only for it: the `webui` Terraform variable, the
+  `-WebUI` / `--webui` flags of `tools/open-remedigenius`, the agent's API server (port 8642) with its key and firewall rule, and the generated
+  wiki view (`RGTRIAGE_WIKI_DIR`, Insights, LLM Wiki). Reason: the dashboard is the one place where Knowledge, Improve, Kanban and GitHub live, so a
+  second UI could never show the whole picture, and the WebUI was a fast-moving third-party image to re-pin and re-test every release. Chat is the
+  dashboard's Chat tab. On upgrade the boot removes the old service, container, volume, API key and wiki view; `/data/hermes/webui` is left for you to
+  delete. See [docs/UPGRADING.md](docs/UPGRADING.md). If your tfvars sets `webui = ...`, delete that line.
+
 **Changed**
 - Spot installs pinned `tflint` 0.63.1 and `cfn-lint` 1.57.2 for the checks above; the desk service can write `/data/iac`
   (the mirror) and its own GitHub folder, which is part of the private durable checkpoint.
