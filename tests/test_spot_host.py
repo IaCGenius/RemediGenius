@@ -239,3 +239,20 @@ def test_the_pinned_host_packages_resolve_together(host):
     assert "ResolutionImpossible" not in text and "conflicting dependencies" not in text, text[-600:]
     if proc.returncode != 0:
         pytest.skip(f"pip could not reach the package index: {text[-200:]}")
+
+
+def test_the_release_checks_never_write_or_delete_the_real_github_files():
+    """A release check once overwrote and deleted a person's real GitHub App key on an instance they had connected (the checks used the real file
+    names). Every write or delete of a GitHub file in the checks must name a probe file of its own, and checks that would act on a real connection
+    must skip when one exists."""
+    import re
+    source = (ROOT / "tools/spot_release_test.py").read_text(encoding="utf-8")
+    for line in source.splitlines():
+        if "/data/rggithub/" not in line:
+            continue
+        writes = re.search(r"(\brm\b|[^>]>[^>]| > |\bprintf\b|\bchown\b|\bchmod\b|\binstall\b|>>)", line)
+        if writes and "/data/rggithub/" in line:
+            names = re.findall(r"/data/rggithub/([A-Za-z0-9_.]+)", line)
+            assert all(n.startswith("_probe") for n in names), line.strip()
+    assert "app.pem" not in source.split("the untrusted-tools boundary")[1].split("ref=$($D list --limit 1")[0]
+    assert "-e /data/rggithub/app.json" in source and "skipped on purpose" in source        # Connect GitHub is not started on a connected instance

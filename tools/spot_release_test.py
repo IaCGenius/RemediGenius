@@ -77,7 +77,7 @@ if [ -x /usr/local/bin/rgdesk ]; then
   check "the agent's API server (port 8642) is not running inside the agent container" $([ "$api" != 0 ] && [ -n "$api" ]; echo $?) "connect_ex=$api"
   left=$( [ -e /data/hermes/.remedigenius-api-key ] && echo key; [ -e /data/hermes/rg-wiki ] && echo wiki; grep -l API_SERVER_KEY /data/hermes/.env /data/hermes/profiles/remedigenius/.env 2>/dev/null | head -1; true )
   check "nothing is left from an earlier release's WebUI (API key, wiki view, API server key in .env)" $([ -z "$left" ]; echo $?) "left: [$(echo $left)] (the WebUI's own /data/hermes/webui folder is kept on purpose)"
-  check "GitHub starts Disconnected" $(echo "$g" | head -1 | grep -q "GitHub: Disconnected"; echo $?) "$(echo "$g" | head -1)"
+  check "GitHub status is readable (Disconnected on a fresh stack)" $(echo "$g" | head -1 | grep -q "^GitHub: "; echo $?) "$(echo "$g" | head -1)"
   check "validation tools installed (terraform, tflint, cfn-lint)" $(echo "$g" | grep -q "terraform yes, tflint yes, cfn-lint yes"; echo $?) "$(echo "$g" | tail -1)"
   p=$(stat -c "%a %u" /data/rggithub 2>&1); check "GitHub key folder private to the desk user" $([ "$p" = "700 10000" ]; echo $?) "$p"
   m=$(for c in remedigenius; do docker inspect $c --format '{{json .Mounts}}' 2>/dev/null; done | grep -c rggithub)
@@ -105,9 +105,13 @@ if [ -x /usr/local/bin/rgdesk ]; then
   a=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9120/api/plugins/rg-github/status)
   check "GitHub tab API requires the dashboard login" $([ "$a" = 401 ] || [ "$a" = 403 ]; echo $?) "without login: http $a"
   b=$(curl -s -b $JAR http://127.0.0.1:9120/api/plugins/rg-github/status)
-  check "GitHub tab API returns the connection status (after login)" $(echo "$b" | grep -q '"state": *"Disconnected"'; echo $?) "$(echo "$b" | cut -c1-90)"
-  c=$(curl -s -b $JAR -H 'Content-Type: application/json' -X POST -d '{}' http://127.0.0.1:9120/api/plugins/rg-github/begin)
-  check "Connect GitHub starts: github.com target, and GitHub is told to return to this console" $( (echo "$c" | grep -q 'https://github.com/settings/apps/new?state=' && echo "$c" | grep -q '127.0.0.1:9120/api/plugins/rg-github/callback' && ! echo "$c" | grep -qi 'BEGIN'); echo $?) "$(echo "$c" | cut -c1-70)"
+  check "GitHub tab API returns the connection status (after login)" $(echo "$b" | grep -q '"state": *"'; echo $?) "$(echo "$b" | cut -c1-90)"
+  if [ -e /data/rggithub/app.json ]; then
+    check "Connect GitHub starts (skipped here: this instance is already connected, and starting a reconnect could replace a real App)" 0 "skipped on purpose"
+  else
+    c=$(curl -s -b $JAR -H 'Content-Type: application/json' -X POST -d '{}' http://127.0.0.1:9120/api/plugins/rg-github/begin)
+    check "Connect GitHub starts: github.com target, and GitHub is told to return to this console" $( (echo "$c" | grep -q 'https://github.com/settings/apps/new?state=' && echo "$c" | grep -q '127.0.0.1:9120/api/plugins/rg-github/callback' && ! echo "$c" | grep -qi 'BEGIN'); echo $?) "$(echo "$c" | cut -c1-70)"
+  fi
   d=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -b $JAR "http://127.0.0.1:9120/api/plugins/rg-github/callback?code=abcdefgh1234&state=forged")
   check "a forged GitHub callback is refused and the page is shown with the reason" $(echo "$d" | grep -q '^303 .*github?error='; echo $?) "$(echo "$d" | cut -c1-110)"
   e=$(curl -s -o /dev/null -w '%{http_code}' -b $JAR -H 'Content-Type: application/json' -X POST -d '{"repo":"a/b; rm","base":"dev","reviewers":["x"]}' http://127.0.0.1:9120/api/plugins/rg-github/configure)
@@ -128,25 +132,25 @@ print(m.on_pre_tool_call('read_file',{'path':'/opt/data/.rg-operator-token'}).ge
   # --- the untrusted-tools boundary (PR #19 finding 1): validation runs as its own user, away from the key and policy
   vs=$(systemctl is-active remedigenius-validate); vpid=$(systemctl show -p MainPID --value remedigenius-validate); vuid=$(ps -o uid= -p "$vpid" 2>/dev/null | tr -d ' ')
   check "validation service runs as its own user (10002)" $([ "$vs" = active ] && [ "$vuid" = 10002 ]; echo $?) "$vs uid=$vuid"
-  printf 'SYNTHETIC-BROKER-KEY' > /data/rggithub/app.pem; printf '{"repo":"x/y"}' > /data/rggithub/policy.json; chown 10000:10000 /data/rggithub/app.pem /data/rggithub/policy.json; chmod 600 /data/rggithub/app.pem /data/rggithub/policy.json
-  r=$(sudo -u '#10002' cat /data/rggithub/app.pem 2>&1 | head -1); check "validation user cannot read the GitHub key" $(echo "$r" | grep -qi "permission denied"; echo $?) "$r"
-  r=$(sudo -u '#10002' sh -c 'echo tamper >> /data/rggithub/policy.json' 2>&1 | head -1); check "validation user cannot modify the GitHub policy" $(echo "$r" | grep -qi "permission denied"; echo $?) "$r $(cat /data/rggithub/policy.json | cut -c1-20)"
+  printf 'SYNTHETIC-BROKER-KEY' > /data/rggithub/_probe.pem; printf '{"repo":"x/y"}' > /data/rggithub/_probe.json; chown 10000:10000 /data/rggithub/_probe.pem /data/rggithub/_probe.json; chmod 600 /data/rggithub/_probe.pem /data/rggithub/_probe.json
+  r=$(sudo -u '#10002' cat /data/rggithub/_probe.pem 2>&1 | head -1); check "validation user cannot read the GitHub key" $(echo "$r" | grep -qi "permission denied"; echo $?) "$r"
+  r=$(sudo -u '#10002' sh -c 'echo tamper >> /data/rggithub/_probe.json' 2>&1 | head -1); check "validation user cannot modify the GitHub policy" $(echo "$r" | grep -qi "permission denied"; echo $?) "$r $(cat /data/rggithub/_probe.json | cut -c1-20)"
   r=$(sudo -u '#10002' ls /data/rggithub 2>&1 | head -1); check "validation user cannot even list the key folder" $(echo "$r" | grep -qi "permission denied"; echo $?) "$r"
   c=$(sudo -u '#10002' curl -s -m 5 -o /dev/null -w '%{http_code}' http://169.254.169.254/latest/meta-data/ 2>&1); check "validation user cannot reach the instance metadata service" $([ "$c" = 000 ]; echo $?) "http $c"
   mkdir -p /data/iac/_rgtest; printf 'locals {\n  a = 1\n}\n' > /data/iac/_rgtest/main.tf; chown -R 10000:10000 /data/iac/_rgtest; printf 'locals {\n  b = 2\n}\n' > /opt/data/proposals/_t.tf; chown 10000:10000 /opt/data/proposals/_t.tf
   rm -f /data/rgtriage/stolen.pem /data/rgtriage/stolen.tf
-  o1=$(rgdesk validate --module /data/iac/_rgtest --file /data/rggithub/app.pem=/data/rgtriage/stolen.pem 2>&1 | tail -1 | cut -c1-90)
+  o1=$(rgdesk validate --module /data/iac/_rgtest --file /data/rggithub/_probe.pem=/data/rgtriage/stolen.pem 2>&1 | tail -1 | cut -c1-90)
   o2=$(rgdesk validate --module /data/iac/_rgtest --file /opt/data/proposals/_t.tf=/data/rgtriage/stolen.tf 2>&1 | tail -1 | cut -c1-90)
   o3=$(rgdesk validate --module /data/rggithub --file /opt/data/proposals/_t.tf=a.tf 2>&1 | tail -1 | cut -c1-90)
   check "the key cannot be copied out through validate (absolute destination, key as source, key folder as module)" $( (echo "$o1" | grep -q DENIED && echo "$o2" | grep -q "safe relative" && echo "$o3" | grep -q DENIED && [ ! -e /data/rgtriage/stolen.pem ] && [ ! -e /data/rgtriage/stolen.tf ]); echo $?) "$o1 | $o2"
   o4=$(rgdesk validate --module /data/iac/_rgtest --file /opt/data/proposals/_t.tf=extra.tf 2>&1 | tail -1 | cut -c1-80)
   check "normal proposal validation works through the validation service" $(echo "$o4" | grep -q "VALID"; echo $?) "$o4"
   printf 'module "steal" {\n  source = "/data/rggithub"\n}\n' > /opt/data/proposals/_h.tf; chown 10000:10000 /opt/data/proposals/_h.tf
-  printf 'SYNTHETIC-BROKER-KEY-DO-NOT-LEAK' > /data/rggithub/app.pem; chown 10000:10000 /data/rggithub/app.pem; chmod 600 /data/rggithub/app.pem
+  printf 'SYNTHETIC-BROKER-KEY-DO-NOT-LEAK' > /data/rggithub/_probe.pem; chown 10000:10000 /data/rggithub/_probe.pem; chmod 600 /data/rggithub/_probe.pem
   o5=$(rgdesk validate --module /data/iac/_rgtest --file /opt/data/proposals/_h.tf=evil.tf 2>&1 | tr '\n' ' ' | cut -c1-160)
   leak=$(grep -rl "SYNTHETIC-BROKER-KEY" /data/rgtriage /data/hermes /data/iac /var/lib/rgvalidate 2>/dev/null | head -1)
   check "a hostile module pointing at the key folder cannot read it, and the key text appears nowhere the agent can read" $(echo "$o5" | grep -qE "init: FAILED|Unreadable module directory" && [ -z "$leak" ]; echo $?) "$o5 leak=[$leak]"
-  rm -rf /data/iac/_rgtest /opt/data/proposals/_t.tf /opt/data/proposals/_h.tf /data/rggithub/app.pem /data/rggithub/policy.json
+  rm -rf /data/iac/_rgtest /opt/data/proposals/_t.tf /opt/data/proposals/_h.tf /data/rggithub/_probe.pem /data/rggithub/_probe.json  # only our own probe files
   fw=$(iptables -S OUTPUT | grep -c "uid-owner 10002.*REJECT"); check "firewall blocks the validation user from metadata and private networks" $([ "$fw" -ge 3 ]; echo $?) "$fw rules"
 fi
 ref=$($D list --limit 1 --json 2>/dev/null | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['key'])" 2>/dev/null)
