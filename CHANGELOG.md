@@ -1,5 +1,67 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
+## v0.4.0
+
+**New**
+- **Fixes as pull requests (Spot).** Connect a GitHub repository and the agent can turn a validated IaC fix into **one pull
+  request** from a `feature/remedigenius/...` branch into your configured development branch (`rg_triage action=github`,
+  operations `status`, `publish`, `pr_status`, `refresh`). It never merges, approves, force-pushes, deletes, touches `main` or
+  any production or release branch, or changes protections: those requests do not exist in the desk, and your GitHub
+  rulesets and a human review are the independent second layer. See [docs/GITHUB.md](docs/GITHUB.md).
+- **Per-installation GitHub App.** `rgtriage github connect` creates a GitHub App for your installation through GitHub's App
+  Manifest flow (one click on github.com, no secret to paste). You select only the repository it may use; its key stays in a
+  desk-only folder that is not mounted into the agent container, tokens last one hour and are narrowed to that repository.
+  Revoke at any time: `rgtriage github disconnect`, or uninstall the App on GitHub.
+- **Writes are off until GitHub shows the protections.** Login alone never enables PRs: the desk reads the effective rules on the
+  development and production branches (reviewed PR required, no force push or delete) and stays in read/proposal mode, with
+  the exact remedy, until they are there. Admin-applied rulesets are in `deploy/github`.
+- **Deterministic checks before any push**, on a copy of the repository with no credentials: `terraform fmt/validate`,
+  `tflint`, `cfn-lint`, YAML and JSON parsing. A failed check pushes nothing; a tool that is missing is reported as *not
+  validated*.
+- **The desk keeps its view of your repository current.** `rgtriage github refresh` (or "I updated the repo, refresh it")
+  mirrors the development branch read-only for `fix` (secrets, state files and `.tfvars` are left out) and writes a
+  **Repository** page into the Knowledge tab. Published PRs are linked to the fix record automatically.
+- `rgdesk`: operators run the desk CLI as the desk user over SSM (`sudo rgdesk github status`).
+- **A GitHub tab in the web console** (Spot): Connect GitHub (two clicks on github.com, then back to the page), choose the repository, development
+  branch and human reviewers from drop-downs, see each protection as present or missing with the next step, and Check, Refresh, Change,
+  Reconnect and Disconnect, all from the browser. The agent cannot use it: the setup operations need a secret regenerated every boot that only
+  the dashboard backend reads, and the agent now tells people to use the tab when GitHub is not connected.
+- **One guided setup command**: `python tools/github_connect_spot.py --stack <name>` runs `sudo rgdesk github setup`: prerequisites,
+  App creation and installation (your two clicks on github.com), repository, development branch and reviewers, and a protection report with
+  the next step. It resumes if interrupted; `connect` self-heals after an uninstall or a deleted App.
+- **Untrusted checking tools run away from the key.** A separate validation service (its own OS user, no access to the GitHub key or
+  policy, blocked from the instance credentials) runs Terraform, tflint and cfn-lint for both `publish` and the agent's `validate`
+  command. `validate` now accepts only proposals from the proposals folder, modules from approved IaC folders, and destinations inside its
+  scratch copy; `fix` is never pointed at the key folder.
+- **Publishing is idempotent and exact**: the existing PR and branch are checked first (a PR retargeted away from the development branch
+  stops the publish before anything changes); the validated tree is exactly the tree that is committed; a retry after a partial failure
+  completes the missing PR without a second commit; the branch and PR belong to the finding, not the title (closed PRs are replaced,
+  merged ones start a `-r2` follow-up); user and team reviewers are separate allowlists.
+- Refreshing the repository knowledge page keeps the owner, notes and review history a person added, and marks the page stale when the
+  repository, branch or kind of IaC changes.
+
+**Removed**
+- **The community Hermes WebUI** (`nesquena/hermes-webui`) and everything that existed only for it: the `webui` Terraform variable, the
+  `-WebUI` / `--webui` flags of `tools/open-remedigenius`, the settings that exposed the agent's API server to it (host and port setting, the shared key, the firewall rule), and the
+  generated wiki view (`RGTRIAGE_WIKI_DIR`, Insights, LLM Wiki). Reason: the dashboard is the one place where Knowledge, Improve, Kanban and GitHub live, so a
+  second UI could never show the whole picture, and the WebUI was a fast-moving third-party image to re-pin and re-test every release. Chat is the
+  dashboard's Chat tab. Hermes still runs its own API server, on loopback inside the agent container only: nothing is published for it and nothing outside can reach it. On upgrade the boot removes the old service, container, volume, shared API key and wiki view; `/data/hermes/webui` is left for you to
+  delete. See [docs/UPGRADING.md](docs/UPGRADING.md). If your tfvars sets `webui = ...`, delete that line.
+
+**Changed**
+- Spot installs pinned `tflint` 0.63.1 and `cfn-lint` 1.57.2 for the checks above; the desk service can write `/data/iac`
+  (the mirror) and its own GitHub folder, which is part of the private durable checkpoint.
+- **The security-watch alert job no longer dies on a brief desk outage.** It failed once with "No such file or directory" on the desk's socket and
+  showed as an error until its next run. The job now retries for 90 seconds (the desk is unreachable for about 3 seconds while it restarts), and
+  prints a one-line reason instead of a traceback if it still cannot connect, including when it is run somewhere the socket folder is not mounted
+  (the removed WebUI could run it, and did not have the mount). The agent container now also waits (up to a minute) for the desk's socket before
+  it starts, so a job that is due at boot cannot beat the desk.
+- The `rg-iac-fix` skill gains one step (open a PR). Steps 1 to 8 and the protected rules are unchanged.
+
+**Not in this release**
+- GitHub on the Docker workstation and existing-Hermes installs (the key cannot be kept away from the agent there): it shows
+  `Blocked` with the reason. One repository per installation.
+
 ## v0.3.3
 
 **New**

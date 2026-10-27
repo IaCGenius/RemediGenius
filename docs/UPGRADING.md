@@ -1,5 +1,27 @@
 # Upgrading RemediGenius Community Edition
 
+## To v0.4.0 (from v0.3.x)
+
+Spot: rebuild the archive, `terraform apply`, then replace the instance (the same steps as within v0.3.x). The new instance restores your state
+from S3; nothing needs migrating. What changes:
+
+- **The Hermes WebUI is removed.** Use the dashboard (`tools/open-remedigenius`): it has the Chat tab, Knowledge, Improve and the new GitHub tab.
+  Why: Knowledge, Improve, GitHub and Kanban only ever lived in the dashboard, so a second UI showed a different, partial picture, and it was a
+  third-party image to re-pin and re-test with every release. The `-WebUI` / `--webui` flags of the open-console scripts are gone.
+- **The `webui` Terraform variable is gone.** If your tfvars file sets `webui = ...`, delete that line (Terraform only warns about an unknown
+  variable in a tfvars file, but an explicit `-var webui=...` is an error).
+- **The agent's API server is no longer exposed.** It was opened to the private container network (port 8642, with a shared key) only for the WebUI.
+  Hermes still starts its own API server, but on loopback inside the agent container: nothing is published for it and nothing outside can reach it. The boot
+  removes the old shared key (`/data/hermes/.remedigenius-api-key` and `API_SERVER_KEY` lines in the `.env` files), the old WebUI service, container
+  and volume if present, and the generated wiki view (`/data/hermes/rg-wiki`, **Insights, LLM Wiki**), which only the WebUI showed. The desk no longer
+  writes it (`RGTRIAGE_WIKI_DIR` has no effect).
+- **Your WebUI data is left alone.** Its own folder, `/data/hermes/webui`, stays; delete it in an SSM session when you are sure you no longer need it.
+  Conversations are stored by Hermes and stay available in the dashboard.
+- **New: GitHub.** The dashboard has a GitHub tab (Spot only) to connect one repository so fixes can become pull requests into your
+  development branch; see [GITHUB.md](GITHUB.md). It adds a separate validation service, the `rgdesk` command, `tflint` and `cfn-lint`, and PyYAML 6.0.3.
+- **Fixed:** the Kanban dispatcher is now verified off at boot. On a v0.3.3 Spot it could be on in the default profile.
+- **Docker workstation and existing Hermes:** nothing changes there except that the GitHub tab is not available (the key cannot be kept away from the agent).
+
 ## Within v0.3.x
 
 - **Spot:** rebuild the archive (`python tools/package_release.py --spot …`), `terraform apply`, then replace the instance

@@ -108,6 +108,11 @@ KINDS = {
                      "fields": [{"name": "title", "label": "Name", "required": True},
                                 {"name": "description", "label": "One-sentence summary", "required": True},
                                 {"name": "body", "label": "Description", "kind": "text", "required": True}]},
+    "Repository": {"folder": "repositories", "effect": "Where the infrastructure code lives: fixes cite it and open PRs against it (no score change).",
+                   "fields": [{"name": "title", "label": "Repository", "required": True},
+                              {"name": "description", "label": "What it deploys", "required": True},
+                              {"name": "owner", "label": "Owning team", "kind": "team"},
+                              {"name": "body", "label": "Notes for the desk", "kind": "text"}]},
     "Note": {"folder": "notes", "effect": "Context only.",
              "fields": [{"name": "title", "label": "Title", "required": True},
                         {"name": "description", "label": "One-sentence summary", "required": True},
@@ -306,123 +311,6 @@ def ensure() -> okf.Bundle:
     if not (b.root / SHIPPED).is_dir():
         seed(b)
     return b
-
-
-# ------------------------------------------------------------------ the generated wiki view (Hermes WebUI)
-
-WIKI_ENV = "RGTRIAGE_WIKI_DIR"
-WIKI_SCHEMA = ("Generated view of the RemediGenius-CE knowledge bundle. Do not edit; edit in the dashboard "
-               "Knowledge tab.")
-LOG_ACTION = re.compile(r"^\*\*([^*]{1,40})\*\*:\s*(.*)$")
-
-
-def wiki_dir() -> Path | None:
-    """Where the desk writes the read-only wiki view; unset means no export."""
-    raw = os.environ.get(WIKI_ENV)
-    return Path(raw) if raw else None
-
-
-def _wiki_page(c: okf.Concept) -> tuple[str, str]:
-    """(wiki folder, file name): organization concepts as entities/<folder>-<slug>.md, shipped and sources by slug."""
-    slug = okf.slug(PurePosixPath(c.path).stem)
-    if is_shipped(c.path):
-        return "concepts", f"{slug}.md"
-    parts = PurePosixPath(c.path).parts
-    if parts[0] == "references":
-        return "raw", f"{slug}.md"
-    return "entities", f"{okf.slug(parts[0])}-{slug}.md"
-
-
-def _wiki_write(root: Path, rel: str, text: str) -> None:
-    """Write one generated file strictly inside the staging folder (never through a symbolic link)."""
-    pure = PurePosixPath(rel)
-    if pure.is_absolute() or ".." in pure.parts or pure.suffix != ".md":
-        raise okf.OKFError(f"refusing to write {rel!r} in the wiki view")
-    path = root / pure
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.parent.is_symlink() or path.is_symlink():
-        raise okf.OKFError(f"refusing to follow a symbolic link at {rel!r}")
-    path.write_text(text, encoding="utf-8", newline="\n")
-    path.chmod(0o644)
-
-
-def _wiki_index(pages: list[dict]) -> str:
-    lines = ["---", f'okf_version: "{okf.OKF_VERSION}"', "---", "", "# RemediGenius-CE knowledge", "",
-             WIKI_SCHEMA, ""]
-    by_type: dict[str, list[dict]] = {}
-    for page in pages:
-        by_type.setdefault(str(page["type"] or "Unreadable"), []).append(page)
-    for type_name in sorted(by_type):
-        lines += [f"## {type_name}", ""]
-        for page in sorted(by_type[type_name], key=lambda p: p["title"].lower()):
-            lines.append(f"* [{okf._md_text(page['title'])}]({page['page']}) - {page['path']}, "
-                         f"{page['trust']}, {page['status']}")
-        lines.append("")
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _wiki_log(entries: list[dict]) -> str:
-    """The knowledge change log, newest first, with the headings the WebUI reads the last writer from."""
-    lines = ["# Knowledge log", ""]
-    for entry in entries:
-        text = str(entry.get("text") or "").strip()
-        match = LOG_ACTION.match(text)
-        action, rest = (match.group(1).strip(), match.group(2)) if match else ("Update", text)
-        links = okf.LINK.findall(rest)
-        heading = f"## [{entry.get('date') or ''}] {action}" + (f" | {links[0][1]}" if links else "")
-        lines += [heading, "", f"* {text}", ""]
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def export_wiki(dest: Path, b: okf.Bundle | None = None) -> dict:
-    """Write the read-only wiki view the Hermes WebUI shows (Insights -> LLM Wiki) from the bundle.
-
-    Generated one-way: build in a temporary folder inside `dest`, then replace every entry, so pages of removed
-    concepts disappear. Nothing outside `dest` is written and no symbolic link is followed.
-    """
-    b = b or bundle()
-    dest = Path(dest)
-    dest.mkdir(parents=True, exist_ok=True)
-    if dest.is_dir() and not dest.is_symlink():
-        dest.chmod(0o755)
-    staging = Path(tempfile.mkdtemp(dir=dest, prefix=".build-"))
-    os.chmod(staging, 0o755)
-    pages, counts, taken, entries = [], {"entities": 0, "concepts": 0, "raw": 0}, set(), []
-    try:
-        for c in b.concepts():
-            if c.error:
-                continue
-            folder, name = _wiki_page(c)
-            page, n = f"{folder}/{name}", 2
-            while page in taken:  # same stem in two folders: keep both pages
-                page, n = f"{folder}/{name[:-3]}-{n}.md", n + 1
-            taken.add(page)
-            note = f"> Generated from {c.path} ({okf.trust_tier(c.meta)}). Edit in the dashboard Knowledge tab."
-            # The WebUI reads the last writer from `updated_by`: who last verified the concept, else who generated it.
-            checks = okf.verifications(c.meta)
-            writer = checks[-1]["by"] if checks else str((c.meta.get("generated") or {}).get("by") or "unknown")
-            _wiki_write(staging, page, okf.dump({**c.meta, "updated_by": writer}, f"{note}\n\n{c.body}"))
-            counts[folder] += 1
-            pages.append({"page": page, "path": c.path, "type": c.type, "title": c.title,
-                          "trust": okf.trust_tier(c.meta), "status": okf.status(c.meta)})
-        entries = b.log_entries(limit=200)
-        _wiki_write(staging, "index.md", _wiki_index(pages))
-        _wiki_write(staging, "SCHEMA.md", f"# Wiki schema\n\n{WIKI_SCHEMA}\n")
-        _wiki_write(staging, "log.md", _wiki_log(entries))
-        for path in staging.rglob("*"):
-            path.chmod(0o755 if path.is_dir() else 0o644)
-        for old in dest.iterdir():  # removed concepts go away with their folder; a link is unlinked, never followed
-            if old == staging:
-                continue
-            if old.is_dir() and not old.is_symlink():
-                shutil.rmtree(old)
-            else:
-                old.unlink()
-        for child in staging.iterdir():
-            os.replace(child, dest / child.name)
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
-    return {"dest": str(dest), **counts, "pages": len(pages), "log": len(entries)}
 
 
 # ------------------------------------------------------------------ writes (dashboard / operator only)

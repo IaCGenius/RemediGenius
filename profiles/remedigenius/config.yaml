@@ -14,6 +14,7 @@ plugins:
   enabled:
     - rg-triage
     - rg-knowledge
+    - rg-github
 # No terminal: AWS access goes only through the read-only rg_triage tool.
 # file: read IaC repositories; writes are limited to the proposals folder by the plugin.
 platform_toolsets:
@@ -22,7 +23,6 @@ platform_toolsets:
   telegram: [skills, clarify, file, rg_triage]
   discord: [skills, clarify, file, rg_triage]
   slack: [skills, clarify, file, rg_triage]
-  api_server: [skills, clarify, file, rg_triage]
 # Kanban board: a to-do list for people. The desk files cards (rg_triage action=card) in triage without an assignee;
 # Hermes never starts worker agents on the board, and the agent has no kanban toolset of its own.
 kanban:

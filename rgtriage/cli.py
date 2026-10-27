@@ -148,23 +148,7 @@ def run_scan(sources=None, progress=None) -> dict:
     store.cap_findings(scan, int(profile["max_stored_findings"]))
     store.save_scan(scan)
     write_outputs(scan)
-    export_wiki_view()
     return scan
-
-
-def export_wiki_view() -> dict:
-    """Refresh the read-only wiki view the Hermes WebUI shows (Insights -> LLM Wiki), when a destination is set.
-
-    A failure is logged and never stops a scan or a knowledge change: the view is only a copy of the bundle.
-    """
-    dest = knowledge.wiki_dir()
-    if not dest:
-        return {}
-    try:
-        return knowledge.export_wiki(dest)
-    except Exception as exc:
-        print(f"wiki export failed: {type(exc).__name__}: {exc}"[:240], file=sys.stderr)
-        return {}
 
 
 FOOTPRINT_MAX_AGE = 24 * 3600
@@ -327,6 +311,7 @@ def cmd_fix(args):
     scan = _latest_or_exit()
     f = _ref_or_exit(scan, args.ref)
     paths = args.iac or config.load().get("iac_paths", [])
+    paths = [str(p) for p in paths if not iac.is_credential_path(p)]  # the agent names these folders; never the GitHub key folder
     _out(f"# Fix context for {f['key']}: {f['title']}")
     _out(f"{f['priority']} · {f['product']} {f['severity']} · control/type {f.get('control_id') or f.get('type')} · "
          f"resource {f['resource'].get('type')} `{f['resource'].get('id')}` · account {f['account']} / {f['region']}")
@@ -566,50 +551,148 @@ def cmd_aws(args):
 
 
 def cmd_validate(args):
-    """Overlay proposed files on a copy of a Terraform module and run init/validate/fmt. Never plans or applies."""
-    import shutil
-    import subprocess
-    import tempfile
-    from pathlib import Path
+    """Overlay proposed files on a copy of a Terraform module and run init/validate/fmt. Never plans or applies.
 
-    terraform = shutil.which("terraform")
-    if not terraform:
-        sys.exit("terraform is not on PATH; cannot validate. Ask the operator to run `terraform validate`.")
+    The agent chooses the arguments, so they are treated as untrusted: proposed files must be regular files in the proposals folder, the
+    module must be inside an approved IaC folder, every destination must stay inside the scratch copy, and the Terraform run happens in
+    the validation service (its own OS user, no access to the GitHub key or instance credentials) when one is configured."""
+    from . import validators
+
     module = Path(args.module).expanduser()
     if not module.is_dir():
         sys.exit(f"module folder not found: {module}")
-    with tempfile.TemporaryDirectory(prefix="rgtriage-validate-") as tmp:
-        work = Path(tmp) / "module"
-        shutil.copytree(module, work, ignore=shutil.ignore_patterns(".terraform", "*.tfstate*", ".git", "*.tfvars", "*.tfvars.json"))
+    roots = config.iac_roots()
+    if not config.inside(module, roots):
+        sys.exit("DENIED: the module must be inside an approved IaC folder (the profile's iac_paths or the GitHub mirror); "
+                 f"approved: {', '.join(str(r) for r in roots) or 'none configured'}")
+    try:
+        files = validators.snapshot_dir(module.resolve())
+        proposals = config.proposals_dir().resolve()
         for spec in args.file:
             source, _, name = spec.partition("=")
             source_path = Path(source).expanduser()
-            if not source_path.is_file():
+            if source_path.is_symlink() or not source_path.is_file():
                 sys.exit(f"proposed file not found: {source_path}")
-            shutil.copy2(source_path, work / (name or source_path.name))
-        env = {k: v for k, v in __import__("os").environ.items() if not k.startswith("AWS_")}
-        env["TF_IN_AUTOMATION"] = "1"
-        if env.get("TF_PLUGIN_CACHE_DIR"):  # reuse downloaded providers across validations
-            Path(env["TF_PLUGIN_CACHE_DIR"]).mkdir(parents=True, exist_ok=True)
-        steps = [("init", [terraform, "init", "-backend=false", "-input=false", "-no-color"]),
-                 ("validate", [terraform, "validate", "-no-color"]),
-                 ("fmt", [terraform, "fmt", "-check", "-diff", "-no-color"])]
-        ok = True
-        for label, cmd in steps:
-            proc = subprocess.run(cmd, cwd=work, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
-            text = (proc.stdout + proc.stderr).strip()
-            if label == "init" and proc.returncode == 0:
-                _out("init: ok (no backend, providers downloaded)")
-                continue
-            status = "ok" if proc.returncode == 0 else ("formatting differences" if label == "fmt" else "FAILED")
-            ok = ok and (proc.returncode == 0 or label == "fmt")
-            _out(f"{label}: {status}")
-            if text and (proc.returncode != 0 or label == "validate"):
-                _out(text[-3000:])
-            if label == "init" and proc.returncode != 0:
-                break
-    _out("Result: " + ("VALID — syntax and provider schema check passed (this is not a plan; review `terraform plan` before applying)."
-                       if ok else "NOT VALID — fix the errors above and validate again."))
+            if proposals not in source_path.resolve().parents:
+                sys.exit(f"DENIED: proposed files must be in the proposals folder ({proposals}), not {source_path}")
+            if source_path.stat().st_size > validators.MAX_MODULE_FILE_BYTES:
+                sys.exit(f"proposed file is too large: {source_path}")
+            files[validators.safe_relative(name or source_path.name)] = source_path.read_bytes()
+    except ValueError as exc:
+        sys.exit(f"DENIED: {exc}")
+    ok, lines = validators.check_module(files)
+    for line in lines:
+        _out(line)
+
+
+def cmd_github(args):
+    """GitHub App connection and development PRs. connect/configure/disconnect are operator-only (never over the socket)."""
+    from . import github, validators
+
+    try:
+        sys.stdout.reconfigure(line_buffering=True)  # setup and connect print as they go, also when output is piped or the command is stopped
+    except (AttributeError, ValueError):
+        pass
+    try:
+        if args.op == "connect":
+            result = github.connect(owner=args.org or "", port=args.port, open_browser=not args.no_browser, reconnect=args.reconnect)
+            _out(f"Connected: App {result['app']} installed on {result['account']}. Next: rgtriage github configure --repo owner/name --base dev --reviewer <login>")
+        elif args.op == "configure":
+            if not args.repo or not args.base:
+                sys.exit("configure needs --repo owner/name and --base <development branch>")
+            _github_status_out(github.configure(args.repo, args.base, args.prefix or github.DEFAULT_PREFIX, args.reviewer or []), args.json)
+        elif args.op in ("status", "verify"):
+            report = github.status(verify=args.op == "verify")
+            tools = validators.available()
+            if args.json:  # pure JSON: the web console parses this output
+                return _github_status_out({**report, "validation_tools": tools}, True)
+            _github_status_out(report, False)
+            _out("Validation tools: " + ", ".join(f"{k} {'yes' if v else 'MISSING'}" for k, v in tools.items()))
+        elif args.op == "setup":
+            github.setup(repo=args.repo or "", base=args.base or "", reviewers=args.reviewer or [], org=args.org or "", port=args.port,
+                         interactive=not args.yes and sys.stdin.isatty(), open_browser=not args.no_browser, reconnect=args.reconnect)
+        elif args.op == "probe":
+            _out("Attempting operations the adapter never sends, with the App's own token, to see whether GitHub rejects them:")
+            out = github.probe_protections(github.Client(), args.confirm_disposable or "", say=_out)
+            _out(("PASS: " if out["ok"] else "FAIL: ") + out["note"])
+            if not out["ok"]:
+                sys.exit(1)
+        elif args.op == "web-begin":  # the web console's connect flow: operator-only, JSON in and out
+            _json(github.begin_connect(args.redirect or "", args.setup_url or "", owner=args.org or "", reconnect=args.reconnect))
+        elif args.op == "web-finish":
+            _json(github.finish_connect(args.code or "", args.state or ""))
+        elif args.op == "web-install":
+            _json(github.install_status())
+        elif args.op == "web-repos":
+            _json(github.web_repos())
+        elif args.op == "web-branches":
+            _json(github.web_branches(args.repo or ""))
+        elif args.op == "refresh":
+            result = github.refresh()
+            if args.json:
+                return _json(result)
+            _out(f"Repository {result['repo']} refreshed from {result['branch']} @ {result['commit'][:10]}: {result['files']} files mirrored read-only, "
+                 f"IaC found: {', '.join(result['iac']) or 'none'}; knowledge: {result['knowledge']}")
+        elif args.op == "disconnect":
+            outcome = github.disconnect(uninstall=not args.keep_installation)
+            if args.json:
+                return _json(outcome)
+            for note in outcome["notes"]:
+                _out(note)
+        elif args.op == "publish":
+            if not args.ref or not args.file:
+                sys.exit("publish needs --ref and at least one --file proposal=repo/path")
+            files = github.read_proposals(args.file, github.proposals_dir())
+            result = github.publish(args.ref, files, title=args.title or "", evidence=args.evidence or "", change=args.change or "",
+                                    effect=args.effect or "", risk=args.risk or "", rollback=args.rollback or "", topic=args.topic or "")
+            _github_publish_out(result, args.json)
+        elif args.op == "pr-status":
+            _json(github.pr_status(number=args.number, branch=args.branch or "")) if args.json else _github_pr_out(github.pr_status(number=args.number, branch=args.branch or ""))
+    except github.Denied as exc:
+        sys.exit(f"DENIED (nothing was sent to GitHub): {exc}")
+    except github.GitHubError as exc:
+        sys.exit(str(exc))
+
+
+def _github_status_out(st: dict, as_json: bool = False) -> None:
+    if as_json:
+        return _json(st)
+    _out(f"GitHub: {st['state']}")
+    for label, key in (("Identity", "identity"), ("Repository", "repo"), ("Development base", "base"), ("Feature branches", "branch_prefix")):
+        _out(f"  {label}: {st.get(key) or 'not set'}")
+    _out(f"  Designated reviewers: {', '.join(st.get('reviewers') or []) or 'not set'}")
+    _out(f"  Writes enabled: {'yes' if st.get('writes_enabled') else 'no'}")
+    for c in (st.get("protection") or {}).get("checks", []):
+        _out(f"  [{c['result']}] {c['check']}: {c['detail']}")
+    if st.get("remedy"):
+        _out(f"  Next step: {st['remedy']}")
+
+
+def _github_publish_out(result: dict, as_json: bool = False) -> None:
+    if as_json:
+        return _json(result)
+    for v in result.get("validation", []):
+        _out(f"  [{v['result']}] {v['check']}" + (f": {v['detail'][:200]}" if v.get("detail") and v["result"] in ("fail", "skipped") else ""))
+    if not result.get("published"):
+        return _out(f"NOT PUBLISHED: {result.get('reason')}")
+    if not result.get("changed", True):
+        return _out(f"No new commit: {result.get('note')}. PR: {result.get('pr') or 'none open'}")
+    _out(f"PR {result['action']}: {result['pr']} (branch {result['branch']}, into the development base). A human reviewer must approve and merge; the desk never does.")
+
+
+def _github_pr_out(info: dict) -> None:
+    if not info.get("found"):
+        return _out("No pull request found.")
+    _out(f"PR #{info['number']} {info['state']} {info['url']} ({info['head']} -> {info['base']})")
+    _out("  Human reviews: " + (", ".join(f"{u}: {s}" for u, s in info["human_reviews"].items()) or "none yet"))
+    _out("  Checks: " + (", ".join(f"{n}: {c}" for n, c in info["checks"].items()) or "none reported") + f" (combined status: {info.get('status')})")
+
+
+def cmd_serve_validate(args):
+    from . import validators
+    if not hasattr(validators, "serve") or not hasattr(validators, "Server"):
+        sys.exit("serve-validate needs Unix sockets (it runs on the Spot host)")
+    validators.serve(args.socket, scratch=args.scratch, workers=args.workers, group=args.group)
 
 
 def cmd_serve(args):
@@ -797,7 +880,6 @@ def rescore() -> dict:
     scan["knowledge"] = knowledge.scan_summary(scan, known)
     store.write_latest(scan)
     write_outputs(scan)
-    export_wiki_view()
     changed = sum(1 for f in findings if before.get(f["key"]) != f["priority"])
     return {"findings": len(findings), "changed_priority": changed}
 
@@ -992,6 +1074,22 @@ def main(argv=None):
     p.add_argument("--module", required=True, help="Terraform module folder the change belongs to")
     p.add_argument("--file", action="append", required=True, help="proposed file, optionally =target-name (repeatable)")
     p.set_defaults(func=cmd_validate)
+    p = sub.add_parser("github", help="GitHub App connection and development PRs (connect, configure, disconnect: operator only)")
+    p.add_argument("op", choices=["status", "verify", "refresh", "setup", "probe", "connect", "configure", "disconnect", "publish", "pr-status",
+                                "web-begin", "web-finish", "web-install", "web-repos", "web-branches"])
+    p.add_argument("--org", help="connect: create the App under this organization instead of your account")
+    p.add_argument("--port", type=int, default=8743, help="connect: local port for GitHub's redirect")
+    p.add_argument("--no-browser", action="store_true")
+    p.add_argument("--redirect"); p.add_argument("--setup-url"); p.add_argument("--code"); p.add_argument("--state")
+    p.add_argument("--confirm-disposable", metavar="OWNER/REPO", help="probe: name the DISPOSABLE test repository to run real forbidden-operation attempts against")
+    p.add_argument("--yes", action="store_true", help="setup: never prompt; use the flags (and the only choice when there is one)")
+    p.add_argument("--reconnect", action="store_true", help="connect: create a new App even if one is connected")
+    p.add_argument("--repo"); p.add_argument("--base"); p.add_argument("--prefix"); p.add_argument("--reviewer", action="append")
+    p.add_argument("--keep-installation", action="store_true", help="disconnect: only delete local credentials, leave the installation")
+    p.add_argument("--ref"); p.add_argument("--file", action="append"); p.add_argument("--title"); p.add_argument("--topic")
+    p.add_argument("--evidence"); p.add_argument("--change"); p.add_argument("--effect"); p.add_argument("--risk"); p.add_argument("--rollback")
+    p.add_argument("--number", type=int); p.add_argument("--branch"); p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_github)
     p = sub.add_parser("serve", help="desk API on a Unix socket for the containerized agent; checkpoints state")
     p.add_argument("--socket", required=True)
     p.add_argument("--durable", default="", help="s3://bucket/prefix or a folder for durable checkpoints")
@@ -1000,6 +1098,12 @@ def main(argv=None):
     p.add_argument("--spot", action="store_true", help="watch for EC2 Spot interruption notices")
     p.add_argument("--scan-every-hours", type=float, default=0, help="run scheduled scans (0 = off)")
     p.set_defaults(func=cmd_serve)
+    p = sub.add_parser("serve-validate", help="validation service on a Unix socket: runs Terraform, tflint and cfn-lint away from any credential")
+    p.add_argument("--socket", required=True)
+    p.add_argument("--scratch", help="folder for throwaway working copies")
+    p.add_argument("--workers", type=int, default=2)
+    p.add_argument("--group", type=int, help="group id that may connect to the socket")
+    p.set_defaults(func=cmd_serve_validate)
     p = sub.add_parser("durable", help="checkpoint or restore state homes (s3://bucket/prefix or a folder)")
     p.add_argument("action", choices=["checkpoint", "restore"])
     p.add_argument("--url", required=True)

@@ -70,15 +70,6 @@ Open the dashboard (workstation `http://127.0.0.1:9125`, Spot through the SSM tu
 
 The reviewer name at the top is recorded as `human:<name>` (default: the dashboard login name).
 
-### In the Hermes WebUI
-
-The desk writes a **read-only, generated** view of the knowledge bundle after every scan and every knowledge change
-(only when `RGTRIAGE_WIKI_DIR` is set: `/data/hermes/rg-wiki` on Spot, `/opt/data/rg-wiki` in the containers). When the
-Hermes WebUI is enabled, its Insights page shows it under **LLM Wiki**: organization concepts under `entities/`, the
-shipped guides, practices, frameworks, sources and playbooks under `concepts/`, imported documents under `raw/`, plus
-`index.md`, `log.md` and `SCHEMA.md`. It is one-way. Edits made in the wiki view are overwritten at the next export and
-never change priorities; change knowledge in the dashboard Knowledge tab (or `rgtriage knowledge-edit`) instead.
-
 ### Documents and the model (token use)
 
 - **Conversion is local and free.** PDF and Office files are converted by [markitdown](https://github.com/microsoft/markitdown)

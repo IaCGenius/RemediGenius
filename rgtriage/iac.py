@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import os
 import re
 from pathlib import Path
 
@@ -405,3 +406,15 @@ def build(paths: list[str]) -> Index:
     for path in paths:
         index.add_root(path)
     return index
+
+
+def is_credential_path(path) -> bool:
+    """True for a folder the agent must never be pointed at: the GitHub key folder, or anything containing or inside it."""
+    home = os.environ.get("RGGITHUB_HOME")
+    if not home:
+        return False
+    try:
+        target, secret = Path(path).expanduser().resolve(), Path(home).resolve()
+    except OSError:
+        return True
+    return target == secret or secret in target.parents or target in secret.parents

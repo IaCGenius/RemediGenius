@@ -10,6 +10,7 @@ its own. Self-hosting the application does not make inference local: that depend
 | Read-only API calls | AWS, from your account's read role | scans, `doctor`, the agent's live checks |
 | Conversations, decisions, knowledge, settings, model key | your S3 bucket (Spot) or a local folder (workstation) | checkpoints every 2 minutes |
 | Pull request lookups (optional, only if you configure a token) | GitHub | fix tracking |
+| Repository reads and pull requests (optional, only if you connect GitHub: [docs/GITHUB.md](GITHUB.md)) | GitHub (`api.github.com`, from the desk, never the agent) | repository files of the connected repo, the proposed change and a sanitized PR description |
 
 **Never leaves the desk:** AWS credentials (the agent has none), secret values, S3 object contents, decrypted data,
 CloudWatch log events. The desk's guard refuses those reads even with administrator credentials.
@@ -18,10 +19,6 @@ CloudWatch log events. The desk's guard refuses those reads even with administra
 (`model_base_url: http://<host>:11434/v1`). Answers from smaller local models are less reliable; validate with the
 offline evaluation before relying on them. `rgtriage doctor` says whether the configured endpoint is local or a
 third-party provider.
-
-**Optional Hermes WebUI (Spot):** a separate community project ([nesquena/hermes-webui](https://github.com/nesquena/hermes-webui),
-MIT, pinned), not maintained by RemediGenius or Nous Research. It runs on the same instance, reachable only through the
-SSM tunnel, and sends chat to the Hermes gateway on the private container network; it adds no other destination.
 
 **Scope:** one named operator, one organization per installation. It is not multi-user or multi-tenant: an MSP runs
 one installation per customer. The installer shows this notice once and records the acknowledgement; the dashboard

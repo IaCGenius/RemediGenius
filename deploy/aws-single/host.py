@@ -23,8 +23,13 @@ ROOT = Path('/opt/remedigenius')          # root-only: config, source archive
 SOURCE = ROOT / 'source'
 UID = 10000                               # Hermes container user; also the desk service user
 HERMES_HOME = Path('/data/hermes')
-WIKI = HERMES_HOME / 'rg-wiki'            # generated, read-only view of the knowledge bundle for the WebUI
 DESK = Path('/data/rgtriage')
+VUID = 10002                              # validation service user: runs Terraform, tflint and cfn-lint; no access to the GitHub key
+VALIDATE_HOME = Path('/var/lib/rgvalidate')
+VALIDATE_SOCKET = Path('/run/rgvalidate/validate.sock')
+OPERATOR_TOKEN = Path('/data/rggithub/operator.token')   # the desk's copy of the web console's setup secret (desk-only)
+OPERATOR_TOKEN_IN_CONTAINER = '/opt/data/.rg-operator-token'  # the dashboard backend reads this one; the agent's tools have no way to call the setup routes
+GITHUB = Path('/data/rggithub')           # GitHub App key and policy: desk-only, never mounted into the agent container
 IAC = Path('/data/iac')
 RUNDIR = Path('/run/rgtriage')
 SOCKET = RUNDIR / 'rgtriage.sock'
@@ -32,16 +37,12 @@ VENV = Path('/opt/rgtriage/venv')
 CODE = Path('/opt/rgtriage/src')          # readable copy of the rgtriage package for uid 10000
 PACKAGE = Path('/opt/remedigenius/package')
 LOGIN = HERMES_HOME / 'remedigenius-login.json'
-API_KEY = HERMES_HOME / '.remedigenius-api-key'
 CONTAINER = 'remedigenius'
-WEBUI_CONTAINER = 'remedigenius-webui'
-# Community Hermes WebUI (MIT, https://github.com/nesquena/hermes-webui), pinned; not maintained by RemediGenius.
-WEBUI_IMAGE = 'ghcr.io/nesquena/hermes-webui:0.52.492@sha256:e507cafa7b112de9abd58348423ded28a8182539e6ebb5f95be603f20aff52e6'
 SUBNET = '172.29.242.0/24'
-API_PORT = 8642
 PROFILE = 'remedigenius'
-PACKAGES = ['boto3==1.42.89', 'PyYAML==6.0.2']
+PACKAGES = ['boto3==1.42.89', 'PyYAML==6.0.3', 'cfn-lint==1.57.2']  # cfn-lint: deterministic CloudFormation checks before a PR
 TERRAFORM = ('1.12.2', '1eaed12ca41fcfe094da3d76a7e9aa0639ad3409c43be0103ee9f5a1ff4b7437')
+TFLINT = ('0.63.1', '8441a7d97df20431f19c9b9d27ff4c63e308c964e86660bc7cc0cf7bbe0725e8')
 # Inside the container the desk paths are identical, so no path translation is needed.
 PROPOSALS = '/opt/data/proposals'  # inside the Hermes home: Hermes only permits writes under /opt/data
 CONTAINER_MOUNTS = ['-v', f'{DESK.as_posix()}:{DESK.as_posix()}:ro',
@@ -63,6 +64,11 @@ def ensure_user():
     if subprocess.run(['getent', 'passwd', str(UID)], capture_output=True).returncode:
         run('useradd', '--system', '--uid', str(UID), '--gid', str(UID), '--no-create-home', '--shell', '/sbin/nologin',
             'remedigenius')
+    # A different user for the code we do not trust (validation): it cannot read what the desk user can (GitHub key and policy).
+    if subprocess.run(['getent', 'group', str(VUID)], capture_output=True).returncode:
+        run('groupadd', '--system', '--gid', str(VUID), 'rgvalidate')
+    if subprocess.run(['getent', 'passwd', str(VUID)], capture_output=True).returncode:
+        run('useradd', '--system', '--uid', str(VUID), '--gid', str(VUID), '--no-create-home', '--shell', '/sbin/nologin', 'rgvalidate')
 
 
 def install_runtime():
@@ -76,18 +82,39 @@ def install_runtime():
     shutil.copytree(SOURCE / 'rgtriage', CODE / 'rgtriage', ignore=shutil.ignore_patterns('__pycache__'))
     for path in [CODE, *CODE.rglob('*')]:
         path.chmod(0o755 if path.is_dir() else 0o644)
-    version, digest = TERRAFORM
-    binary = Path('/usr/local/bin/terraform')
-    if binary.exists() and version in subprocess.run([str(binary), 'version'], capture_output=True, text=True).stdout:
+    install_wrapper()
+    install_zip_binary('terraform', *TERRAFORM, 'https://releases.hashicorp.com/terraform/{v}/terraform_{v}_linux_amd64.zip')
+    install_zip_binary('tflint', *TFLINT, 'https://github.com/terraform-linters/tflint/releases/download/v{v}/tflint_linux_amd64.zip')
+
+
+def wrapper_script() -> str:
+    """`sudo rgdesk <rgtriage args>`: run the desk CLI as the desk user with the desk environment (operator use over SSM)."""
+    return ("#!/bin/sh\n"
+            f"exec sudo -u '#{UID}' env PYTHONPATH={CODE.as_posix()} RGTRIAGE_HOME={DESK.as_posix()} RGGITHUB_HOME={GITHUB.as_posix()} "
+            f"RGGITHUB_IAC_DIR={IAC.as_posix()} RGVALIDATE_SOCKET={VALIDATE_SOCKET.as_posix()} RGTRIAGE_PROPOSALS=/opt/data/proposals "
+            f"HOME={DESK.as_posix()}/.home "
+            f"{(VENV / 'bin/python').as_posix()} -m rgtriage \"$@\"\n")
+
+
+def install_wrapper():
+    path = Path('/usr/local/bin/rgdesk')
+    path.write_text(wrapper_script())
+    path.chmod(0o755)
+
+
+def install_zip_binary(name, version, digest, url):
+    """A pinned, checksummed single-binary release zip into /usr/local/bin (skipped when that version is already there)."""
+    binary = Path('/usr/local/bin') / name
+    if binary.exists() and version in subprocess.run([str(binary), 'version' if name == 'terraform' else '--version'],
+                                                    capture_output=True, text=True).stdout:
         return
-    data = urllib.request.urlopen(f'https://releases.hashicorp.com/terraform/{version}/terraform_{version}_linux_amd64.zip',
-                                  timeout=120).read()
+    data = urllib.request.urlopen(url.format(v=version), timeout=120).read()
     if hashlib.sha256(data).hexdigest() != digest:
-        raise SystemExit('Terraform download checksum mismatch')
-    archive = Path('/tmp/terraform.zip')
+        raise SystemExit(f'{name} download checksum mismatch')
+    archive = Path(f'/tmp/{name}.zip')
     archive.write_bytes(data)
     with zipfile.ZipFile(archive) as z:
-        binary.write_bytes(z.read('terraform'))
+        binary.write_bytes(z.read(name))
     binary.chmod(0o755)
     archive.unlink()
 
@@ -102,20 +129,36 @@ def desk(*args, user=None, **kw):
 
 def restore_state(cfg):
     """Durable copy first: an empty disk (new Spot instance) is filled from the latest S3 checkpoints."""
-    for path in (HERMES_HOME, DESK):
+    for path in (HERMES_HOME, DESK, GITHUB):
         path.mkdir(parents=True, exist_ok=True)
     result = desk('durable', 'restore', '--url', durable_url(cfg), '--home', f'hermes={HERMES_HOME}',
-                  '--home', f'desk={DESK}', '--owner', f'{UID}:{UID}', capture_output=True)
+                  '--home', f'desk={DESK}', '--home', f'github={GITHUB}', '--owner', f'{UID}:{UID}', capture_output=True)
     print(result.stdout.strip())
-    for path in (HERMES_HOME, DESK, HERMES_HOME / 'proposals', DESK / '.home', DESK / '.lineage', IAC, HERMES_HOME / 'work'):
+    for path in (HERMES_HOME, DESK, GITHUB, HERMES_HOME / 'proposals', DESK / '.home', DESK / '.lineage', IAC, HERMES_HOME / 'work'):
         path.mkdir(parents=True, exist_ok=True)
         os.chown(path, UID, UID)
+    GITHUB.chmod(0o700)  # only the desk user; the folder is not mounted into the Hermes container
+    for path in (VALIDATE_HOME, VALIDATE_HOME / 'scratch', VALIDATE_HOME / '.home'):
+        path.mkdir(parents=True, exist_ok=True)
+        os.chown(path, VUID, VUID)
+    VALIDATE_HOME.chmod(0o700)
     for path in (DESK / '.lineage').iterdir():
         os.chown(path, UID, UID)
     # Same path on the host as in the container, so the desk can validate files the agent proposes.
     link = Path('/opt/data')
     if not link.is_symlink():
         link.symlink_to(HERMES_HOME)
+
+
+def write_operator_token():
+    """A fresh secret every boot for the web console's GitHub setup. The desk accepts the connect, configure and disconnect operations over
+    its socket only from a caller that presents it; the agent's own tool never does, and nothing the agent can call reaches the dashboard's
+    routes. Both copies are 0600 and owned by the desk and container user."""
+    token = secrets.token_urlsafe(32)
+    for path in (OPERATOR_TOKEN, HERMES_HOME / '.rg-operator-token'):
+        path.write_text(token)
+        path.chmod(0o600)
+        os.chown(path, UID, UID)
 
 
 def member_accounts(cfg) -> list[dict]:
@@ -180,9 +223,6 @@ def network():
             'com.docker.network.bridge.name=br-remedigenius', CONTAINER)
     subprocess.run(['iptables', '-N', 'REMEDIGENIUS'], stderr=subprocess.DEVNULL)
     run('iptables', '-F', 'REMEDIGENIUS')
-    # Container to container on this network only: the WebUI reaches the Hermes API server; replies come back.
-    run('iptables', '-A', 'REMEDIGENIUS', '-s', SUBNET, '-d', SUBNET, '-m', 'conntrack', '--ctstate', 'ESTABLISHED,RELATED', '-j', 'ACCEPT')
-    run('iptables', '-A', 'REMEDIGENIUS', '-s', SUBNET, '-d', SUBNET, '-p', 'tcp', '--dport', str(API_PORT), '-j', 'ACCEPT')
     for line in Path('/etc/resolv.conf').read_text().splitlines():
         fields = line.split()
         if len(fields) >= 2 and fields[0] == 'nameserver' and ':' not in fields[1]:
@@ -198,6 +238,19 @@ def network():
                         ('DOCKER-USER', ['-i', 'br-remedigenius', '-j', 'REMEDIGENIUS'])]:
         if subprocess.run(['iptables', '-C', chain, *args], stderr=subprocess.DEVNULL).returncode:
             run('iptables', '-I', chain, '1', *args)
+    # Untrusted validation tools may use the internet (provider downloads) but never the instance metadata service (the instance
+    # role's credentials), the agent's container network or other private addresses.
+    for destination in ('169.254.0.0/16', SUBNET, '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'):
+        args = ['-m', 'owner', '--uid-owner', str(VUID), '-d', destination, '-j', 'REJECT']
+        if subprocess.run(['iptables', '-C', 'OUTPUT', *args], stderr=subprocess.DEVNULL).returncode:
+            run('iptables', '-I', 'OUTPUT', '1', *args)
+    for line in Path('/etc/resolv.conf').read_text().splitlines():  # name resolution is still allowed (inserted before the blocks)
+        fields = line.split()
+        if len(fields) >= 2 and fields[0] == 'nameserver' and ':' not in fields[1]:
+            for protocol in ('udp', 'tcp'):
+                args = ['-m', 'owner', '--uid-owner', str(VUID), '-d', fields[1], '-p', protocol, '--dport', '53', '-j', 'ACCEPT']
+                if subprocess.run(['iptables', '-C', 'OUTPUT', *args], stderr=subprocess.DEVNULL).returncode:
+                    run('iptables', '-I', 'OUTPUT', '1', *args)
 
 
 def seed_model(config_text: str, model_seed) -> str:
@@ -217,9 +270,38 @@ def seed_model(config_text: str, model_seed) -> str:
     return ''.join(out)
 
 
-WATCH_SCRIPT = '''"""Hermes cron script: print only new P1/P2 security findings (empty output = silent)."""
-import json, socket
-s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.settimeout(1200); s.connect(%r)
+WATCH_SCRIPT = '''"""Hermes cron script: print only new P1/P2 security findings (empty output = silent).
+
+Reaches the desk over its Unix socket. The desk can be restarting (about 3 seconds) or just starting, so a failed connection is retried for
+WAIT seconds before giving up with a one-line reason. It only works inside the agent container, which is where the socket folder is mounted."""
+import json, os, socket, sys, time
+
+PATH = %r
+WAIT = 90
+
+
+def connect():
+    last, deadline = None, time.time() + WAIT
+    while True:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            s.settimeout(30)
+            s.connect(PATH)
+            return s
+        except OSError as exc:
+            last = exc
+            s.close()
+            if time.time() >= deadline:
+                break
+            time.sleep(3)
+    where = ("the desk's socket folder is not mounted in this process: this job must run inside the agent container"
+             if not os.path.isdir(os.path.dirname(PATH)) else "the desk service is not answering")
+    print(f"security watch could not reach the desk ({type(last).__name__}): {where}. It will try again at the next run.")
+    sys.exit(1)
+
+
+s = connect()
+s.settimeout(1200)
 s.sendall(json.dumps({"args": ["watch", "--min-priority", "P2"]}).encode() + b"\\n")
 data = b""
 while True:
@@ -227,7 +309,11 @@ while True:
     if not chunk:
         break
     data += chunk
-reply = json.loads(data)
+try:
+    reply = json.loads(data)
+except ValueError:
+    print("security watch got an unreadable answer from the desk. It will try again at the next run.")
+    sys.exit(1)
 print(reply.get("stdout", "") if reply.get("rc") == 0 else "rgtriage watch failed: " + reply.get("stderr", "")[-600:], end="")
 '''
 
@@ -264,15 +350,21 @@ def sync_profile(source: Path, hermes_home: Path):
                                                 'inbox': '/opt/data/knowledge-inbox', 'files': '/opt/data/knowledge-files',
                                                 'profile': PROFILE, 'improve': '/opt/data/rg-improve',
                                                 'package': '/opt/remedigenius-package'}))
+    # GitHub tab (dashboard plugin): setup steps go to the desk through its socket with the operator token (read from the file below).
+    github_tab = hermes_home / 'plugins' / 'rg-github'
+    if github_tab.exists():
+        shutil.rmtree(github_tab)
+    shutil.copytree(package / 'dashboard-plugins/rg-github', github_tab, ignore=shutil.ignore_patterns('__pycache__', 'local.json'))
+    (github_tab / 'local.json').write_text(json.dumps({'socket': SOCKET.as_posix(), 'operator_token_file': OPERATOR_TOKEN_IN_CONTAINER}))
     folders = [hermes_home / 'proposals' / 'knowledge', hermes_home / 'knowledge-inbox', hermes_home / 'knowledge-files',
-               hermes_home / 'rg-improve', hermes_home / 'rg-traces', hermes_home / WIKI.name]
+               hermes_home / 'rg-improve', hermes_home / 'rg-traces']
     for folder in folders:
         folder.mkdir(parents=True, exist_ok=True)
     # Skill improvements a person approved survive instance replacement when made for this shipped version.
     sys.path.insert(0, str(tab))
     from improve.runner import apply_approved
     print(f"approved skill improvements: {json.dumps(apply_approved(hermes_home / 'rg-improve', package / 'skills', profile / 'skills'))}")
-    for path in [profile, *profile.rglob('*'), hermes_home / 'plugins', tab, *tab.rglob('*'), *folders]:
+    for path in [profile, *profile.rglob('*'), hermes_home / 'plugins', tab, *tab.rglob('*'), github_tab, *github_tab.rglob('*'), *folders]:
         if hasattr(os, 'lchown'):
             os.lchown(path, UID, UID)
         if not path.is_symlink():
@@ -285,18 +377,22 @@ def units(cfg: dict) -> dict:
            f'Environment=AWS_STS_REGIONAL_ENDPOINTS=regional\nEnvironment=TF_PLUGIN_CACHE_DIR={DESK.as_posix()}/.home/plugins\n'
            f'Environment=REMEDIGENIUS_MODEL_NAME={cfg.get("model_name") or ""}\n'
            f'Environment=REMEDIGENIUS_MODEL_BASE_URL={cfg.get("model_base_url") or ""}\n'
-           f'Environment=RGTRIAGE_WIKI_DIR={WIKI.as_posix()}\n')
+           f'Environment=RGGITHUB_HOME={GITHUB.as_posix()}\n'
+           f'Environment=RGGITHUB_IAC_DIR={IAC.as_posix()}\n'
+           f'Environment=RGVALIDATE_SOCKET={VALIDATE_SOCKET.as_posix()}\n'
+           f'Environment=RGTRIAGE_OPERATOR_TOKEN_FILE={OPERATOR_TOKEN.as_posix()}\n')
     harden = (f'User={UID}\nGroup={UID}\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\n'
-              f'ReadWritePaths={DESK.as_posix()} -{WIKI.as_posix()}\n')
+              f'ReadWritePaths={DESK.as_posix()} {GITHUB.as_posix()} {IAC.as_posix()}\n')
     python = (VENV / 'bin/python').as_posix()
-    homes = f'--home hermes={HERMES_HOME.as_posix()} --home desk={DESK.as_posix()}'
+    homes = f'--home hermes={HERMES_HOME.as_posix()} --home desk={DESK.as_posix()} --home github={GITHUB.as_posix()}'
     store = durable_url(cfg)
     memory = int(cfg.get('container_memory_mb', 6144))
     mounts = ' '.join(CONTAINER_MOUNTS)
     return {
         'remedigenius-desk.service': f'''[Unit]
 Description=RemediGenius-CE desk: read-only AWS access, Unix socket API, S3 checkpoints
-After=network-online.target
+After=network-online.target remedigenius-validate.service
+Wants=remedigenius-validate.service
 [Service]
 {env}{harden}RuntimeDirectory=rgtriage
 RuntimeDirectoryPreserve=yes
@@ -304,6 +400,37 @@ RuntimeDirectoryMode=0750
 ExecStart={python} -m rgtriage serve --socket {SOCKET.as_posix()} --durable {store} {homes} --every 120 --spot
 ExecStopPost={python} -m rgtriage durable checkpoint --url {store} {homes}
 TimeoutStopSec=120
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
+''',
+        'remedigenius-validate.service': f'''[Unit]
+Description=RemediGenius-CE validation service: Terraform, tflint and cfn-lint away from every credential
+After=network-online.target
+[Service]
+User={VUID}
+Group={VUID}
+SupplementaryGroups={UID}
+Environment=PYTHONPATH={CODE.as_posix()}
+Environment=HOME={VALIDATE_HOME.as_posix()}/.home
+Environment=TF_PLUGIN_CACHE_DIR={VALIDATE_HOME.as_posix()}/.home/plugins
+Environment=PATH=/usr/local/bin:/usr/bin
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths={VALIDATE_HOME.as_posix()}
+RuntimeDirectory=rgvalidate
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+MemoryMax=3G
+TasksMax=512
+ExecStart={(VENV / 'bin/python').as_posix()} -m rgtriage serve-validate --socket {VALIDATE_SOCKET.as_posix()} --scratch {VALIDATE_HOME.as_posix()}/scratch --workers 2 --group {UID}
 Restart=always
 RestartSec=5
 [Install]
@@ -327,28 +454,10 @@ Description=RemediGenius-CE Hermes (pinned image, no AWS credentials)
 After=docker.service remedigenius-desk.service
 Requires=docker.service
 [Service]
+ExecStartPre=/bin/sh -c 'n=0; while [ ! -S {SOCKET.as_posix()} ] && [ $$n -lt 60 ]; do n=$$((n+1)); sleep 1; done; exit 0'
 ExecStartPre=-/usr/bin/docker rm -f {CONTAINER}
 ExecStart=/usr/bin/docker run --rm --name {CONTAINER} --network {CONTAINER} --env-file /run/remedigenius/hermes.env -p 127.0.0.1:9120:9120 -v {HERMES_HOME.as_posix()}:/opt/data {mounts} -v {PACKAGE.as_posix()}:/opt/remedigenius-package:ro --memory {memory}m --pids-limit 1024 {cfg['image']} gateway run
 ExecStop=/usr/bin/docker stop -t 30 {CONTAINER}
-Restart=always
-RestartSec=10
-[Install]
-WantedBy=multi-user.target
-''',
-        # Community Hermes WebUI (MIT, github.com/nesquena/hermes-webui): its code comes from the pinned WebUI image and
-        # runs with the pinned Hermes image's own Python (the documented "manual launch"), so every Hermes module it reads
-        # (skills, kanban, cron) matches the agent. Chat goes through the Hermes gateway of the remedigenius profile, so
-        # skills, plugin guards and approvals stay in the Hermes container.
-        'remedigenius-webui.service': f'''[Unit]
-Description=Hermes WebUI (community project, MIT, pinned) for RemediGenius-CE, gateway mode
-After=remedigenius-hermes.service
-Requires=docker.service
-[Service]
-ExecStartPre=-/usr/bin/docker rm -f {WEBUI_CONTAINER}
-ExecStartPre=-/usr/bin/docker volume rm -f {WEBUI_CONTAINER}-src
-ExecStartPre=/usr/bin/docker run --rm --entrypoint sh -v {WEBUI_CONTAINER}-src:/webui {WEBUI_IMAGE} -c "cp -a /apptoo/. /webui/ && chmod -R a+rX,go-w /webui"
-ExecStart=/usr/bin/docker run --rm --name {WEBUI_CONTAINER} --network {CONTAINER} --user {UID}:{UID} --entrypoint /opt/hermes/.venv/bin/python --env-file /run/remedigenius/webui.env -e HOME=/opt/data -e HERMES_HOME=/opt/data -e HERMES_WEBUI_STATE_DIR=/opt/data/webui -e HERMES_WEBUI_HOST=0.0.0.0 -e HERMES_WEBUI_PORT=8787 -e HERMES_WEBUI_SKIP_ONBOARDING=1 -e HERMES_WEBUI_CHAT_BACKEND=gateway -e HERMES_WEBUI_GATEWAY_BASE_URL=http://{CONTAINER}:{API_PORT}/p/{PROFILE} -e HERMES_API_URL=http://{CONTAINER}:{API_PORT} -e HERMES_WEBUI_AGENT_DIR=/opt/hermes -e WIKI_PATH=/opt/data/rg-wiki -e AWS_EC2_METADATA_DISABLED=true -w /webui -v {HERMES_HOME.as_posix()}:/opt/data -v {WEBUI_CONTAINER}-src:/webui:ro -p 127.0.0.1:8787:8787 --memory 1024m --pids-limit 512 {cfg['image']} /webui/server.py
-ExecStop=/usr/bin/docker stop -t 20 {WEBUI_CONTAINER}
 Restart=always
 RestartSec=10
 [Install]
@@ -363,18 +472,11 @@ def hermes_env(cfg, model_key):
         LOGIN.chmod(0o600)
         os.chown(LOGIN, UID, UID)
     login = json.loads(LOGIN.read_text())
-    if not API_KEY.exists():  # Hermes API server key, used only by the WebUI on the private network
-        API_KEY.write_text(secrets.token_urlsafe(32))
-        API_KEY.chmod(0o600)
-        os.chown(API_KEY, UID, UID)
-    api_key = API_KEY.read_text().strip()
     values = {'HERMES_DASHBOARD': '1', 'HERMES_DASHBOARD_PORT': '9120',
               'HERMES_DASHBOARD_BASIC_AUTH_USERNAME': login['username'],
               'HERMES_DASHBOARD_BASIC_AUTH_PASSWORD': login['password'],
               'HERMES_DASHBOARD_BASIC_AUTH_SECRET': login['secret'],
               'AWS_EC2_METADATA_DISABLED': 'true', 'HERMES_TUI_TOOLSETS': 'skills,clarify,file,rg_triage'}
-    if cfg.get('webui', True):
-        values.update({'API_SERVER_ENABLED': 'true', 'API_SERVER_HOST': '0.0.0.0', 'API_SERVER_PORT': str(API_PORT)})
     if model_key:
         values['MODEL_API_KEY'] = model_key
     if any('\n' in v or '\r' in v for v in values.values()):
@@ -384,22 +486,27 @@ def hermes_env(cfg, model_key):
     path = runtime / 'hermes.env'
     path.write_text(''.join(f'{k}={v}\n' for k, v in values.items()))
     path.chmod(0o600)
-    webui = {'HERMES_WEBUI_PASSWORD': login['password'], 'HERMES_WEBUI_GATEWAY_API_KEY': api_key}
-    (runtime / 'webui.env').write_text(''.join(f'{k}={v}\n' for k, v in webui.items()))
-    (runtime / 'webui.env').chmod(0o600)
 
 
-def set_api_key() -> None:
-    """The API server key lives in the Hermes .env files (they win over the container environment):
-    the root one for the shared gateway, the profile one for /p/remedigenius/ requests."""
-    key = API_KEY.read_text().strip()
-    for env in (HERMES_HOME / '.env', HERMES_HOME / 'profiles' / PROFILE / '.env'):
-        if not env.parent.exists():
-            continue
-        lines = [l for l in (env.read_text().splitlines() if env.exists() else []) if not l.startswith('API_SERVER_KEY=')]
-        env.write_text('\n'.join(lines + [f'API_SERVER_KEY={key}']) + '\n')
-        env.chmod(0o600)
-        os.chown(env, UID, UID)
+def retire_webui():
+    """v0.4.0 removed the community WebUI and the agent's API server it needed. If this host ever ran them (state and a systemd unit can survive
+    from an older release), stop and delete the unit, the container and its volume, the API key and the generated wiki view. The WebUI's own
+    folder (/data/hermes/webui) is left alone: it is the person's data, and can be deleted by hand."""
+    subprocess.run(['systemctl', 'disable', '--now', 'remedigenius-webui.service'], capture_output=True)
+    Path('/etc/systemd/system/remedigenius-webui.service').unlink(missing_ok=True)
+    subprocess.run(['docker', 'rm', '-f', 'remedigenius-webui'], capture_output=True)
+    subprocess.run(['docker', 'volume', 'rm', '-f', 'remedigenius-webui-src'], capture_output=True)
+    (HERMES_HOME / '.remedigenius-api-key').unlink(missing_ok=True)
+    shutil.rmtree(HERMES_HOME / 'rg-wiki', ignore_errors=True)
+    Path('/run/remedigenius/webui.env').unlink(missing_ok=True)
+    for env in (HERMES_HOME / '.env', HERMES_HOME / 'profiles' / PROFILE / '.env'):  # the API server key the WebUI used
+        if env.exists():
+            lines = env.read_text().splitlines()
+            kept = [line for line in lines if not line.startswith('API_SERVER_KEY=')]
+            if kept != lines:
+                env.write_text('\n'.join(kept) + ('\n' if kept else ''))
+                env.chmod(0o600)
+                os.chown(env, UID, UID)
 
 
 def in_container(*args, check=True, **kw):
@@ -426,8 +533,12 @@ from ruamel.yaml import YAML
 yaml, path = YAML(), Path('/opt/data/profiles/%s/config.yaml')
 data = yaml.load(path.read_text())
 enabled = data.setdefault('plugins', {}).setdefault('enabled', [])
-if 'rg-knowledge' not in enabled:
-    enabled.append('rg-knowledge')
+changed = False
+for name in ('rg-knowledge', 'rg-github'):
+    if name not in enabled:
+        enabled.append(name)
+        changed = True
+if changed:
     with path.open('w') as f:
         yaml.dump(data, f)
 ''' % PROFILE
@@ -436,20 +547,49 @@ if 'rg-knowledge' not in enabled:
 def enable_knowledge_tab():
     """The dashboard serves user plugins only when enabled: in the profile (tab list) and at its launch scope (API)."""
     in_container('python', '-c', ENABLE_PROFILE_PLUGIN)
-    in_container('hermes', '-p', 'default', 'plugins', 'enable', 'rg-knowledge', capture_output=True)
-    # The gateway runs the Kanban dispatcher from the root config: cards are for people, never for worker agents.
-    for key in ('kanban.dispatch_in_gateway', 'kanban.auto_decompose'):
-        in_container('hermes', '-p', 'default', 'config', 'set', key, 'false', capture_output=True)
+    for name in ('rg-knowledge', 'rg-github'):
+        in_container('hermes', '-p', 'default', 'plugins', 'enable', name, capture_output=True)
+
+
+KANBAN_OFF = ('kanban.dispatch_in_gateway', 'kanban.auto_decompose')
+
+
+def kanban_off() -> bool:
+    """True when the root config says the Kanban dispatcher and task splitting are off (read back, never assumed)."""
+    for key in KANBAN_OFF:
+        got = in_container('hermes', '-p', 'default', 'config', 'get', key, check=False, capture_output=True)
+        if got.returncode or got.stdout.strip().splitlines()[-1:] != ['false']:
+            return False
+    return True
+
+
+def ensure_kanban_off():
+    """The gateway runs the Kanban dispatcher from the root config: cards are for people, never for worker agents.
+
+    Hermes can rewrite its root config while it initializes, so the setting is applied after the last restart, read back, and the
+    gateway restarted only if it had to change. A setting that does not stick fails the boot instead of shipping a dispatcher."""
+    for _ in range(2):
+        if kanban_off():
+            return
+        for key in KANBAN_OFF:
+            in_container('hermes', '-p', 'default', 'config', 'set', key, 'false', capture_output=True)
+        run('docker', 'restart', CONTAINER)
+        for _ in range(60):
+            if in_container('hermes', '-p', 'default', 'config', 'get', KANBAN_OFF[0], check=False, capture_output=True).returncode == 0:
+                break
+            time.sleep(2)
+    if not kanban_off():
+        raise RuntimeError('could not turn the Kanban dispatcher off in the Hermes root config; refusing to finish the boot')
 
 
 def main():
     cfg = json.loads((ROOT / 'config.json').read_text())
     install_runtime()
     restore_state(cfg)
+    retire_webui()
+    write_operator_token()
     write_desk_profile(cfg)
     network()
-    WIKI.mkdir(parents=True, exist_ok=True)  # before the desk starts: its ReadWritePaths names this folder
-    os.chown(WIKI, UID, UID)
     model_key = ''
     if cfg.get('model_secret'):
         model_key = run('aws', 'secretsmanager', 'get-secret-value', '--secret-id', cfg['model_secret'], '--region',
@@ -463,7 +603,14 @@ def main():
     for name, body in units(cfg).items():
         Path('/etc/systemd/system', name).write_text(body)
     run('systemctl', 'daemon-reload')
-    run('systemctl', 'enable', 'remedigenius-desk.service', 'remedigenius-scan.timer', 'remedigenius-hermes.service')
+    run('systemctl', 'enable', 'remedigenius-validate.service', 'remedigenius-desk.service', 'remedigenius-scan.timer', 'remedigenius-hermes.service')
+    run('systemctl', 'restart', 'remedigenius-validate.service')
+    for _ in range(60):
+        if VALIDATE_SOCKET.exists():
+            break
+        time.sleep(1)
+    else:
+        raise RuntimeError('remedigenius-validate did not start; check journalctl -u remedigenius-validate')
     run('systemctl', 'restart', 'remedigenius-desk.service')
     for _ in range(60):
         if SOCKET.exists():
@@ -484,15 +631,10 @@ def main():
                         '--name', PROFILE, '--yes'], check=True)
     sync_profile(SOURCE, HERMES_HOME)
     seed_model_key()
-    if cfg.get('webui', True):
-        set_api_key()
     enable_knowledge_tab()
     in_container('hermes', 'profile', 'use', PROFILE)
     run('docker', 'restart', CONTAINER)
-    if cfg.get('webui', True):
-        run('systemctl', 'enable', '--now', 'remedigenius-webui.service')
-    else:
-        subprocess.run(['systemctl', 'disable', '--now', 'remedigenius-webui.service'], capture_output=True)
+    ensure_kanban_off()
     if cfg.get('watch_deliver'):
         for _ in range(30):
             jobs = in_container('hermes', '-p', PROFILE, 'cron', 'list', check=False, capture_output=True)
@@ -503,7 +645,7 @@ def main():
             in_container('hermes', '-p', PROFILE, 'cron', 'create', f"every {int(cfg.get('scan_interval_hours', 6))}h",
                          '--name', 'security-watch', '--no-agent', '--script', 'rgtriage-watch.py',
                          '--deliver', cfg['watch_deliver'])
-    print('RemediGenius-CE ready. Dashboard: tools/open-remedigenius (SSM tunnel); WebUI: add --webui; '
+    print('RemediGenius-CE ready. Dashboard: tools/open-remedigenius (SSM tunnel); '
           'login in /data/hermes/remedigenius-login.json.')
 
 
