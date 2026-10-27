@@ -124,7 +124,7 @@ def test_org_wide_member_role_is_limited_to_the_organization():
     assert '"aws:ResourceOrgID" = "$${aws:PrincipalOrgID}"' in iam
 
 
-def test_the_webui_and_the_agents_api_server_are_gone(host):
+def test_the_webui_is_gone_and_the_agents_api_server_is_no_longer_exposed(host):
     units = host.units(CFG)
     assert "remedigenius-webui.service" not in units and not hasattr(host, "WEBUI_IMAGE") and not hasattr(host, "WEBUI_CONTAINER")
     assert "8642" not in units["remedigenius-hermes.service"] and "8787" not in units["remedigenius-hermes.service"]
@@ -256,3 +256,76 @@ def test_the_release_checks_never_write_or_delete_the_real_github_files():
             assert all(n.startswith("_probe") for n in names), line.strip()
     assert "app.pem" not in source.split("the untrusted-tools boundary")[1].split("ref=$($D list --limit 1")[0]
     assert "-e /data/rggithub/app.json" in source and "skipped on purpose" in source        # Connect GitHub is not started on a connected instance
+
+
+# ---------------------------------------------------------------- the security-watch cron script and the agent container's start
+
+def _run_watch(host, monkeypatch, connects, reply=b'{"rc": 0, "stdout": "all quiet"}', wait=None, folder_exists=True):
+    """Run the generated cron script against a scripted socket: `connects` is a list of exceptions to raise before connecting succeeds."""
+    import socket as real_socket
+    text = host.WATCH_SCRIPT % "/run/rgtriage/rgtriage.sock"
+    if wait is not None:
+        text = text.replace("WAIT = 90", f"WAIT = {wait}")
+    script_calls = {"connect": 0, "sent": b"", "slept": 0}
+
+    class FakeSocket:
+        def __init__(self, *a): pass
+        def settimeout(self, t): pass
+        def connect(self, path):
+            script_calls["connect"] += 1
+            if connects:
+                raise connects.pop(0)
+        def close(self): pass
+        def sendall(self, data): script_calls["sent"] = data
+        def recv(self, n):
+            data, self.chunks = getattr(self, "chunks", [reply, b""])[0], getattr(self, "chunks", [reply, b""])[1:]
+            self.chunks = self.chunks
+            return data
+    monkeypatch.setattr(real_socket, "socket", FakeSocket)
+    monkeypatch.setattr(real_socket, "AF_UNIX", 1, raising=False)
+    monkeypatch.setattr(real_socket, "SOCK_STREAM", 1, raising=False)
+    import os as real_os
+    import time as real_time
+    monkeypatch.setattr(real_time, "sleep", lambda s: script_calls.update(slept=script_calls["slept"] + s))
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(real_time, "time", lambda: (clock.__setitem__("t", clock["t"] + 1) or clock["t"]))
+    monkeypatch.setattr(real_os.path, "isdir", lambda p: folder_exists)
+    return text, script_calls
+
+
+def test_the_watch_script_retries_while_the_desk_restarts_and_then_delivers_its_output(host, monkeypatch, capsys):
+    text, calls = _run_watch(host, monkeypatch, [ConnectionRefusedError(111, "refused"), ConnectionRefusedError(111, "refused")])
+    exec(compile(text, "rgtriage-watch.py", "exec"), {"__name__": "__main__"})
+    assert capsys.readouterr().out == "all quiet" and calls["connect"] == 3 and calls["slept"] >= 6      # two refusals, then it got through
+    assert json.loads(calls["sent"].decode()) == {"args": ["watch", "--min-priority", "P2"]} and calls["sent"].endswith(b"\n")
+
+
+def test_the_watch_script_gives_up_with_a_clear_reason_and_names_a_missing_mount(host, monkeypatch, capsys):
+    text, calls = _run_watch(host, monkeypatch, [FileNotFoundError(2, "No such file")] * 99, wait=10, folder_exists=False)
+    with pytest.raises(SystemExit) as stopped:
+        exec(compile(text, "rgtriage-watch.py", "exec"), {"__name__": "__main__"})
+    out = capsys.readouterr().out
+    assert stopped.value.code == 1 and "FileNotFoundError" in out and "not mounted in this process" in out and "inside the agent container" in out
+    assert "Traceback" not in out and "It will try again at the next run" in out and calls["connect"] > 1
+    text, calls = _run_watch(host, monkeypatch, [ConnectionRefusedError(111, "refused")] * 99, wait=10, folder_exists=True)
+    with pytest.raises(SystemExit):
+        exec(compile(text, "rgtriage-watch.py", "exec"), {"__name__": "__main__"})
+    assert "the desk service is not answering" in capsys.readouterr().out
+
+
+def test_the_watch_script_reports_an_unreadable_answer_and_a_failed_watch_plainly(host, monkeypatch, capsys):
+    text, _ = _run_watch(host, monkeypatch, [], reply=b"not json")
+    with pytest.raises(SystemExit):
+        exec(compile(text, "rgtriage-watch.py", "exec"), {"__name__": "__main__"})
+    assert "unreadable answer" in capsys.readouterr().out
+    text, _ = _run_watch(host, monkeypatch, [], reply=b'{"rc": 1, "stderr": "boom"}')
+    exec(compile(text, "rgtriage-watch.py", "exec"), {"__name__": "__main__"})
+    assert capsys.readouterr().out == "rgtriage watch failed: boom"
+
+
+def test_the_agent_container_waits_for_the_desks_socket_before_it_starts(host):
+    unit = host.units(CFG)["remedigenius-hermes.service"]
+    wait = [line for line in unit.splitlines() if line.startswith("ExecStartPre=/bin/sh -c")][0]
+    assert "[ ! -S /run/rgtriage/rgtriage.sock ]" in wait and "-lt 60" in wait and "exit 0" in wait     # waits at most a minute, never blocks the boot
+    assert "$$n" in wait and "$n" not in wait.replace("$$n", "")                                          # systemd would otherwise expand it
+    assert unit.index("ExecStartPre=/bin/sh -c") < unit.index("ExecStartPre=-/usr/bin/docker rm") < unit.index("ExecStart=/usr/bin/docker run")

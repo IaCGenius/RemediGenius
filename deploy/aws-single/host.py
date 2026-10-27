@@ -270,9 +270,38 @@ def seed_model(config_text: str, model_seed) -> str:
     return ''.join(out)
 
 
-WATCH_SCRIPT = '''"""Hermes cron script: print only new P1/P2 security findings (empty output = silent)."""
-import json, socket
-s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.settimeout(1200); s.connect(%r)
+WATCH_SCRIPT = '''"""Hermes cron script: print only new P1/P2 security findings (empty output = silent).
+
+Reaches the desk over its Unix socket. The desk can be restarting (about 3 seconds) or just starting, so a failed connection is retried for
+WAIT seconds before giving up with a one-line reason. It only works inside the agent container, which is where the socket folder is mounted."""
+import json, os, socket, sys, time
+
+PATH = %r
+WAIT = 90
+
+
+def connect():
+    last, deadline = None, time.time() + WAIT
+    while True:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            s.settimeout(30)
+            s.connect(PATH)
+            return s
+        except OSError as exc:
+            last = exc
+            s.close()
+            if time.time() >= deadline:
+                break
+            time.sleep(3)
+    where = ("the desk's socket folder is not mounted in this process: this job must run inside the agent container"
+             if not os.path.isdir(os.path.dirname(PATH)) else "the desk service is not answering")
+    print(f"security watch could not reach the desk ({type(last).__name__}): {where}. It will try again at the next run.")
+    sys.exit(1)
+
+
+s = connect()
+s.settimeout(1200)
 s.sendall(json.dumps({"args": ["watch", "--min-priority", "P2"]}).encode() + b"\\n")
 data = b""
 while True:
@@ -280,7 +309,11 @@ while True:
     if not chunk:
         break
     data += chunk
-reply = json.loads(data)
+try:
+    reply = json.loads(data)
+except ValueError:
+    print("security watch got an unreadable answer from the desk. It will try again at the next run.")
+    sys.exit(1)
 print(reply.get("stdout", "") if reply.get("rc") == 0 else "rgtriage watch failed: " + reply.get("stderr", "")[-600:], end="")
 '''
 
@@ -421,6 +454,7 @@ Description=RemediGenius-CE Hermes (pinned image, no AWS credentials)
 After=docker.service remedigenius-desk.service
 Requires=docker.service
 [Service]
+ExecStartPre=/bin/sh -c 'n=0; while [ ! -S {SOCKET.as_posix()} ] && [ $$n -lt 60 ]; do n=$$((n+1)); sleep 1; done; exit 0'
 ExecStartPre=-/usr/bin/docker rm -f {CONTAINER}
 ExecStart=/usr/bin/docker run --rm --name {CONTAINER} --network {CONTAINER} --env-file /run/remedigenius/hermes.env -p 127.0.0.1:9120:9120 -v {HERMES_HOME.as_posix()}:/opt/data {mounts} -v {PACKAGE.as_posix()}:/opt/remedigenius-package:ro --memory {memory}m --pids-limit 1024 {cfg['image']} gateway run
 ExecStop=/usr/bin/docker stop -t 30 {CONTAINER}

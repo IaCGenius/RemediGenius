@@ -72,11 +72,16 @@ check "Kanban dispatcher off" $([ "$c" = "false" ]; echo $?) "$c"
 if [ -x /usr/local/bin/rgdesk ]; then
   g=$(rgdesk github status 2>&1)
   ghost=$(systemctl list-unit-files 2>/dev/null | grep -c remedigenius-webui; docker ps -a --format '{{.Names}}' | grep -c webui; ss -ltn 2>/dev/null | grep -cE ':(8787|8642)\b')
-  check "no WebUI, no WebUI container and nothing listening on its ports (8787) or the agent API server (8642)" $([ "$(echo $ghost | tr -d ' 0')" = "" ]; echo $?) "unit/container/port counts: $(echo $ghost | tr '\n' ' ')"
-  api=$(docker exec --user 10000:10000 remedigenius python -c "import socket;s=socket.socket();s.settimeout(3);print(s.connect_ex(('127.0.0.1',8642)))" 2>&1 | tail -1)
-  check "the agent's API server (port 8642) is not running inside the agent container" $([ "$api" != 0 ] && [ -n "$api" ]; echo $?) "connect_ex=$api"
-  left=$( [ -e /data/hermes/.remedigenius-api-key ] && echo key; [ -e /data/hermes/rg-wiki ] && echo wiki; grep -l API_SERVER_KEY /data/hermes/.env /data/hermes/profiles/remedigenius/.env 2>/dev/null | head -1; true )
-  check "nothing is left from an earlier release's WebUI (API key, wiki view, API server key in .env)" $([ -z "$left" ]; echo $?) "left: [$(echo $left)] (the WebUI's own /data/hermes/webui folder is kept on purpose)"
+  check "no WebUI service or container, and nothing on the host listening on its port (8787) or the old API port (8642)" $([ "$(echo $ghost | tr -d ' 0')" = "" ]; echo $?) "unit/container/port counts: $(echo $ghost | tr '\n' ' ')"
+  cip=$(docker inspect remedigenius --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+  a1=$(curl -s -m 3 -o /dev/null -w '%{http_code}' http://$cip:8642/health); a2=$(curl -s -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8642/health)
+  bound=$(docker exec --user 10000:10000 remedigenius python -c "
+for l in open('/proc/net/tcp').read().splitlines()[1:]:
+    f = l.split()
+    if f[3] == '0A' and int(f[1].split(':')[1], 16) == 8642: print(f[1].split(':')[0])" 2>&1 | head -1)
+  check "the agent's API server is not reachable from outside the agent container (Hermes keeps it on loopback inside; nothing is published for it)" $([ "$a1" = 000 ] && [ "$a2" = 000 ] && { [ -z "$bound" ] || [ "$bound" = 0100007F ]; }; echo $?) "from host via container address: http $a1; host loopback: http $a2; bound to: ${bound:-closed}"
+  left=$( [ -e /data/hermes/.remedigenius-api-key ] && echo key; [ -e /data/hermes/rg-wiki ] && echo wiki; grep -l API_SERVER_KEY /data/hermes/profiles/remedigenius/.env 2>/dev/null | head -1; true )
+  check "nothing is left from an earlier release's WebUI (shared API key, wiki view, key in the profile .env)" $([ -z "$left" ]; echo $?) "left: [$(echo $left)] (Hermes writes its own key in /data/hermes/.env; the WebUI's own /data/hermes/webui folder is kept on purpose)"
   check "GitHub status is readable (Disconnected on a fresh stack)" $(echo "$g" | head -1 | grep -q "^GitHub: "; echo $?) "$(echo "$g" | head -1)"
   check "validation tools installed (terraform, tflint, cfn-lint)" $(echo "$g" | grep -q "terraform yes, tflint yes, cfn-lint yes"; echo $?) "$(echo "$g" | tail -1)"
   p=$(stat -c "%a %u" /data/rggithub 2>&1); check "GitHub key folder private to the desk user" $([ "$p" = "700 10000" ]; echo $?) "$p"

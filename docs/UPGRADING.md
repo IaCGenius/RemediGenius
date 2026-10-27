@@ -10,8 +10,9 @@ from S3; nothing needs migrating. What changes:
   third-party image to re-pin and re-test with every release. The `-WebUI` / `--webui` flags of the open-console scripts are gone.
 - **The `webui` Terraform variable is gone.** If your tfvars file sets `webui = ...`, delete that line (Terraform only warns about an unknown
   variable in a tfvars file, but an explicit `-var webui=...` is an error).
-- **The agent's API server is off.** It existed only for the WebUI (port 8642 on the private container network, with its own key). The boot
-  removes the old key (`/data/hermes/.remedigenius-api-key` and `API_SERVER_KEY` lines in the `.env` files), the old WebUI service, container
+- **The agent's API server is no longer exposed.** It was opened to the private container network (port 8642, with a shared key) only for the WebUI.
+  Hermes still starts its own API server, but on loopback inside the agent container: nothing is published for it and nothing outside can reach it. The boot
+  removes the old shared key (`/data/hermes/.remedigenius-api-key` and `API_SERVER_KEY` lines in the `.env` files), the old WebUI service, container
   and volume if present, and the generated wiki view (`/data/hermes/rg-wiki`, **Insights, LLM Wiki**), which only the WebUI showed. The desk no longer
   writes it (`RGTRIAGE_WIKI_DIR` has no effect).
 - **Your WebUI data is left alone.** Its own folder, `/data/hermes/webui`, stays; delete it in an SSM session when you are sure you no longer need it.

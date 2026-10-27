@@ -42,15 +42,20 @@
 
 **Removed**
 - **The community Hermes WebUI** (`nesquena/hermes-webui`) and everything that existed only for it: the `webui` Terraform variable, the
-  `-WebUI` / `--webui` flags of `tools/open-remedigenius`, the agent's API server (port 8642) with its key and firewall rule, and the generated
-  wiki view (`RGTRIAGE_WIKI_DIR`, Insights, LLM Wiki). Reason: the dashboard is the one place where Knowledge, Improve, Kanban and GitHub live, so a
+  `-WebUI` / `--webui` flags of `tools/open-remedigenius`, the settings that exposed the agent's API server to it (host and port setting, the shared key, the firewall rule), and the
+  generated wiki view (`RGTRIAGE_WIKI_DIR`, Insights, LLM Wiki). Reason: the dashboard is the one place where Knowledge, Improve, Kanban and GitHub live, so a
   second UI could never show the whole picture, and the WebUI was a fast-moving third-party image to re-pin and re-test every release. Chat is the
-  dashboard's Chat tab. On upgrade the boot removes the old service, container, volume, API key and wiki view; `/data/hermes/webui` is left for you to
+  dashboard's Chat tab. Hermes still runs its own API server, on loopback inside the agent container only: nothing is published for it and nothing outside can reach it. On upgrade the boot removes the old service, container, volume, shared API key and wiki view; `/data/hermes/webui` is left for you to
   delete. See [docs/UPGRADING.md](docs/UPGRADING.md). If your tfvars sets `webui = ...`, delete that line.
 
 **Changed**
 - Spot installs pinned `tflint` 0.63.1 and `cfn-lint` 1.57.2 for the checks above; the desk service can write `/data/iac`
   (the mirror) and its own GitHub folder, which is part of the private durable checkpoint.
+- **The security-watch alert job no longer dies on a brief desk outage.** It failed once with "No such file or directory" on the desk's socket and
+  showed as an error until its next run. The job now retries for 90 seconds (the desk is unreachable for about 3 seconds while it restarts), and
+  prints a one-line reason instead of a traceback if it still cannot connect, including when it is run somewhere the socket folder is not mounted
+  (the removed WebUI could run it, and did not have the mount). The agent container now also waits (up to a minute) for the desk's socket before
+  it starts, so a job that is due at boot cannot beat the desk.
 - The `rg-iac-fix` skill gains one step (open a PR). Steps 1 to 8 and the protected rules are unchanged.
 
 **Not in this release**
