@@ -2,10 +2,11 @@
 
 ## v0.5.0 (2026-10-29)
 
-Validated on the release branch on the maintainer's Windows workstation and on one throwaway AWS Spot stack
-(`rgce-storage-test`, deleted at the end of the run) in one real AWS account, us-east-1. The account is a member of an
-organization with three other accounts; they remain uncovered in this run. Configuration: Hermes
-`nousresearch/hermes-agent:stable@sha256:444b4259…` (0.21.7), model `deepseek-v4.1-flash`, OCSF 1.9.0, PyIceberg 0.12.0.
+Validated on the release branch on the maintainer's Windows workstation, and on throwaway AWS Spot stacks in one real
+AWS account, us-east-1 — the last of them built from the merged release commit `c9d1a90` that carries the `v0.5.0` tag.
+Every stack was deleted at the end of its run. The account is a member of an organization with three other accounts;
+they remain uncovered in this run. Configuration: Hermes `nousresearch/hermes-agent:stable@sha256:444b4259…` (0.21.7),
+model `deepseek-v4.1-flash`, OCSF 1.9.0, PyIceberg 0.12.0.
 
 ### Offline and local profile
 
@@ -29,6 +30,7 @@ organization with three other accounts; they remain uncovered in this run. Confi
 | `terraform apply` from nothing | 20 resources; boot finished in 298 s |
 | Host and boundary checks (`tools/spot_release_test.py`) | **49 of 49 PASS**, 0 FAIL |
 | Tightened IAM revalidation (`rgce-storage-quick`, 228889e) | **45 of 45 PASS** with browser/chat skipped; raw, warehouse, snapshot and outbox checks included; stack destroyed |
+| Publication revalidation (`rgce-release-v050-final`, `c9d1a90`, the merged commit carrying the tag) | **49 of 49 PASS**, 0 FAIL; boot 341 s, 11 minutes end to end; the same checks as the full run, stack destroyed |
 | rgtriage version / services / core plugins / skills | 0.5.0; desk, Hermes, validation and scan timer active; core plugins at 0.5.0 |
 | First scan and board | board produced; report names the account and coverage |
 | Raw evidence | object under `raw/` in the stack bucket, exactly one for the check |
@@ -48,6 +50,11 @@ database deletion, crawlers, jobs, development endpoints, security configuration
 second fresh stack (`rgce-storage-quick`, commit `228889e`) passed all 45 host/storage/boundary checks with browser and
 chat skipped; it also committed a non-null history snapshot with an empty outbox and was destroyed. The full 49-check
 run (commit `fb1392d`) remains the source for the browser and chat evidence.
+
+Before publication, the merged release commit `c9d1a90` was checked once more from its own build: a third fresh stack
+(`rgce-release-v050-final`) passed **49 of 49** checks with browser and chat included, booted in 341 s, committed a
+non-null history snapshot with an empty outbox, and was destroyed (20 resources, bucket included). The v0.5.0 release
+assets were built from that same commit; their checksums are in the release's `SHA256SUMS`.
 
 Not validated: a real S3 or Glue outage during a live scan/decision (covered by local on-disk fault tests, not AWS
 fault injection), replacing the Spot instance and rebuilding from S3 (covered by local on-disk rebuild tests), real

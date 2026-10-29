@@ -58,9 +58,10 @@ their existing path. See [docs/STORAGE.md](docs/STORAGE.md), [docs/SCHEMA.md](do
 
 **Validation:** 624 tests passed and 7 skipped offline; a fresh AWS Spot stack passed 49 of 49 host, storage, boundary,
 dashboard and chat checks, then was destroyed. After the Glue grant was tightened (no catalog administration or ETL), a
-second fresh stack passed all 45 host/storage/boundary checks. Details, including the defects these runs found and the
-remaining gaps, are in [docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md). A local-profile pass is not a claim
-about AWS durability or cost.
+second fresh stack passed all 45 host/storage/boundary checks, and a third fresh stack passed all 49 checks from the
+merged release commit before publication. Details, including the defects these runs found and the remaining gaps, are in
+[docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md). A local-profile pass is not a claim about AWS durability or
+cost.
 
 ## v0.4.0
 
