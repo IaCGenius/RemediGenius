@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -235,8 +236,10 @@ class Cache:
         self._busy_ms = busy_ms
         self._conn: sqlite3.Connection | None = None
         self._lock = ControllerLock(lock_path(self.path), timeout)
+        self._mutex = threading.RLock()  # collectors share one connection from worker threads
         try:
-            self._conn = sqlite3.connect(str(self.path), isolation_level=None, timeout=busy_ms / 1000)
+            self._conn = sqlite3.connect(str(self.path), isolation_level=None, timeout=busy_ms / 1000,
+                                         check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
             self._conn.execute("PRAGMA foreign_keys = ON")
             self._conn.execute(f"PRAGMA busy_timeout = {int(busy_ms)}")
@@ -262,9 +265,10 @@ class Cache:
             raise CacheError(f"cache is missing tables: {', '.join(sorted(missing))}")
 
     def close(self) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+        with self._mutex:
+            if self._conn is not None:
+                self._conn.close()
+                self._conn = None
 
     def __enter__(self) -> "Cache":
         return self
@@ -281,15 +285,16 @@ class Cache:
     @contextmanager
     def transaction(self):
         """One local transaction: outbox rows, staged facts and views are all-or-nothing."""
-        conn = self.conn
-        conn.execute("BEGIN IMMEDIATE")
-        try:
-            yield conn
-        except BaseException:
-            conn.execute("ROLLBACK")
-            raise
-        else:
-            conn.execute("COMMIT")
+        with self._mutex:
+            conn = self.conn
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield conn
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
+            else:
+                conn.execute("COMMIT")
 
     def acquire_controller(self) -> ControllerLock:
         return self._lock.acquire()
@@ -299,8 +304,9 @@ class Cache:
 
     # ---------------------------------------------------------------- meta and watermark
     def get_meta(self, key: str, default: str | None = None) -> str | None:
-        row = self.conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
-        return row["value"] if row else default
+        with self._mutex:
+            row = self.conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+            return row["value"] if row else default
 
     def set_meta(self, key: str, value: str) -> None:
         with self.transaction() as conn:
@@ -424,30 +430,33 @@ class Cache:
         return "new", int(cursor.lastrowid)
 
     def pending_batch(self, limit: int = 500, kinds: tuple[str, ...] | None = None) -> list[StagedEvent]:
-        sql = ("SELECT e.rowid AS rowid, e.* FROM outbox o JOIN events_local e ON e.event_id = o.event_id "
-               "WHERE e.state = 'pending'")
-        args: list = []
-        if kinds:
-            sql += f" AND e.kind IN ({', '.join('?' for _ in kinds)})"
-            args.extend(kinds)
-        sql += " ORDER BY o.seq LIMIT ?"
-        args.append(limit)
-        rows = self.conn.execute(sql, args).fetchall()
-        return [StagedEvent(event=self._event(row), payload=json.loads(row["payload"]), rowid=int(row["rowid"]))
-                for row in rows]
+        with self._mutex:
+            sql = ("SELECT e.rowid AS rowid, e.* FROM outbox o JOIN events_local e ON e.event_id = o.event_id "
+                   "WHERE e.state = 'pending'")
+            args: list = []
+            if kinds:
+                sql += f" AND e.kind IN ({', '.join('?' for _ in kinds)})"
+                args.extend(kinds)
+            sql += " ORDER BY o.seq LIMIT ?"
+            args.append(limit)
+            rows = self.conn.execute(sql, args).fetchall()
+            return [StagedEvent(event=self._event(row), payload=json.loads(row["payload"]), rowid=int(row["rowid"]))
+                    for row in rows]
 
     def pending_count(self, kinds: tuple[str, ...] | None = None) -> int:
-        sql = ("SELECT COUNT(*) FROM outbox o JOIN events_local e ON e.event_id = o.event_id "
-               "WHERE e.state = 'pending'")
-        args = ()
-        if kinds:
-            sql += f" AND e.kind IN ({', '.join('?' for _ in kinds)})"
-            args = tuple(kinds)
-        return int(self.conn.execute(sql, args).fetchone()[0])
+        with self._mutex:
+            sql = ("SELECT COUNT(*) FROM outbox o JOIN events_local e ON e.event_id = o.event_id "
+                   "WHERE e.state = 'pending'")
+            args = ()
+            if kinds:
+                sql += f" AND e.kind IN ({', '.join('?' for _ in kinds)})"
+                args = tuple(kinds)
+            return int(self.conn.execute(sql, args).fetchone()[0])
 
     def undurable_decisions(self) -> int:
-        return int(self.conn.execute("SELECT COUNT(*) FROM outbox o JOIN events_local e ON e.event_id = o.event_id "
-                                     "WHERE e.kind = 'decision' AND e.state = 'pending'").fetchone()[0])
+        with self._mutex:
+            return int(self.conn.execute("SELECT COUNT(*) FROM outbox o JOIN events_local e ON e.event_id = o.event_id "
+                                         "WHERE e.kind = 'decision' AND e.state = 'pending'").fetchone()[0])
 
     def _event(self, row: sqlite3.Row) -> contracts.Event:
         raw = contracts.RawRef.from_dict(json.loads(row["raw_ref"])) if row["raw_ref"] else None
@@ -460,20 +469,25 @@ class Cache:
             raw_ref=raw, batch_id=None)
 
     def raw_ref_for_sha256(self, sha256: str) -> contracts.RawRef | None:
-        row = self.conn.execute("SELECT raw_ref FROM events_local WHERE raw_sha256 = ? AND raw_ref IS NOT NULL "
-                                "ORDER BY rowid DESC LIMIT 1", (sha256,)).fetchone()
-        return contracts.RawRef.from_dict(json.loads(row["raw_ref"])) if row else None
+        with self._mutex:
+            row = self.conn.execute("SELECT raw_ref FROM events_local WHERE raw_sha256 = ? AND raw_ref IS NOT NULL "
+                                    "ORDER BY rowid DESC LIMIT 1", (sha256,)).fetchone()
+            return contracts.RawRef.from_dict(json.loads(row["raw_ref"])) if row else None
 
     def event_state(self, event_id: str) -> str | None:
-        row = self.conn.execute("SELECT state FROM events_local WHERE event_id = ?", (event_id,)).fetchone()
-        return row["state"] if row else None
+        with self._mutex:
+            row = self.conn.execute("SELECT state FROM events_local WHERE event_id = ?", (event_id,)).fetchone()
+            return row["state"] if row else None
 
     def event(self, event_id: str) -> StagedEvent | None:
-        row = self.conn.execute("SELECT rowid AS rowid, * FROM events_local WHERE event_id = ?", (event_id,)).fetchone()
-        return StagedEvent(self._event(row), json.loads(row["payload"]), int(row["rowid"])) if row else None
+        with self._mutex:
+            row = self.conn.execute("SELECT rowid AS rowid, * FROM events_local WHERE event_id = ?",
+                                    (event_id,)).fetchone()
+            return StagedEvent(self._event(row), json.loads(row["payload"]), int(row["rowid"])) if row else None
 
     def conflicts(self) -> list[dict]:
-        return [dict(row) for row in self.conn.execute("SELECT * FROM quarantine ORDER BY detected_at")]
+        with self._mutex:
+            return [dict(row) for row in self.conn.execute("SELECT * FROM quarantine ORDER BY detected_at")]
 
     # ---------------------------------------------------------------- batches
     def start_batch(self, plan: contracts.BatchPlan, max_rowid: int) -> None:
@@ -552,12 +566,14 @@ class Cache:
                  status, completeness, contracts.format_time(contracts.utc_now())))
 
     def load_progress(self, scope_key: str) -> dict | None:
-        row = self.conn.execute("SELECT * FROM collection_progress WHERE scope_key = ?", (scope_key,)).fetchone()
-        return dict(row) if row else None
+        with self._mutex:
+            row = self.conn.execute("SELECT * FROM collection_progress WHERE scope_key = ?", (scope_key,)).fetchone()
+            return dict(row) if row else None
 
     def progress_for_run(self, run_id: str) -> list[dict]:
-        return [dict(row) for row in self.conn.execute(
-            "SELECT * FROM collection_progress WHERE run_id = ? ORDER BY account, region, source", (run_id,))]
+        with self._mutex:
+            return [dict(row) for row in self.conn.execute(
+                "SELECT * FROM collection_progress WHERE run_id = ? ORDER BY account, region, source", (run_id,))]
 
     # ---------------------------------------------------------------- views
     def put_view(self, name: str, payload: Any, staged_rowid: int | None = None,
@@ -577,7 +593,8 @@ class Cache:
                       contracts.format_time(contracts.utc_now())))
 
     def get_view(self, name: str) -> dict | None:
-        row = self.conn.execute("SELECT * FROM views WHERE name = ?", (name,)).fetchone()
+        with self._mutex:
+            row = self.conn.execute("SELECT * FROM views WHERE name = ?", (name,)).fetchone()
         if row is None:
             return None
         return {"payload": json.loads(row["payload"]), "staged_rowid": int(row["staged_rowid"]),

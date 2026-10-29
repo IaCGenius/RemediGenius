@@ -99,6 +99,26 @@ def test_run_one_records_pages_and_the_scope_result(tmp_path, monkeypatch):
     assert run.result_refs["111122223333/us-east-1/inspector/"]
 
 
+def test_concurrent_collection_scopes_share_the_cache(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    cache, raw = setup(tmp_path)
+    run = collection.CollectionRun(cache, raw, "run-5")
+
+    def collect_scope(source):
+        scope = run.scope(account(), "us-east-1", source)
+        run.begin_scope(scope)
+        run.record_page(scope, "ListFindings", {"Findings": []})
+        run.record_result(scope, [finding(1)], {"truncated": False})
+        run.complete_scope(scope, count=1)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(collect_scope, ("inspector", "guardduty", "config", "accessanalyzer")))
+    progress = cache.progress_for_run("run-5")
+    assert len(progress) == 4 and all(row["status"] == "complete" for row in progress)
+    assert run.pending() == []
+
+
 def test_run_one_failure_keeps_partial_coverage(tmp_path, monkeypatch):
     cache, raw = setup(tmp_path)
     run = collection.CollectionRun(cache, raw, "run-4")
