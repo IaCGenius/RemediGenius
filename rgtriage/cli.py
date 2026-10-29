@@ -412,6 +412,65 @@ def cmd_fixes(args):
              f"{check.get('at', 'never')} {'passed' if check.get('passed') else ('failed ' + json.dumps(check.get('observed') or check.get('error'), default=str)[:120] if check else '')}")
 
 
+def cmd_history(args):
+    """Current facts, committed history and evidence resolution from the desk's durable store."""
+    from . import cache as cache_module
+    from . import contracts, iceberg_store, queries, rawstore
+
+    profile = config.load()
+    storage_profile = contracts.storage_profile(profile, config.home())
+    region = os.environ.get("AWS_REGION") or (profile.get("regions") or ["us-east-1"])[0]
+    try:
+        storage = iceberg_store.IcebergStore.open(storage_profile, region=region)
+        storage.ensure_tables()
+    except Exception as exc:
+        sys.exit(f"Durable storage is not ready: {type(exc).__name__}: {exc}. See docs/STORAGE.md.")
+    cache = cache_module.Cache(timeout=2)
+    raw = rawstore.from_config(profile, storage_profile, home=config.home())
+    service = queries.QueryService(cache, storage, raw)
+    try:
+        if args.evidence:
+            result = service.dispatch("evidence", {"sha256": args.evidence})
+        elif args.current:
+            result = service.dispatch("current", {"finding_key": args.finding, "account": args.account,
+                                                  "region": args.region, "limit": args.limit})
+        else:
+            result = service.dispatch("history", {"finding_key": args.finding, "as_of": args.as_of,
+                                                  "account": args.account, "region": args.region, "limit": args.limit})
+    except queries.QueryError as exc:
+        sys.exit(str(exc))
+    finally:
+        cache.close()
+    if args.json:
+        _json(result)
+        return
+    if result["query"] == "evidence":
+        _out(f"Evidence {result['sha256']}: {'verified' if result['verified'] else 'NOT verified'}"
+             + (f" · {result.get('key')}" if result.get("key") else "")
+             + (f" · {result['reason']}" if result.get("reason") else ""))
+        return
+    mark = result["durability"]["watermark"]
+    _out(f"Installation {result['installation_id']} · namespace {storage_profile.namespace}")
+    _out(f"Committed: {('sequence %s · snapshot %s' % (mark['sequence'], mark.get('snapshot_id'))) if mark else 'nothing yet'}")
+    _out(f"Not yet durable: {result['durability']['outbox_events']} event(s), "
+         f"{result['durability']['undurable_decisions']} decision(s)")
+    if result["query"] == "history":
+        manifest = result.get("manifest") or {}
+        state = "complete" if manifest.get("complete") else "INCOMPLETE"
+        _out(f"Evidence set: {state}" + (f" · run {manifest['run_id']}" if manifest.get("run_id") else "")
+             + (f" · {manifest['reason']}" if manifest.get("reason") else ""))
+        for spot in (manifest.get("blind_spots") or [])[:6]:
+            _out(f"  blind spot: {spot.get('source')} {spot.get('account_id')} {spot.get('region')} "
+                 f"{spot.get('status')}{' truncated' if spot.get('truncated') else ''}")
+        _out(f"As of: {result.get('as_of') or 'latest'} · snapshot {result.get('snapshot_id')}")
+    _out(f"Rows: {result['count']}" + (" (truncated)" if result.get("truncated") else ""))
+    for row in result["rows"]:
+        ce = row.get("ce") or {}
+        _out(f"  {ce.get('priority') or '-':<3} {ce.get('finding_key') or row.get('finding_key') or row.get('key') or '-':<16} "
+             f"{row.get('class_uid', '-')} {row.get('account_id', '')}/{row.get('region', '')} "
+             f"{row.get('observed_at', '')} raw {str(row.get('raw_sha256') or '')[:16]}")
+
+
 def cmd_card(args):
     """A Kanban card for people: the change, exact AWS CLI from a live read, an IaC chat prompt, the verify read."""
     from . import cards
@@ -1060,6 +1119,14 @@ def main(argv=None):
     p.set_defaults(func=cmd_decide)
     p = sub.add_parser("fixes", help="fix records from decision to verified closure"); p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_fixes)
+    p = sub.add_parser("history", help="current facts and committed history from durable storage")
+    p.add_argument("--current", action="store_true", help="current state instead of history")
+    p.add_argument("--finding", help="one finding key")
+    p.add_argument("--as-of", help="ISO date/time or a date (for example 2026-06-15)")
+    p.add_argument("--account"); p.add_argument("--region")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--evidence", help="resolve a raw evidence SHA-256 without returning its bytes")
+    p.add_argument("--json", action="store_true"); p.set_defaults(func=cmd_history)
     p = sub.add_parser("card", help="Kanban card text for one change: AWS CLI fix, IaC prompt, verify read")
     p.add_argument("ref", nargs="+"); p.add_argument("--offline", action="store_true", help="no live read for exact commands")
     p.add_argument("--text", dest="json", action="store_false", help="print markdown instead of JSON")

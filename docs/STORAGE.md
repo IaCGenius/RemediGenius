@@ -156,6 +156,19 @@ Both profiles run the same in-process maintenance, so no Athena job, Spark clust
 Cost is S3 GET/PUT and Glue API requests during maintenance; there is no hourly service. Athena remains optional
 for operators who want SQL over the tables.
 
+## Current and historical queries
+
+`rgtriage history` reads the committed Iceberg tables (or a past snapshot with `--as-of`) and the current view from
+the cache. Every answer includes the installation, commit watermark, not-yet-durable counts, the evidence-set manifest
+and the raw evidence reference. `--current` reads the current view; `--evidence <sha256>` resolves a raw object's
+metadata and hash without returning its bytes. The agent reaches the same read-only surface through the
+`rg_triage` tool's `history` action; the Unix socket accepts the command and nothing else needs to be exposed.
+
+A historical answer is bound to one committed batch: the manifest comes from that batch's `scan_runs` and `coverage`
+snapshots, so per-table commit order cannot mix runs. If coverage is incomplete, the answer says so and lists the
+blind spots; it is never presented as a complete evidence set. Later campaign/relationship handlers return
+`unsupported` until their tables exist.
+
 ## Operator-visible health
 
 `doctor` and `status` report installation and epoch, commit watermark and age, outbox size, not-yet-durable
@@ -196,7 +209,7 @@ The contract is CE-01. The rest of the release fills it in; this table is update
 | CE-09 command cut-over | `rgtriage/repository.py` | planned |
 | CE-10 current-state tables | `rgtriage/current.py` | planned |
 | CE-11 rebuild and reconciliation | `rgtriage/recovery.py` | planned |
-| CE-14 scoped history queries | `rgtriage/queries.py` | planned |
+| CE-14 scoped history queries | `rgtriage/queries.py`, `rgtriage history` | done |
 | CE-15 crash/outage proof and health | `rgtriage/health.py`, `tests/test_storage_live.py` | planned |
 
 See also: [ARCHITECTURE.md](ARCHITECTURE.md) · [SCHEMA.md](SCHEMA.md) · [DATA-FLOW.md](DATA-FLOW.md) ·

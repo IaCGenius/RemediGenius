@@ -153,6 +153,19 @@ class IcebergStore:
         scan = table.scan(snapshot_id=snapshot_id, limit=limit)
         return scan.to_arrow().to_pylist()
 
+    def snapshot_at(self, name: str, as_of: datetime) -> int | None:
+        table = self.table(name)
+        snapshot = table.snapshot_as_of_timestamp(int(as_of.timestamp() * 1000))
+        return snapshot.snapshot_id if snapshot else None
+
+    def scan_rows_as_of(self, name: str, *, as_of: datetime | None = None,
+                        limit: int | None = None) -> list[dict]:
+        table = self.table(name)
+        snapshot_id = self.snapshot_at(name, as_of) if as_of else None
+        if as_of and snapshot_id is None:
+            return []
+        return table.scan(snapshot_id=snapshot_id, limit=limit).to_arrow().to_pylist()
+
     def snapshots(self, name: str) -> list:
         return self.table(name).snapshots()
 
@@ -168,6 +181,10 @@ class IcebergStore:
             if (snapshot.summary or {}).get("ce.batch_id") == batch_id:
                 return snapshot.snapshot_id
         return None
+
+    def snapshot_summary(self, name: str, snapshot_id: int):
+        snapshot = self.table(name).snapshot_by_id(snapshot_id)
+        return snapshot.summary if snapshot else {}
 
     def last_snapshot_id(self, name: str) -> int | None:
         snapshots = self.snapshots(name)

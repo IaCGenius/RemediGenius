@@ -36,7 +36,7 @@ flowchart TB
 
 | Piece | What it does |
 | --- | --- |
-| `rg_triage` tool | `digest`, `scan`, `list`, `show`, `fix`, `aws` (one read-only call or policy evaluation, prefixed with an Evidence line: account, region, time, complete or partial), `validate`, `decide`, `doctor`, `onboarding`, `playbook`, `report`, `knowledge` (read-only views) |
+| `rg_triage` tool | `digest`, `scan`, `list`, `show`, `fix`, `aws` (one read-only call or policy evaluation, prefixed with an Evidence line: account, region, time, complete or partial), `validate`, `decide`, `doctor`, `onboarding`, `playbook`, `report`, `knowledge` (read-only views), `history` (current facts or committed history with the manifest and evidence id) |
 | Session-start hook | puts the current board in front of the agent on the first turn; starts a background refresh when the scan is stale |
 | Guards | blocks file writes outside the proposals folder; blocks reads of credential stores, keys, `.env` and Terraform state; routes every `decide` through Hermes's approval prompt |
 | `/triage` | the board without a model call (interactive chat and gateways) |
