@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from . import contracts
+from . import contracts, lifecycle
 
-HANDLERS = ("current", "history", "evidence")
-UNSUPPORTED = ("campaign", "campaigns", "relationships", "graph", "timeline")
+HANDLERS = ("current", "history", "timeline", "evidence")
+UNSUPPORTED = ("campaign", "campaigns", "relationships", "graph")
 MAX_LIMIT = 500
 
 
@@ -152,6 +152,13 @@ class QueryService:
                              for row in entries],
                 "blind_spots": blind, "reason": "" if complete else "coverage is missing sources or was not complete"}
 
+    def timeline(self, finding_key: str | None = None, as_of=None, limit: int | None = None) -> dict:
+        limit = _limit(limit, 200)
+        result = lifecycle.from_storage(self.storage, finding_key=finding_key, as_of=_as_of(as_of), limit=limit)
+        result.update({"query": "timeline", "installation_id": self.installation_id,
+                       "durability": self._durability()})
+        return result
+
     def evidence(self, sha256: str) -> dict:
         """Resolve a raw evidence reference without returning the object bytes to the agent."""
         if not isinstance(sha256, str) or len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
@@ -180,6 +187,7 @@ class QueryService:
             raise QueryError(f"unknown query handler {handler!r}")
         allowed = {"current": {"finding_key", "account", "region", "limit"},
                    "history": {"finding_key", "as_of", "account", "region", "limit"},
+                   "timeline": {"finding_key", "as_of", "limit"},
                    "evidence": {"sha256"}}[handler]
         unknown = set(params) - allowed
         if unknown:

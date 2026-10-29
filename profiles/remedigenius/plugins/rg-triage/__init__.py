@@ -297,6 +297,8 @@ def handle(params: dict, **_kwargs) -> str:
         else:
             if p.get("current"):
                 args.append("--current")
+            if p.get("timeline"):
+                args.append("--timeline")
             for key in ("finding", "as_of", "account", "region"):
                 if p.get(key):
                     args += [f"--{key.replace('_', '-')}", str(p[key])]
@@ -387,6 +389,7 @@ SCHEMA = {
             "finding": {"type": "string", "description": "history: finding key"},
             "as_of": {"type": "string", "description": "history: ISO date/time or date (2026-06-15)"},
             "current": {"type": "boolean", "description": "history: current state instead of committed history"},
+            "timeline": {"type": "boolean", "description": "history: finding episodes with applied and verified time"},
             "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "history: raw evidence id to resolve"},
             "priority": {"type": "string", "description": "P1, P2, P3, P4 or comma list"},
             "source": {"type": "string", "description": "securityhub, guardduty, inspector, accessanalyzer, config, cloudwatch, health"},

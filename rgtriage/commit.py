@@ -133,7 +133,8 @@ class Committer:
                         "outcome": payload.get("outcome", ""), "passed": payload.get("passed"),
                         "observed": _json(payload.get("observed")), "error": payload.get("error"),
                         "target": payload.get("target") or {}, "rule_version": payload.get("rule_version"),
-                        "raw_sha256": raw_sha})
+                        "raw_sha256": raw_sha, "visibility": payload.get("visibility"),
+                        "target_state": payload.get("target_state")})
         elif table == "github_ops":
             row.update({"operation_id": payload.get("operation_id") or event.event_id,
                         "phase": payload.get("phase") or ("intent" if event.kind == "github_intent" else "result"),

@@ -204,7 +204,8 @@ def verification_attempts() -> Schema:
                                           StructType(_f(12, "account_id", StringType()), _f(13, "region", StringType()),
                                                      _f(14, "resource_type", StringType()), _f(15, "resource_id", StringType()))),
         _f(16, "rule_version", StringType()), _f(17, "raw_sha256", StringType()),
-        _f(18, "observed_at", TimestamptzType(), True), _f(19, "ingested_at", TimestamptzType(), True))
+        _f(18, "observed_at", TimestamptzType(), True), _f(19, "ingested_at", TimestamptzType(), True),
+        _f(20, "visibility", StringType()), _f(21, "target_state", StringType()))
 
 
 def github_ops() -> Schema:

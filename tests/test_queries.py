@@ -127,6 +127,15 @@ def test_evidence_ids_are_resolved_or_rejected_without_returning_bytes(tmp_path)
         service.evidence("not-a-hash")
 
 
+def test_timeline_is_available_without_campaign_features(tmp_path):
+    cache, raw, store, committer = setup(tmp_path)
+    commit_batch(cache, raw, committer, 1, run_id="run-1")
+    service = queries.QueryService(cache, store, raw)
+    result = service.dispatch("timeline", {"finding_key": "key1"})
+    assert result["query"] == "timeline" and result["findings"]["key1"][0]["status"] == "open"
+    assert result["durability"]["watermark"]["sequence"] == 1
+
+
 def test_dispatch_contract_rejects_unknown_and_extra_parameters(tmp_path):
     cache, raw, store, committer = setup(tmp_path)
     service = queries.QueryService(cache, store, raw)
