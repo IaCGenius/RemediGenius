@@ -440,6 +440,11 @@ class Cache:
             observed_at=row["observed_at"], ingested_at=row["ingested_at"], payload_hash=row["payload_hash"],
             raw_ref=raw, batch_id=None)
 
+    def raw_ref_for_sha256(self, sha256: str) -> contracts.RawRef | None:
+        row = self.conn.execute("SELECT raw_ref FROM events_local WHERE raw_sha256 = ? AND raw_ref IS NOT NULL "
+                                "ORDER BY rowid DESC LIMIT 1", (sha256,)).fetchone()
+        return contracts.RawRef.from_dict(json.loads(row["raw_ref"])) if row else None
+
     def event_state(self, event_id: str) -> str | None:
         row = self.conn.execute("SELECT state FROM events_local WHERE event_id = ?", (event_id,)).fetchone()
         return row["state"] if row else None
