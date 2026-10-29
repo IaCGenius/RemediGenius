@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from . import contracts, lifecycle
+from . import campaigns, contracts, lifecycle
 
-HANDLERS = ("current", "history", "timeline", "evidence")
-UNSUPPORTED = ("campaign", "campaigns", "relationships", "graph")
+HANDLERS = ("current", "history", "timeline", "evidence", "campaign", "campaigns")
+UNSUPPORTED = ("relationships", "graph")
 MAX_LIMIT = 500
 
 
@@ -159,6 +159,54 @@ class QueryService:
                        "durability": self._durability()})
         return result
 
+    def _campaign_rows(self) -> list:
+        return self.storage.scan_rows("campaigns") if self.storage else []
+
+    def campaigns(self, status: str | None = None, limit: int | None = None) -> dict:
+        """Campaign versions, newest first, one entry per campaign with its latest version."""
+        limit = _limit(limit, 50)
+        rows = [row for row in self._campaign_rows() if not status or row.get("status") == status]
+        latest = {}
+        for row in rows:
+            current = latest.get(row.get("campaign_id"))
+            if current is None or int(row.get("version") or 0) > int(current.get("version") or 0):
+                latest[row.get("campaign_id")] = row
+        ordered = sorted(latest.values(), key=lambda row: (_at(row.get("updated_at")) or
+                                                          datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
+        return {"query": "campaigns", "installation_id": self.installation_id, "durability": self._durability(),
+                "count": len(ordered), "rows": ordered[:limit], "truncated": len(ordered) > limit}
+
+    def campaign(self, campaign_id: str = "", version: int | None = None, after: int | None = None,
+                 limit: int | None = None) -> dict:
+        """Full paginated membership of one campaign version, with per-target progress from its stored states."""
+        if not campaign_id or not isinstance(campaign_id, str):
+            raise QueryError("campaign_id is required")
+        limit = _limit(limit, 100)
+        versions = [row for row in self._campaign_rows() if row.get("campaign_id") == campaign_id]
+        if not versions:
+            return {"query": "campaign", "campaign_id": campaign_id, "found": False, "members": [],
+                    "reason": "no campaign with this id is committed", "installation_id": self.installation_id,
+                    "durability": self._durability()}
+        chosen = int(version) if version is not None else max(int(row.get("version") or 0) for row in versions)
+        record = next((row for row in versions if int(row.get("version") or 0) == chosen), None)
+        if record is None:
+            raise QueryError(f"campaign {campaign_id} has no version {chosen}")
+        rows = [row for row in (self.storage.scan_rows("campaign_members") if self.storage else [])
+                if row.get("campaign_id") == campaign_id and int(row.get("version") or 0) == chosen]
+        page = campaigns.page(rows, after=int(after or 0), limit=limit)
+        states = {row.get("state") for row in rows}
+        page.update({"query": "campaign", "found": True, "campaign_id": campaign_id, "version": chosen,
+                     "title": record.get("title"), "status": record.get("status"),
+                     "membership_digest": record.get("membership_digest"), "member_count": record.get("member_count"),
+                     "approved_by": record.get("approved_by"), "approved_at": record.get("approved_at"),
+                     "progress": {"verified": sum(1 for row in rows if row.get("state") == "verified"),
+                                  "applied_pending_verification": sum(1 for row in rows if row.get("state") == "applied"),
+                                  "open": sum(1 for row in rows if row.get("state") == "open"),
+                                  "membership_digest": record.get("membership_digest")},
+                     "states_seen": sorted(state for state in states if state),
+                     "installation_id": self.installation_id, "durability": self._durability()})
+        return page
+
     def evidence(self, sha256: str) -> dict:
         """Resolve a raw evidence reference without returning the object bytes to the agent."""
         if not isinstance(sha256, str) or len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
@@ -188,6 +236,8 @@ class QueryService:
         allowed = {"current": {"finding_key", "account", "region", "limit"},
                    "history": {"finding_key", "as_of", "account", "region", "limit"},
                    "timeline": {"finding_key", "as_of", "limit"},
+                   "campaign": {"campaign_id", "version", "after", "limit"},
+                   "campaigns": {"status", "limit"},
                    "evidence": {"sha256"}}[handler]
         unknown = set(params) - allowed
         if unknown:

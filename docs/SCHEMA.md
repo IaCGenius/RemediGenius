@@ -62,6 +62,12 @@ record was not retained, mapping fails closed instead of re-mapping it lossily.
 | `current_fixes` | current fix records | — |
 | `current_decisions` | current decisions | — |
 | `current_operations` | open GitHub operations for recovery | — |
+| `campaigns` | one row per campaign version: scope digest, member count, and the approval that froze them | — |
+| `campaign_members` | complete membership per version; `ordinal` is the pagination cursor | `account_id` |
+
+`campaign_members` is the authoritative scope: the board preview is bounded on purpose, while decisions and approved
+actions read the frozen membership digest. A target discovered after approval starts a new campaign version and needs a
+new approval — it can never join an approved scope silently.
 
 `account_id`, `region`, `class_uid` and `event_day` are top-level columns as well as fields inside the OCSF
 record, so partitioning does not depend on nested access. `event_day` is the UTC observation day.

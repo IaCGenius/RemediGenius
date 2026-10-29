@@ -139,7 +139,9 @@ def test_timeline_is_available_without_campaign_features(tmp_path):
 def test_dispatch_contract_rejects_unknown_and_extra_parameters(tmp_path):
     cache, raw, store, committer = setup(tmp_path)
     service = queries.QueryService(cache, store, raw)
-    assert service.dispatch("campaign")["status"] == "unsupported"
+    assert service.dispatch("relationships")["status"] == "unsupported"
+    with pytest.raises(queries.QueryError, match="campaign_id is required"):
+        service.dispatch("campaign")
     with pytest.raises(queries.QueryError):
         service.dispatch("not-a-handler")
     with pytest.raises(queries.QueryError):
