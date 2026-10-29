@@ -74,7 +74,8 @@ check "raw evidence exists once in S3" $([ "$r" = "1" ]; echo $?) "$r"
 w=$(aws s3api list-objects-v2 --bucket "$bucket" --prefix warehouse/ --max-keys 1 --query 'KeyCount' --output text 2>&1)
 check "Iceberg warehouse exists in S3" $([ "$w" = "1" ]; echo $?) "$w"
 h=$($D history --limit 1 --json 2>&1)
-echo "$h" | grep -q '"snapshot_id"'; check "history reads committed facts with a snapshot" $? "$(echo "$h" | head -1 | cut -c1-120)"
+echo "$h" | grep -Eq '"snapshot_id": [0-9]+'; check "history reads a committed snapshot (not an empty store)" $? "$(echo "$h" | head -1 | cut -c1-120)"
+echo "$h" | grep -q '"outbox_events": 0'; check "the scan outbox is empty after the commit" $? "$(echo "$h" | grep -o '"outbox_events": [0-9]*' | head -1)"
 c=$($H -p default config get kanban.dispatch_in_gateway 2>&1 | tail -1)
 check "Kanban dispatcher off" $([ "$c" = "false" ]; echo $?) "$c"
 if [ -x /usr/local/bin/rgdesk ]; then

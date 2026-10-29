@@ -104,6 +104,13 @@ def test_vulnerability_compliance_and_residual_fields():
     assert "surprise" in unknown["unmapped"]["source_keys"]
 
 
+def test_resource_details_are_json_text_not_a_nested_dict():
+    record = ocsf.map_finding(base("inspector", resource={"type": "AwsS3Bucket", "id": "arn:aws:s3:::bucket",
+                                                          "name": "bucket", "details": {"policy": {"public": True}}}))
+    assert isinstance(record["resources"][0]["data"], str)
+    assert '"public":true' in record["resources"][0]["data"]
+
+
 def test_unknown_source_falls_back_instead_of_guessing():
     record = ocsf.map_finding(base("brand-new-source"))
     assert record["class_uid"] == ocsf.CLASS_FINDING

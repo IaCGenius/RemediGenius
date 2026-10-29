@@ -121,7 +121,8 @@ def _resources(finding: dict, region: str) -> list[dict]:
         "uid": uid, "type": str(resource.get("type") or "AwsResource"),
         "name": str(resource.get("name") or uid), "region": region,
         "account_uid": _account_uid(finding), "tags": {str(k): str(v) for k, v in (tags or {}).items()},
-        "data": _bounded(resource.get("details")) if resource.get("details") else None,
+        "data": (contracts.canonical_json(contracts.jsonable(_bounded(resource.get("details"))))
+                 if resource.get("details") else None),
     }
     return [item]
 

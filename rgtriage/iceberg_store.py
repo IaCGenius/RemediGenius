@@ -131,10 +131,8 @@ class IcebergStore:
             return "empty"
         if batch_id and self.batch_in_history(name, batch_id):
             return "already-committed"
-        import pyarrow as pa
-
         table = self.table(name)
-        arrow = pa.Table.from_pylist(rows, schema=schemas.pyarrow_schema(name, table.schema()))
+        arrow = self._arrow(rows, schemas.pyarrow_schema(name, table.schema()))
         properties = {}
         if batch_id:
             properties["ce.batch_id"] = batch_id
@@ -148,13 +146,21 @@ class IcebergStore:
         return {name: self.append_rows(name, rows, batch_id=batch_id, content_hash=content_hash)
                 for name, rows in rows_by_table.items() if rows}
 
+    def _arrow(self, rows: list[dict], arrow_schema):
+        """Column-wise Arrow conversion: from_pylist mishandles a nested struct that contains a map."""
+        import pyarrow as pa
+
+        if not rows:
+            return pa.Table.from_pylist([], schema=arrow_schema)
+        columns = [pa.array([row.get(field.name) for row in rows], type=field.type) for field in arrow_schema]
+        return pa.Table.from_arrays(columns, schema=arrow_schema)
+
     def overwrite_rows(self, name: str, rows: list[dict], *, snapshot_properties: dict | None = None) -> int:
         """Replace a small current-state table in one snapshot (used by CE-10)."""
-        import pyarrow as pa
         from pyiceberg.expressions import AlwaysTrue
 
         table = self.table(name)
-        arrow = pa.Table.from_pylist(rows, schema=schemas.pyarrow_schema(name, table.schema()))
+        arrow = self._arrow(rows, schemas.pyarrow_schema(name, table.schema()))
         table.overwrite(arrow, overwrite_filter=AlwaysTrue(), snapshot_properties=snapshot_properties or {})
         table.refresh()
         return len(rows)
