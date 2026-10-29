@@ -1,0 +1,12 @@
+# Copy to deploy/backend.hcl (git-ignored) and fill in the bucket printed by deploy/bootstrap.
+# Every root module has its own state key; pass this file with -backend-config.
+#
+#   terraform -chdir=deploy/aws-static  init -backend-config=../backend.hcl
+#   terraform -chdir=deploy/aws-private init -backend-config=../backend.hcl
+#   terraform -chdir=deploy/ami         init -backend-config=../backend.hcl
+#
+# use_lockfile needs Terraform >= 1.10 and removes the need for a DynamoDB lock table.
+bucket       = "<state-bucket-from-deploy-bootstrap>"
+region       = "us-east-1"
+use_lockfile = true
+encrypt      = true

@@ -98,6 +98,11 @@ variable "spot_instance_types" {
   type    = list(string)
   default = ["t3.large", "t3a.large"]
 }
+variable "ami_id" {
+  type        = string
+  default     = ""
+  description = "Optional baked image from deploy/ami (runtime and Hermes image already on disk). Empty installs at boot on plain AL2023."
+}
 variable "container_memory_mb" {
   type    = number
   default = 6144
@@ -242,7 +247,7 @@ locals {
 
 resource "aws_launch_template" "host" {
   name_prefix   = "${var.name}-"
-  image_id      = data.aws_ssm_parameter.ami.value
+  image_id      = var.ami_id == "" ? data.aws_ssm_parameter.ami.value : var.ami_id
   instance_type = var.spot_instance_types[0]
   iam_instance_profile {
     name = aws_iam_instance_profile.host.name

@@ -1,7 +1,11 @@
 #!/bin/bash
 # RemediGenius Community Edition (RemediGenius-CE) first boot. Each Spot instance is new; state comes from S3.
+#
+# Two paths, same script:
+#   plain AL2023   - install docker and the runtime, then download the release archive (no image baked)
+#   baked image    - docker, the runtime and the archive are already on disk; only config and restore happen here
 set -euo pipefail
-dnf install -y -q docker python3 iptables util-linux
+command -v docker >/dev/null || dnf install -y -q docker python3 iptables util-linux
 systemctl enable --now docker
 install -d -m 0700 /opt/remedigenius
 echo '${config_b64}' | base64 -d >/opt/remedigenius/config.json
@@ -10,19 +14,28 @@ import hashlib, json, subprocess, zipfile
 from pathlib import Path, PurePosixPath
 root = Path('/opt/remedigenius')
 cfg = json.loads((root / 'config.json').read_text())
-archive = root / 'source.zip'
-subprocess.run(['aws', 's3', 'cp', f"s3://{cfg['bucket']}/{cfg['archive_key']}", str(archive), '--region', cfg['region'],
-                '--only-show-errors'], check=True)
-if hashlib.sha256(archive.read_bytes()).hexdigest() != cfg['archive_sha256']:
-    raise SystemExit('Source archive SHA-256 mismatch')
-with zipfile.ZipFile(archive) as z:
-    names = z.namelist()
-    if len(names) != len(set(names)):
-        raise SystemExit('Duplicate source archive paths')
-    for entry in z.infolist():
-        path = PurePosixPath(entry.filename)
-        if path.is_absolute() or '..' in path.parts or '\\' in entry.filename or ((entry.external_attr >> 16) & 0o170000) == 0o120000:
-            raise SystemExit('Invalid source archive path')
-    z.extractall(root / 'source')
+archive, extract = root / 'source.zip', root / 'source'
+
+
+def matches(path):
+    return path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == cfg['archive_sha256']
+
+
+if Path('/opt/rgtriage/.baked').exists() and matches(archive) and (extract / 'deploy/aws-single/host.py').exists():
+    print('baked image: release archive already verified', cfg['archive_sha256'])
+else:
+    subprocess.run(['aws', 's3', 'cp', f"s3://{cfg['bucket']}/{cfg['archive_key']}", str(archive),
+                    '--region', cfg['region'], '--only-show-errors'], check=True)
+    if not matches(archive):
+        raise SystemExit('Source archive SHA-256 mismatch')
+    with zipfile.ZipFile(archive) as z:
+        names = z.namelist()
+        if len(names) != len(set(names)):
+            raise SystemExit('Duplicate source archive paths')
+        for entry in z.infolist():
+            path = PurePosixPath(entry.filename)
+            if path.is_absolute() or '..' in path.parts or '\\' in entry.filename or ((entry.external_attr >> 16) & 0o170000) == 0o120000:
+                raise SystemExit('Invalid source archive path')
+        z.extractall(extract)
 PY
 python3 /opt/remedigenius/source/deploy/aws-single/host.py

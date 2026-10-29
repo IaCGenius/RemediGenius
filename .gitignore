@@ -25,3 +25,6 @@ playwright-output/
 
 modules/approved-reader/build/
 modules/assurance-schedule/.build/
+
+# Terraform backend settings for the split stack (copy deploy/backend.hcl.example)
+deploy/backend.hcl
