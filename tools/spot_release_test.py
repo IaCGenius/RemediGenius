@@ -68,6 +68,13 @@ check "dashboard serves the release Knowledge tab" $([ "$j" = "__JS_SHA__" ]; ec
 D="setpriv --reuid=10000 --regid=10000 --clear-groups env PYTHONPATH=/opt/rgtriage/src RGTRIAGE_HOME=/data/rgtriage RGTRIAGE_DURABLE=1 RGTRIAGE_CONFIG=/data/rgconfig/triage.yaml HOME=/data/rgtriage/.home AWS_DEFAULT_REGION=__REGION__ /opt/rgtriage/venv/bin/python -m rgtriage"
 for i in $(seq 1 30); do b=$($D digest --limit 3 2>&1); echo "$b" | grep -qiE "P[1-4]|no open findings" && break; sleep 10; done
 echo "$b" | grep -qiE "P[1-4]|no open findings"; check "first scan produced a board" $? "$(echo "$b" | head -1 | cut -c1-120)"
+bucket=$(python3 -c "import json; print(json.load(open('/opt/remedigenius/config.json'))['bucket'])" 2>/dev/null)
+r=$(aws s3api list-objects-v2 --bucket "$bucket" --prefix raw/ --max-keys 1 --query 'KeyCount' --output text 2>&1)
+check "raw evidence exists once in S3" $([ "$r" = "1" ]; echo $?) "$r"
+w=$(aws s3api list-objects-v2 --bucket "$bucket" --prefix warehouse/ --max-keys 1 --query 'KeyCount' --output text 2>&1)
+check "Iceberg warehouse exists in S3" $([ "$w" = "1" ]; echo $?) "$w"
+h=$($D history --limit 1 --json 2>&1)
+echo "$h" | grep -q '"snapshot_id"'; check "history reads committed facts with a snapshot" $? "$(echo "$h" | head -1 | cut -c1-120)"
 c=$($H -p default config get kanban.dispatch_in_gateway 2>&1 | tail -1)
 check "Kanban dispatcher off" $([ "$c" = "false" ]; echo $?) "$c"
 if [ -x /usr/local/bin/rgdesk ]; then
