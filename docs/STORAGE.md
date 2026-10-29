@@ -142,8 +142,19 @@ Compaction of small files, snapshot expiry and orphan cleanup run from the desk 
 (`storage.maintenance.interval_hours`, default 24). Expiry always retains at least
 `min_snapshots` (default 5) and `snapshot_retention_days` (default 14), long enough to cover batch
 reconciliation and time travel. Maintenance may run during commits; it may not remove a snapshot still needed to
-answer an uncertain batch. The AWS profile uses the catalog's maintenance mechanism or a scheduled Athena job;
-the local profile runs maintenance in-process. No new always-on service is part of the default path.
+answer an uncertain batch.
+
+Both profiles run the same in-process maintenance, so no Athena job, Spark cluster or always-on service is required:
+
+- **Compaction** rewrites the current data files when more than one is smaller than
+  `target_file_size_mb` (default 128), bounded by `max_compact_rows` (default 200,000 rows). Larger tables report
+  that compaction was skipped rather than exhausting memory.
+- **Snapshot expiry** uses PyIceberg's expiry with the retention above.
+- **Orphan cleanup** deletes only `.parquet` files under the table's `data/` folder that no remaining snapshot
+  references and that are older than `orphan_retention_hours` (default 72).
+
+Cost is S3 GET/PUT and Glue API requests during maintenance; there is no hourly service. Athena remains optional
+for operators who want SQL over the tables.
 
 ## Operator-visible health
 
@@ -177,7 +188,7 @@ The contract is CE-01. The rest of the release fills it in; this table is update
 | CE-24 OCSF mapping and Iceberg schemas | `rgtriage/ocsf.py`, `rgtriage/schemas.py` | done |
 | CE-05 SQLite cache, outbox, controller lock | `rgtriage/cache.py` | done |
 | CE-06 raw responses to S3 | `rgtriage/rawstore.py` | done |
-| CE-12 Iceberg profiles and maintenance | `rgtriage/iceberg_store.py` | planned |
+| CE-12 Iceberg profiles and maintenance | `rgtriage/iceberg_store.py` | done |
 | CE-13 commit loop | `rgtriage/commit.py` | planned |
 | CE-02…CE-04 lifecycle fixes | `rgtriage/fixes.py` | planned |
 | CE-07 resumable collection | `rgtriage/collect.py` | planned |

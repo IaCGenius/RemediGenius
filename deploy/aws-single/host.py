@@ -208,7 +208,12 @@ def write_desk_profile(cfg):
                           'boost': {'resource_types': ['AwsIamUser', 'AwsIamRole', 'AwsIamAccessKey'],
                                     'signals': ['identity_risk', 'root_usage'], 'points': 5}}],
                'iac_paths': [str(IAC)],
-               'organization': {'discover': True, 'member_role_name': cfg.get('member_role_name') or 'RemediGeniusReadOnly'}}
+               'organization': {'discover': True, 'member_role_name': cfg.get('member_role_name') or 'RemediGeniusReadOnly'},
+               'storage': {'profile': 'aws', 'namespace': cfg['name'], 'warehouse_uri': cfg['warehouse'],
+                           'catalog_database': cfg['glue_database'], 'raw_prefix': 'raw', 'buffer_limit_mb': 256,
+                           'maintenance': {'snapshot_retention_days': 14, 'min_snapshots': 5,
+                                           'target_file_size_mb': 128, 'interval_hours': 24,
+                                           'orphan_retention_hours': 72}}}
     request = {'exists': profile.exists(), 'initial': initial, 'members': member_accounts(cfg),
                'header': '# RemediGenius-CE desk profile. Edit freely; it is saved to S3. Terraform only adds member accounts.\n'}
     result = run(str(VENV / 'bin/python'), '-c', MERGE, str(profile), input=json.dumps(request), capture_output=True).stdout

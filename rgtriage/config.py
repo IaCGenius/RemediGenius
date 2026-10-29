@@ -112,6 +112,7 @@ def normalize(data: dict) -> dict:
     storage.setdefault("namespace", "remedigenius")
     storage.setdefault("raw_prefix", "raw")
     storage.setdefault("warehouse_uri", "")
+    storage.setdefault("catalog_uri", "")
     storage.setdefault("catalog_database", "")
     storage.setdefault("buffer_limit_mb", 256)
     storage["maintenance"] = {"snapshot_retention_days": 14, "min_snapshots": 5, "target_file_size_mb": 128,

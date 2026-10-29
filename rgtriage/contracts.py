@@ -530,8 +530,10 @@ def storage_profile(data: dict | None = None, home: Path | str | None = None) ->
                               catalog="glue", catalog_uri=str(storage.get("catalog_database") or ""),
                               raw_prefix=raw_prefix)
     base = Path(home or os.environ.get("RGTRIAGE_HOME") or Path.home() / ".rgtriage")
-    return StorageProfile(kind="local", namespace=namespace, warehouse=str(base / "warehouse"),
-                          catalog="sql", catalog_uri=str(base / "catalog.db"), raw_prefix=raw_prefix)
+    warehouse = str(storage.get("warehouse_uri") or base / "warehouse")
+    catalog_uri = str(storage.get("catalog_uri") or base / "catalog.db")
+    return StorageProfile(kind="local", namespace=namespace, warehouse=warehouse, catalog="sql",
+                          catalog_uri=catalog_uri, raw_prefix=raw_prefix)
 
 
 def schema_path(name: str) -> Path:

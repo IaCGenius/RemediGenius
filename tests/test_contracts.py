@@ -192,6 +192,9 @@ def test_storage_profiles(tmp_path):
     assert local.warehouse == str(tmp_path / "warehouse")
     aws = contracts.storage_profile({"storage": {"warehouse_uri": "s3://bucket/warehouse"}}, tmp_path)
     assert (aws.kind, aws.catalog, aws.warehouse) == ("aws", "glue", "s3://bucket/warehouse")
+    overridden = contracts.storage_profile({"storage": {"profile": "local", "warehouse_uri": "/durable/warehouse",
+                                                         "catalog_uri": "/durable/catalog.db"}}, tmp_path)
+    assert (overridden.warehouse, overridden.catalog_uri) == ("/durable/warehouse", "/durable/catalog.db")
     with pytest.raises(contracts.ContractError):
         contracts.storage_profile({"storage": {"profile": "aws"}}, tmp_path)
     with pytest.raises(contracts.ContractError):

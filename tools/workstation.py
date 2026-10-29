@@ -122,7 +122,9 @@ def write_desk_profile(args):
             "    boost: {resource_types: [AwsS3Bucket, AwsRdsDbInstance, AwsDynamoDbTable], points: 5}\n"
             "  - text: Detect and stop misuse of privileged identities\n"
             "    boost: {resource_types: [AwsIamUser, AwsIamRole, AwsIamAccessKey], signals: [identity_risk, root_usage], points: 5}\n"
-            f"iac_paths: [{'/data/iac' if args.iac else ''}]\n")
+            f"iac_paths: [{'/data/iac' if args.iac else ''}]\n"
+            "storage:\n  profile: local\n  namespace: remedigenius\n"
+            "  maintenance: {snapshot_retention_days: 14, min_snapshots: 5, target_file_size_mb: 128, interval_hours: 24, orphan_retention_hours: 72}\n")
     docker("run", "--rm", "-i", "-v", f"{VOLUMES['desk']}:/data/rgtriage", "--entrypoint", "sh", DESK_IMAGE, "-c",
            "cat > /data/rgtriage/triage.yaml", input=text)
 
