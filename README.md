@@ -77,7 +77,7 @@ for the five-minute orientation.
   events. Conversations and settings keep the Hermes checkpoint. A replaced Spot instance or wiped Docker volume
   rebuilds its cache and restores itself.
 
-Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/STORAGE.md](docs/STORAGE.md) · [docs/SCHEMA.md](docs/SCHEMA.md) · [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) · [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md) · [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md) · [docs/IAM.md](docs/IAM.md) · [docs/LIMITS.md](docs/LIMITS.md)
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/STORAGE.md](docs/STORAGE.md) · [docs/SCHEMA.md](docs/SCHEMA.md) · [docs/RECOVERY.md](docs/RECOVERY.md) · [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) · [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md) · [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md) · [docs/IAM.md](docs/IAM.md) · [docs/LIMITS.md](docs/LIMITS.md)
 
 ## Validated configuration
 

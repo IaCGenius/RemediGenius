@@ -36,8 +36,12 @@ reaches your model provider, for every change you make to your cloud, and for AW
 - **Decisions are local triage records.** They do not archive or suppress findings in AWS.
 - **Single operator.** The dashboard has one login and is reachable only on localhost (workstation) or through SSM
   (Spot). It is not a multi-user or multi-tenant service.
-- **Durable state, not zero loss.** Checkpoints run every 2 minutes and after scans and decisions. A crash or
-  interruption can lose the last moments of chat activity.
+- **Durable facts, bounded loss.** Every collected response is written to S3 `raw/` before a fact references it; facts
+  commit once per completed scan, and a decision commits before it is acknowledged. The only accepted loss window is
+  observations collected but not yet committed (the scope is re-collected) and a decision explicitly reported as not
+  yet durable. Local SQLite is a rebuildable cache. Raw objects expire only according to the operator's
+  `raw_retention_days`; Iceberg facts do not expire with them. Hermes conversations and settings keep their 2-minute
+  checkpoint, so a crash can still lose the last moments of chat activity.
 - **IaC matching is evidence-ranked.** Low-confidence matches must be confirmed. Resources created outside the indexed
   repositories are reported as such, with an import snippet.
 

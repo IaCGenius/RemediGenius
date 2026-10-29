@@ -26,7 +26,7 @@ from pathlib import Path
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from . import __version__, accounts, aws, collect, config, digest, fixes, iac, knowledge, okf, playbooks, prioritize, store
+from . import __version__, accounts, aws, collect, config, digest, fixes, health, iac, knowledge, okf, playbooks, prioritize, store
 
 PRIORITY_ORDER = ("P1", "P2", "P3", "P4")
 
@@ -107,6 +107,20 @@ def cmd_doctor(args):
         except FileNotFoundError as exc:
             advice.append(str(exc))
     _out("\n" + digest.SCOPE_NOTE)
+    repository = store.repository()
+    if repository is not None:
+        storage_health = health.snapshot(repository)
+        _out(f"\nDurable storage: {repository.storage_profile.kind} · namespace {repository.storage_profile.namespace} · "
+             f"installation {storage_health.get('installation_id')} · state {storage_health['state']}")
+        mark = storage_health.get("commit_watermark")
+        _out(f"  commit: {('sequence %s · snapshot %s' % (mark['sequence'], mark.get('snapshot_id'))) if mark else 'nothing yet'}"
+             f" · not yet durable: {storage_health.get('outbox_events', 0)} event(s), "
+             f"{storage_health.get('undurable_decisions', 0)} decision(s)")
+        _out(f"  raw buffer: {storage_health.get('raw_backlog', 0)} object(s) "
+             f"({storage_health.get('raw_backlog_bytes', 0)} bytes) · unresolved operations "
+             f"{storage_health.get('unresolved_operations', 0)}")
+        if storage_health.get("reason"):
+            _out(f"  reason: {storage_health['reason']}")
     _out(model_line())
     if advice:
         _out("\nRecommendations:")
@@ -120,7 +134,13 @@ def run_scan(sources=None, progress=None) -> dict:
         onboarding = accounts.discover(profile, store.load_onboarding())
     except Exception as exc:  # onboarding must never stop the configured accounts from being scanned
         onboarding = {"mode": "unknown", "admin": {}, "notes": [f"account discovery failed: {type(exc).__name__}: {exc}"[:240]]}
-    findings, coverage = collect.collect(profile, sources, progress, skip=accounts.skip_pairs(onboarding))
+    repository = store.repository()
+    run = None
+    if repository is not None:
+        from . import collection
+
+        run = collection.CollectionRun(repository.cache, repository.raw, f"scan-{collect.now_iso().replace(':', '').replace('-', '')}")
+    findings, coverage = collect.collect(profile, sources, progress, skip=accounts.skip_pairs(onboarding), run=run)
     footprint = _footprints(profile)
     try:
         fix_records = fixes.advance({"findings": findings, "coverage": coverage}, profile)
@@ -146,7 +166,7 @@ def run_scan(sources=None, progress=None) -> dict:
         scan["knowledge"] = {"error": f"{type(exc).__name__}: {exc}"[:240]}
     scan["issues"] = prioritize.build_issues(findings)  # before capping, so issue counts cover every finding read
     store.cap_findings(scan, int(profile["max_stored_findings"]))
-    store.save_scan(scan)
+    store.save_scan(scan, run)
     write_outputs(scan)
     return scan
 
@@ -380,7 +400,10 @@ def cmd_decide(args):
         if args.pr and fix["state"] in ("decided", "stalled"):
             fix["state"] = "pr"
     for key in keys:
-        decision = store.save_decision(key, args.status, args.reason, args.by, fix=fix)
+        try:
+            decision = store.save_decision(key, args.status, args.reason, args.by, fix=fix)
+        except RuntimeError as exc:
+            sys.exit(str(exc))
     for item in scan["findings"]:
         if item["key"] in keys:
             item["decision"] = decision
@@ -431,6 +454,9 @@ def cmd_history(args):
     try:
         if args.evidence:
             result = service.dispatch("evidence", {"sha256": args.evidence})
+        elif args.timeline:
+            result = service.dispatch("timeline", {"finding_key": args.finding, "as_of": args.as_of,
+                                                   "limit": args.limit})
         elif args.current:
             result = service.dispatch("current", {"finding_key": args.finding, "account": args.account,
                                                   "region": args.region, "limit": args.limit})
@@ -454,6 +480,14 @@ def cmd_history(args):
     _out(f"Committed: {('sequence %s · snapshot %s' % (mark['sequence'], mark.get('snapshot_id'))) if mark else 'nothing yet'}")
     _out(f"Not yet durable: {result['durability']['outbox_events']} event(s), "
          f"{result['durability']['undurable_decisions']} decision(s)")
+    if result["query"] == "timeline":
+        _out("Finding episodes (observed and ingested time kept separate):")
+        for key, episodes in result["findings"].items():
+            for episode in episodes:
+                _out(f"  {key} #{episode['episode']} {episode['status']} · observed {episode['first_observed_at']} "
+                     f"· applied {episode['applied_at'] or 'unknown'} · verified {episode['verified_at'] or '-'}"
+                     + (f" · recurrence {episode['recurrence_at']}" if episode.get("recurrence_at") else ""))
+        return
     if result["query"] == "history":
         manifest = result.get("manifest") or {}
         state = "complete" if manifest.get("complete") else "INCOMPLETE"
@@ -754,8 +788,40 @@ def cmd_serve_validate(args):
     validators.serve(args.socket, scratch=args.scratch, workers=args.workers, group=args.group)
 
 
+def cmd_maintain(args):
+    """Compact files, expire snapshots and remove orphan data files (operators; never the agent)."""
+    repository = store.repository()
+    if repository is None:
+        sys.exit("Durable storage is not configured (set RGTRIAGE_DURABLE=1 and a storage profile).")
+    result = repository.storage.maintenance(dry_run=args.dry_run)
+    if not args.dry_run:
+        repository.cache.set_meta("last_maintenance", result["at"])
+    _json(result)
+
+
 def cmd_serve(args):
     from . import durable, server
+    repository = store.repository()
+    if repository is not None:
+        report = repository.recover()
+        print(f"recovery: {json.dumps(report.as_dict(), default=str)}", flush=True)
+        if report.state == "blocked":
+            sys.exit(f"storage recovery is blocked: {report.reason}")
+        import threading
+        import time
+
+        def maintain():
+            time.sleep(3600)
+            while True:
+                try:
+                    result = repository.storage.maintenance()
+                    repository.cache.set_meta("last_maintenance", result["at"])
+                    print(f"storage maintenance: {result.get('at')}", flush=True)
+                except Exception as exc:
+                    print(f"storage maintenance failed: {type(exc).__name__}: {exc}", flush=True)
+                time.sleep(max(3600, repository.storage.maintenance_settings.interval_hours * 3600))
+
+        threading.Thread(target=maintain, daemon=True).start()
     try:
         print(f"knowledge: {json.dumps(knowledge.seed())}", flush=True)  # shipped concepts follow the installed version
     except Exception as exc:
@@ -1121,6 +1187,7 @@ def main(argv=None):
     p.set_defaults(func=cmd_fixes)
     p = sub.add_parser("history", help="current facts and committed history from durable storage")
     p.add_argument("--current", action="store_true", help="current state instead of history")
+    p.add_argument("--timeline", action="store_true", help="finding episodes with applied and verified time")
     p.add_argument("--finding", help="one finding key")
     p.add_argument("--as-of", help="ISO date/time or a date (for example 2026-06-15)")
     p.add_argument("--account"); p.add_argument("--region")
@@ -1157,6 +1224,8 @@ def main(argv=None):
     p.add_argument("--evidence"); p.add_argument("--change"); p.add_argument("--effect"); p.add_argument("--risk"); p.add_argument("--rollback")
     p.add_argument("--number", type=int); p.add_argument("--branch"); p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_github)
+    p = sub.add_parser("maintain", help="compact Iceberg files, expire snapshots and clean orphan data files")
+    p.add_argument("--dry-run", action="store_true"); p.set_defaults(func=cmd_maintain)
     p = sub.add_parser("serve", help="desk API on a Unix socket for the containerized agent; checkpoints state")
     p.add_argument("--socket", required=True)
     p.add_argument("--durable", default="", help="s3://bucket/prefix or a folder for durable checkpoints")
@@ -1209,6 +1278,15 @@ def main(argv=None):
     p.set_defaults(func=cmd_improve)
 
     args = parser.parse_args(argv)
+    if os.environ.get("RGTRIAGE_DURABLE") == "1" and args.func not in (cmd_init, cmd_durable, cmd_serve_validate):
+        from . import repository
+
+        try:
+            store.use(repository.Repository.open())
+        except repository.LegacyState as exc:
+            sys.exit(str(exc))
+        except Exception as exc:
+            sys.exit(f"Durable desk storage is not ready: {type(exc).__name__}: {exc}. See docs/STORAGE.md.")
     try:
         args.func(args)
     except FileNotFoundError as exc:

@@ -92,7 +92,7 @@ def install_runtime():
 def wrapper_script() -> str:
     """`sudo rgdesk <rgtriage args>`: run the desk CLI as the desk user with the desk environment (operator use over SSM)."""
     return ("#!/bin/sh\n"
-            f"exec sudo -u '#{UID}' env PYTHONPATH={CODE.as_posix()} RGTRIAGE_HOME={DESK.as_posix()} RGTRIAGE_CONFIG={(CONFIG / 'triage.yaml').as_posix()} RGGITHUB_HOME={GITHUB.as_posix()} "
+            f"exec sudo -u '#{UID}' env PYTHONPATH={CODE.as_posix()} RGTRIAGE_HOME={DESK.as_posix()} RGTRIAGE_DURABLE=1 RGTRIAGE_CONFIG={(CONFIG / 'triage.yaml').as_posix()} RGGITHUB_HOME={GITHUB.as_posix()} "
             f"RGGITHUB_IAC_DIR={IAC.as_posix()} RGVALIDATE_SOCKET={VALIDATE_SOCKET.as_posix()} RGTRIAGE_PROPOSALS=/opt/data/proposals "
             f"HOME={DESK.as_posix()}/.home "
             f"{(VENV / 'bin/python').as_posix()} -m rgtriage \"$@\"\n")
@@ -124,7 +124,8 @@ def install_zip_binary(name, version, digest, url):
 def desk(*args, user=None, **kw):
     """Run the rgtriage CLI with the host venv (as root unless a user is given)."""
     env = dict(os.environ, PYTHONPATH=str(CODE), RGTRIAGE_HOME=str(DESK), HOME=str(DESK / '.home'),
-               RGTRIAGE_CONFIG=str(CONFIG / 'triage.yaml'), RGGITHUB_HOME=str(GITHUB), AWS_STS_REGIONAL_ENDPOINTS='regional')
+               RGTRIAGE_CONFIG=str(CONFIG / 'triage.yaml'), RGGITHUB_HOME=str(GITHUB),
+               RGTRIAGE_DURABLE='1', AWS_STS_REGIONAL_ENDPOINTS='regional')
     prefix = ['setpriv', f'--reuid={UID}', f'--regid={UID}', '--clear-groups'] if user else []
     return run(*prefix, str(VENV / 'bin/python'), '-m', 'rgtriage', *args, env=env, **kw)
 
@@ -211,8 +212,9 @@ def write_desk_profile(cfg):
                                     'signals': ['identity_risk', 'root_usage'], 'points': 5}}],
                'iac_paths': [str(IAC)],
                'organization': {'discover': True, 'member_role_name': cfg.get('member_role_name') or 'RemediGeniusReadOnly'},
-               'storage': {'profile': 'aws', 'namespace': cfg['name'], 'warehouse_uri': cfg['warehouse'],
-                           'catalog_database': cfg['glue_database'], 'raw_prefix': 'raw', 'buffer_limit_mb': 256,
+               'storage': {'profile': 'aws', 'namespace': cfg['name'], 'installation_id': cfg['name'],
+                           'warehouse_uri': cfg['warehouse'], 'catalog_database': cfg['glue_database'],
+                           'raw_prefix': 'raw', 'buffer_limit_mb': 256,
                            'maintenance': {'snapshot_retention_days': 14, 'min_snapshots': 5,
                                            'target_file_size_mb': 128, 'interval_hours': 24,
                                            'orphan_retention_hours': 72}}}
@@ -379,7 +381,7 @@ def sync_profile(source: Path, hermes_home: Path):
 
 
 def units(cfg: dict) -> dict:
-    env = (f'Environment=RGTRIAGE_HOME={DESK.as_posix()}\nEnvironment=RGTRIAGE_CONFIG={(CONFIG / "triage.yaml").as_posix()}\nEnvironment=PYTHONPATH={CODE.as_posix()}\n'
+    env = (f'Environment=RGTRIAGE_HOME={DESK.as_posix()}\nEnvironment=RGTRIAGE_DURABLE=1\nEnvironment=RGTRIAGE_CONFIG={(CONFIG / "triage.yaml").as_posix()}\nEnvironment=PYTHONPATH={CODE.as_posix()}\n'
            f'Environment=HOME={DESK.as_posix()}/.home\nEnvironment=AWS_DEFAULT_REGION={cfg["region"]}\n'
            f'Environment=AWS_STS_REGIONAL_ENDPOINTS=regional\nEnvironment=TF_PLUGIN_CACHE_DIR={DESK.as_posix()}/.home/plugins\n'
            f'Environment=REMEDIGENIUS_MODEL_NAME={cfg.get("model_name") or ""}\n'

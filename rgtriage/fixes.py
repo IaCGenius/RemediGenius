@@ -134,7 +134,7 @@ def advance(scan: dict, profile: dict, decisions: dict | None = None, check=chec
                         "title": (finding or {}).get("title") or fix.get("title", ""),
                         "resource": ((finding or {}).get("resource") or {}).get("name") or fix.get("resource", "")})
     if changed:
-        store._write(store.config.home() / "decisions.json", decisions)
+        store.persist_decisions(decisions)
     return records
 
 

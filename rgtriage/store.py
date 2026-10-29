@@ -10,6 +10,18 @@ from . import config
 
 DECISION_STATUSES = ("acknowledged", "investigating", "fixing", "accepted_risk", "false_positive", "suppressed", "resolved")
 
+_REPOSITORY = None
+
+
+def use(repository) -> None:
+    """Route reads and writes through the durable repository (v0.5.0)."""
+    global _REPOSITORY
+    _REPOSITORY = repository
+
+
+def repository():
+    return _REPOSITORY
+
 
 def _write(path: Path, data, compact: bool = False) -> None:
     tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.tmp")  # concurrent scans must not share a temp file
@@ -30,16 +42,18 @@ def latest_path() -> Path:
 
 
 def load_latest() -> dict | None:
-    return _read(latest_path(), None)
+    return _REPOSITORY.load_latest() if _REPOSITORY is not None else _read(latest_path(), None)
 
 
 def load_decisions() -> dict:
-    return _read(config.home() / "decisions.json", {})
+    return _REPOSITORY.load_decisions() if _REPOSITORY is not None else _read(config.home() / "decisions.json", {})
 
 
 def save_decision(key: str, status: str, reason: str, by: str = "operator", fix: dict | None = None) -> dict:
     if status not in DECISION_STATUSES:
         raise ValueError(f"status must be one of {', '.join(DECISION_STATUSES)}")
+    if _REPOSITORY is not None:
+        return _REPOSITORY.decide(key, status, reason, by, fix)
     decisions = load_decisions()
     previous = decisions.get(key) or {}
     decisions[key] = {"status": status, "reason": reason, "by": by,
@@ -134,8 +148,11 @@ def cap_findings(scan: dict, limit: int) -> None:
     scan["stored_overflow"] = max(0, overflow)
 
 
-def save_scan(scan: dict) -> dict:
-    """Write latest.json (compact), a small status file, and a history of key->priority snapshots."""
+def save_scan(scan: dict, run=None) -> dict:
+    """Commit the scan to durable storage, or (legacy/test path only) write latest.json."""
+    if _REPOSITORY is not None:
+        return _REPOSITORY.save_scan(scan, run)
+    # Legacy path: latest.json (compact), a small status file and a history of key->priority snapshots.
     history = config.home() / "history"
     history.mkdir(exist_ok=True)
     stamp = scan["scanned_at"].replace(":", "").replace("-", "")
@@ -151,7 +168,15 @@ def save_scan(scan: dict) -> dict:
 
 
 def write_latest(scan: dict) -> None:
+    if _REPOSITORY is not None:
+        return _REPOSITORY.write_latest(scan)
     _write(latest_path(), scan, compact=True)
+
+
+def persist_decisions(decisions: dict) -> None:
+    if _REPOSITORY is not None:
+        return _REPOSITORY.persist_decisions(decisions)
+    _write(config.home() / "decisions.json", decisions)
 
 
 def find(scan: dict, ref: str) -> dict | None:
@@ -167,11 +192,13 @@ def find(scan: dict, ref: str) -> dict | None:
 
 
 def load_onboarding() -> dict | None:
-    return _read(config.home() / "onboarding.json", None)
+    return _REPOSITORY.load_onboarding() if _REPOSITORY is not None else _read(config.home() / "onboarding.json", None)
 
 
 def save_onboarding(report: dict, profile: dict) -> None:
     """Keep the last onboarding report; `readable` lets investigations reach discovered accounts between scans."""
+    if _REPOSITORY is not None:
+        return _REPOSITORY.save_onboarding(report, profile)
     readable = {a["account_id"]: a["name"] for a in profile["accounts"] if a.get("discovered")}
     _write(config.home() / "onboarding.json", {**report, "readable": readable})
 

@@ -211,12 +211,12 @@ The contract is CE-01. The rest of the release fills it in; this table is update
 | CE-13 commit loop | `rgtriage/commit.py` | done |
 | CE-02…CE-04 lifecycle fixes | `rgtriage/fixes.py`, `rgtriage/store.py` | done |
 | CE-07 resumable collection | `rgtriage/collect.py`, `rgtriage/collection.py` | done |
-| CE-08 episodes and lifecycle | `rgtriage/lifecycle.py` | planned |
-| CE-09 command cut-over | `rgtriage/repository.py` | planned |
+| CE-08 episodes and lifecycle | `rgtriage/lifecycle.py`, `rgtriage history --timeline` | done |
+| CE-09 command cut-over | `rgtriage/repository.py` | done |
 | CE-10 current-state tables | `rgtriage/current.py` | done |
 | CE-11 rebuild and reconciliation | `rgtriage/recovery.py` | done |
 | CE-14 scoped history queries | `rgtriage/queries.py`, `rgtriage history` | done |
-| CE-15 crash/outage proof and health | `rgtriage/health.py`, `tests/test_storage_live.py` | planned |
+| CE-15 crash/outage proof and health | `rgtriage/health.py`, `tests/test_storage_live.py` | done |
 
-See also: [ARCHITECTURE.md](ARCHITECTURE.md) · [SCHEMA.md](SCHEMA.md) · [DATA-FLOW.md](DATA-FLOW.md) ·
-[LIMITS.md](LIMITS.md) · [IAM.md](IAM.md) · [UPGRADING.md](UPGRADING.md).
+See also: [ARCHITECTURE.md](ARCHITECTURE.md) · [SCHEMA.md](SCHEMA.md) · [RECOVERY.md](RECOVERY.md) ·
+[DATA-FLOW.md](DATA-FLOW.md) · [LIMITS.md](LIMITS.md) · [IAM.md](IAM.md) · [UPGRADING.md](UPGRADING.md).
