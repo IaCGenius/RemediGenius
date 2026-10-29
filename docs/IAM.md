@@ -30,9 +30,21 @@ The instance role itself has no AWS security read permissions. No inbound port i
 through SSM port forwarding, which needs `ssm:StartSession` on the instance.
 
 The S3 bucket holds raw AWS responses, the Iceberg warehouse and Hermes home checkpoints, which may include the model
-key. Restrict access to the whole bucket. The instance role's Glue grant names only the `<name>` database, its table
-prefix and the catalog ARN; it cannot read or change another Glue database. The desk's Iceberg writes are the only
-writes in that scope; collection in target accounts stays read-only through the audit and member roles.
+key. Restrict access to the whole bucket.
+
+**The Glue grant is on the EC2 instance role, not the audit role.** The instance role is assumed by the host and the
+desk through instance metadata; it is the only identity that writes the CE catalog. The grant names the catalog ARN,
+only the database `<name>` and only tables under `<name>/*`, and allows: `GetDatabase`, `GetTables`, `GetTable`,
+`CreateTable`, `UpdateTable`, `DeleteTable`, the partition reads/batches. `CreateDatabase` is not allowed: Terraform
+creates the database, and the desk verifies it with `GetDatabase` before creating tables. An explicit deny blocks
+`CreateDatabase`, `DeleteDatabase`, crawlers, jobs, development endpoints, security configurations and catalog resource
+policies, so a future broad policy cannot turn the instance into a Glue/ETL administrator. It cannot read or change
+another Glue database.
+
+This is the effective boundary: a scoped inline policy plus explicit denies, not a separate AWS `PermissionsBoundary`.
+The role has no AWS security read permissions; those stay on the audit role, and target-account collection remains
+read-only through the audit and member roles. A formal `PermissionsBoundary` would duplicate the SSM and app policy
+surface and needs its own Spot validation; it is a possible follow-up, not part of this release.
 
 ## Docker workstation
 

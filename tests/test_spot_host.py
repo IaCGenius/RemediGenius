@@ -329,3 +329,12 @@ def test_the_agent_container_waits_for_the_desks_socket_before_it_starts(host):
     assert "[ ! -S /run/rgtriage/rgtriage.sock ]" in wait and "-lt 60" in wait and "exit 0" in wait     # waits at most a minute, never blocks the boot
     assert "$$n" in wait and "$n" not in wait.replace("$$n", "")                                          # systemd would otherwise expand it
     assert unit.index("ExecStartPre=/bin/sh -c") < unit.index("ExecStartPre=-/usr/bin/docker rm") < unit.index("ExecStart=/usr/bin/docker run")
+
+
+def test_glue_permission_is_scoped_to_the_installation_database():
+    iam = (ROOT / "deploy/aws-single/iam.tf").read_text(encoding="utf-8")
+    assert "glue:GetDatabase" in iam and "glue:CreateTable" in iam and "glue:GetPartitions" in iam
+    assert "table/${var.name}/*" in iam
+    assert 'Action = ["glue:CreateDatabase"]' not in iam  # not an allow anymore
+    assert "glue:CreateDatabase" in iam and "glue:StartJobRun" in iam  # explicit deny
+    assert 'Effect = "Deny"' in iam
