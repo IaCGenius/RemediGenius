@@ -555,10 +555,20 @@ if changed:
 
 
 def enable_knowledge_tab():
-    """The dashboard serves user plugins only when enabled: in the profile (tab list) and at its launch scope (API)."""
+    """The dashboard serves user plugins only when enabled: in the profile (tab list) and at its launch scope (API).
+
+    The Hermes container may still be starting when the rest of the boot is ready; retry the profile-scope enable
+    instead of failing the whole boot on a race.
+    """
     in_container('python', '-c', ENABLE_PROFILE_PLUGIN)
     for name in ('rg-knowledge', 'rg-github'):
-        in_container('hermes', '-p', 'default', 'plugins', 'enable', name, capture_output=True)
+        for attempt in range(30):
+            got = in_container('hermes', '-p', 'default', 'plugins', 'enable', name, check=False, capture_output=True)
+            if got.returncode == 0:
+                break
+            time.sleep(2)
+        else:
+            raise RuntimeError(f"could not enable dashboard plugin {name}: {got.stderr.strip()[-300:]}")
 
 
 KANBAN_OFF = ('kanban.dispatch_in_gateway', 'kanban.auto_decompose')
