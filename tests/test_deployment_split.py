@@ -173,3 +173,5 @@ def test_spot_cycle_can_start_park_and_report(monkeypatch):
     assert "-var=running={'true' if running else 'false'}" in source
     assert "use_lockfile=true" in source
     assert "terraform" in source and "describe-auto-scaling-groups" in source
+    # Terraform resolves -var-file inside the module directory; a relative path failed on the first real run.
+    assert 'Path(settings.pop("_vars_file")).resolve()' in source

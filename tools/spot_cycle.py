@@ -47,7 +47,8 @@ def init(settings: dict) -> None:
 
 
 def apply(settings: dict, running: bool) -> None:
-    path = Path(settings.pop("_vars_file"))
+    # Terraform resolves -var-file against the module directory, so hand it an absolute path.
+    path = Path(settings.pop("_vars_file")).resolve()
     terraform("apply", "-auto-approve", "-input=false", f"-var-file={path}", f"-var=running={'true' if running else 'false'}")
 
 
