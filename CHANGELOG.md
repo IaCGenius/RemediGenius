@@ -56,10 +56,11 @@ their existing path. See [docs/STORAGE.md](docs/STORAGE.md), [docs/SCHEMA.md](do
 - CE-16…CE-23 (campaigns, lineage, deployment receipts, attestations and the evidence-aware graph) remain for a later
   release. Their query handlers return `unsupported` rather than fabricated data.
 
-**Validation:** 623 tests passed and 7 skipped offline; a fresh AWS Spot stack passed 49 of 49 host, storage, boundary,
-dashboard and chat checks, then was destroyed. Details, including the defects this run found and the remaining gaps,
-are in [docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md). A local-profile pass is not a claim about AWS durability
-or cost.
+**Validation:** 624 tests passed and 7 skipped offline; a fresh AWS Spot stack passed 49 of 49 host, storage, boundary,
+dashboard and chat checks, then was destroyed. After the Glue grant was tightened (no catalog administration or ETL), a
+second fresh stack passed all 45 host/storage/boundary checks. Details, including the defects these runs found and the
+remaining gaps, are in [docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md). A local-profile pass is not a claim
+about AWS durability or cost.
 
 ## v0.4.0
 

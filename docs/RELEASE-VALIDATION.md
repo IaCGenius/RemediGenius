@@ -11,7 +11,7 @@ organization with three other accounts; they remain uncovered in this run. Confi
 
 | Check | Result |
 | --- | --- |
-| `pytest tests` (Windows, Python 3.12; no live AWS) | **623 passed, 7 skipped** |
+| `pytest tests` (Windows, Python 3.12; no live AWS) | **624 passed, 7 skipped** |
 | On-disk local Iceberg profile (create, write, read, reconnect, schema evolution) | passed |
 | Local maintenance (compaction, snapshot expiry, orphan cleanup) and commits during maintenance | passed |
 | Crash/rebuild (`test_storage_live.py`): delete the cache, rebuild from current-state tables; uncommitted scan needs a rerun; commit without acknowledgement not duplicated; unreachable store blocked | passed |
@@ -28,6 +28,7 @@ organization with three other accounts; they remain uncovered in this run. Confi
 | --- | --- |
 | `terraform apply` from nothing | 20 resources; boot finished in 298 s |
 | Host and boundary checks (`tools/spot_release_test.py`) | **49 of 49 PASS**, 0 FAIL |
+| Tightened IAM revalidation (`rgce-storage-quick`, 228889e) | **45 of 45 PASS** with browser/chat skipped; raw, warehouse, snapshot and outbox checks included; stack destroyed |
 | rgtriage version / services / core plugins / skills | 0.5.0; desk, Hermes, validation and scan timer active; core plugins at 0.5.0 |
 | First scan and board | board produced; report names the account and coverage |
 | Raw evidence | object under `raw/` in the stack bucket, exactly one for the check |
@@ -41,6 +42,12 @@ Defects found and fixed during this validation: PyIceberg called `glue:CreateDat
 database (the role is denied that call in this account); collection worker threads shared one SQLite connection; Access
 Analyzer pages contain Python datetimes; a resource `details` dict was written into a string column; PyArrow
 `from_pylist` mishandled a nested OCSF struct with a map; the Hermes plugin enable raced the container start.
+
+After the first full run, the Glue grant was tightened: `CreateDatabase` was removed and explicit denies were added for
+database deletion, crawlers, jobs, development endpoints, security configurations and catalog resource policies. A
+second fresh stack (`rgce-storage-quick`, commit `228889e`) passed all 45 host/storage/boundary checks with browser and
+chat skipped; it also committed a non-null history snapshot with an empty outbox and was destroyed. The full 49-check
+run (commit `fb1392d`) remains the source for the browser and chat evidence.
 
 Not validated: a real S3 or Glue outage during a live scan/decision (covered by local on-disk fault tests, not AWS
 fault injection), replacing the Spot instance and rebuilding from S3 (covered by local on-disk rebuild tests), real
