@@ -80,6 +80,21 @@ variable "instance_types" {
   default = ["c7i.large", "m7i.large", "c6i.large"]
 }
 
+variable "security_group_ids" {
+  type        = list(string)
+  default     = []
+  description = "Security groups for the bake instance. Required when subnet_id is set; leave both empty to use the default VPC."
+}
+
+# Image Builder rejects a subnet without security groups (InvalidParameterCombinationException), so say it here
+# instead of failing halfway through an apply.
+check "bake_network" {
+  assert {
+    condition     = (var.subnet_id == "" && length(var.security_group_ids) == 0) || (var.subnet_id != "" && length(var.security_group_ids) > 0)
+    error_message = "Set security_group_ids whenever subnet_id is set, and leave both empty to bake in the default VPC."
+  }
+}
+
 variable "architecture" {
   type    = string
   default = "x86_64"
@@ -202,6 +217,7 @@ resource "aws_imagebuilder_infrastructure_configuration" "bake" {
   instance_profile_name         = aws_iam_instance_profile.bake.name
   instance_types                = var.instance_types
   subnet_id                     = var.subnet_id == "" ? null : var.subnet_id
+  security_group_ids            = length(var.security_group_ids) == 0 ? null : var.security_group_ids
   terminate_instance_on_failure = true
 }
 
