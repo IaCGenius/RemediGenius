@@ -324,6 +324,20 @@ class Cache:
             self.set_meta("epoch", value)
         return value
 
+    def set_identity(self, installation_id: str, namespace: str, *, epoch: str | None = None,
+                     force: bool = False) -> None:
+        """Adopt the configured installation on a fresh cache; never silently change a cache with committed facts."""
+        if not installation_id or not namespace:
+            raise CacheError("installation id and namespace are required")
+        current = self.get_meta("installation_id")
+        if current and current != installation_id and not force:
+            if self.conn.execute("SELECT COUNT(*) FROM events_local WHERE state = 'committed'").fetchone()[0]:
+                raise CacheError(f"cache belongs to installation {current}, not {installation_id}")
+        with self.transaction() as conn:
+            self._set_meta(conn, "installation_id", installation_id)
+            self._set_meta(conn, "namespace", namespace)
+            self._set_meta(conn, "epoch", epoch or contracts.new_recovery_epoch())
+
     def namespace(self) -> str:
         return self.get_meta("namespace") or "remedigenius"
 
@@ -338,6 +352,11 @@ class Cache:
 
     def _write_watermark(self, conn: sqlite3.Connection, watermark: contracts.Watermark) -> None:
         self._set_meta(conn, "watermark", json.dumps(watermark.as_dict(), sort_keys=True))
+
+    def adopt_watermark(self, watermark: contracts.Watermark) -> None:
+        """After a rebuild, record the Iceberg watermark the cache now reflects."""
+        with self.transaction() as conn:
+            self._write_watermark(conn, watermark)
 
     # ---------------------------------------------------------------- staging facts
     def stage_facts(self, facts: Iterable[tuple[contracts.Event, Any]], *,

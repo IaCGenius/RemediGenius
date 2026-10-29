@@ -5,6 +5,7 @@ read, so "no findings" is never confused with "not enabled" or "access denied".
 """
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import re
@@ -15,6 +16,9 @@ from urllib.parse import quote, unquote
 from botocore.exceptions import BotoCoreError, ClientError
 
 from . import aws
+from .collection import CollectionPaused
+
+_PAGE_RECORDER = contextvars.ContextVar("rgtriage_page_recorder", default=None)
 
 SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL")
 
@@ -93,8 +97,11 @@ def paginate_ex(client, operation: str, result_key: str, limit: int, **params) -
         return [], False
     pages = client.get_paginator(operation).paginate(**params, PaginationConfig={"MaxItems": limit})
     items = []
+    recorder = _PAGE_RECORDER.get()
     for page in pages:
         items.extend(page.get(result_key, []))
+        if recorder is not None:
+            recorder.record(operation, page, params)
     return items[:limit], bool(pages.resume_token)
 
 
@@ -729,19 +736,46 @@ def _trim(value, limit=1500):
     return value if len(text) <= limit else {"truncated": text[:limit]}
 
 
-def run_one(source, session, account, region, opts):
+class _PageRecorder:
+    def __init__(self, run, scope):
+        self.run, self.scope = run, scope
+
+    def record(self, operation: str, page, parameters):
+        self.run.record_page(self.scope, operation, page, parameters)
+
+
+def _fail_scope(run, scope, status: str, note: str) -> None:
+    if run is not None and scope is not None:
+        run.fail_scope(scope, status=status, note=note)
+
+
+def run_one(source, session, account, region, opts, run=None):
     entry = {"source": source, "account": account["name"], "account_id": account.get("account_id", ""), "region": region}
+    scope = run.scope(account, region, source) if run is not None else None
+    token = None
     try:
+        if run is not None:
+            run.begin_scope(scope)
+            token = _PAGE_RECORDER.set(_PageRecorder(run, scope))
         findings, meta = COLLECTORS[source](session, account, region, opts)
         entry.update(status="ok", count=len(findings), **meta)
         origin = [source, entry["account_id"], region]
         for f in findings:
             f["collected_from"] = origin  # maps the finding back to the read that produced it (aggregators span regions)
+        if run is not None:
+            run.record_result(scope, findings, meta)
+            run.complete_scope(scope, count=len(findings), truncated=bool(entry.get("truncated")),
+                               note=entry.get("note", ""))
         return findings, entry
+    except CollectionPaused as exc:
+        entry.update(status="paused", count=0, note=str(exc)[:240])
+        _fail_scope(run, scope, "error", str(exc))
     except _Disabled as exc:
         entry.update(status="not_enabled", count=0, note=str(exc))
+        _fail_scope(run, scope, "not_enabled", str(exc))
     except aws.WriteBlocked as exc:
         entry.update(status="error", count=0, note=str(exc))
+        _fail_scope(run, scope, "error", str(exc))
     except ClientError as exc:
         code = aws.error_code(exc)
         status = "denied" if "AccessDenied" in code or code in ("UnauthorizedOperation", "AuthorizationError") else (
@@ -754,13 +788,18 @@ def run_one(source, session, account, region, opts):
         elif source == "securityhub" and code == "InvalidAccessException":
             note = "Security Hub is not enabled in this region"
         entry.update(status=status, count=0, note=note)
+        _fail_scope(run, scope, status, note)
     except BotoCoreError as exc:
         entry.update(status="error", count=0, note=str(exc)[:240])
+        _fail_scope(run, scope, "error", str(exc))
+    finally:
+        if token is not None:
+            _PAGE_RECORDER.reset(token)
     return [], entry
 
 
 def collect(profile: dict, sources: list[str] | None = None, progress=None,
-            skip: set[tuple[str, str]] = frozenset()) -> tuple[list[dict], list[dict]]:
+            skip: set[tuple[str, str]] = frozenset(), run=None) -> tuple[list[dict], list[dict]]:
     """Read every configured source for every account and region in parallel.
 
     Direct sources run first; Security Hub then excludes, server-side, the products that were read
@@ -790,7 +829,7 @@ def collect(profile: dict, sources: list[str] | None = None, progress=None,
 
     def run_all(jobs, job_opts):
         with ThreadPoolExecutor(max_workers=8) as pool:
-            for found, entry in pool.map(lambda job: run_one(*job, job_opts(job)), jobs):
+            for found, entry in pool.map(lambda job: run_one(*job, job_opts(job), run), jobs):
                 if progress:
                     progress(entry)
                 findings.extend(found)

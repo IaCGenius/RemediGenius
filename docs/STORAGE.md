@@ -77,6 +77,12 @@ and keeps retrying. If a GitHub intent cannot be committed, GitHub is not called
 are written once. Observations, coverage and progress are staged in SQLite. When the run completes, one Iceberg
 batch commits every fact and its coverage; only after that does the complete-run pointer advance.
 
+**Resumable collection.** Each source/account/region/filter scope, its page count and its outcome live in SQLite.
+Every paginated response is written to `raw/` as it arrives, and a normalized scope result is raw evidence too. A
+scope is complete only when every required page succeeded; a killed run resumes the scopes that were not committed,
+and a failed source keeps its partial coverage without erasing the successful ones. An expired provider token
+restarts that scope with overlap and event-ID deduplication.
+
 **Human decision.** The desk writes the decision event to Iceberg first. The acknowledgement is returned only
 after the commit succeeds; otherwise the decision stays visibly pending in the outbox.
 
@@ -204,11 +210,11 @@ The contract is CE-01. The rest of the release fills it in; this table is update
 | CE-12 Iceberg profiles and maintenance | `rgtriage/iceberg_store.py` | done |
 | CE-13 commit loop | `rgtriage/commit.py` | done |
 | CE-02…CE-04 lifecycle fixes | `rgtriage/fixes.py`, `rgtriage/store.py` | done |
-| CE-07 resumable collection | `rgtriage/collect.py` | planned |
+| CE-07 resumable collection | `rgtriage/collect.py`, `rgtriage/collection.py` | done |
 | CE-08 episodes and lifecycle | `rgtriage/lifecycle.py` | planned |
 | CE-09 command cut-over | `rgtriage/repository.py` | planned |
 | CE-10 current-state tables | `rgtriage/current.py` | done |
-| CE-11 rebuild and reconciliation | `rgtriage/recovery.py` | planned |
+| CE-11 rebuild and reconciliation | `rgtriage/recovery.py` | done |
 | CE-14 scoped history queries | `rgtriage/queries.py`, `rgtriage history` | done |
 | CE-15 crash/outage proof and health | `rgtriage/health.py`, `tests/test_storage_live.py` | planned |
 

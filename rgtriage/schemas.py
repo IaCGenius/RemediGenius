@@ -247,7 +247,8 @@ def current_operations() -> Schema:
     return Schema(
         _f(1, "operation_id", StringType(), True), _f(2, "finding_key", StringType()), _f(3, "phase", StringType()),
         _f(4, "state", StringType()), _f(5, "branch", StringType()), _f(6, "pr_number", LongType()),
-        _f(7, "updated_at", TimestamptzType(), True), _f(8, "watermark", _watermark(100), True))
+        _f(7, "updated_at", TimestamptzType(), True), _f(8, "watermark", _watermark(100), True),
+        _f(9, "repo", StringType()), _f(10, "base_branch", StringType()), _f(11, "proposal_digest", StringType()))
 
 
 TABLES = {

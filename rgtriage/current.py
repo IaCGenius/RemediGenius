@@ -117,8 +117,15 @@ class CurrentState:
                 results.add(operation)
         return [{"operation_id": operation, "finding_key": row.get("finding_key"), "phase": "intent",
                  "state": row.get("state"), "branch": row.get("branch"), "pr_number": row.get("pr_number"),
-                 "updated_at": now, "watermark": watermark}
+                 "repo": row.get("repo"), "base_branch": row.get("base_branch"),
+                 "proposal_digest": row.get("proposal_digest"), "updated_at": now, "watermark": watermark}
                 for operation, row in intents.items() if operation not in results]
+
+    def refresh_operations(self, mark) -> int:
+        """Refresh only the open-operation table after a read-only reconciliation."""
+        watermark = _mark(mark)
+        return self.storage.overwrite_rows("current_operations", self._open_operations(watermark, datetime.now(timezone.utc)),
+                                           snapshot_properties={"ce.current": "operations"})
 
     def rebuild_cache(self, mark=None) -> dict:
         """Write the current tables into the SQLite views; the caller starts a new recovery epoch (CE-11)."""
