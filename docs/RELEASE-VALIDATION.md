@@ -1,4 +1,60 @@
-# Release validation — RemediGenius Community Edition v0.3.0
+# Release validation — RemediGenius Community Edition
+
+## v0.5.0 (2026-10-29)
+
+Validated on the release branch on the maintainer's Windows workstation and on one throwaway AWS Spot stack
+(`rgce-storage-test`, deleted at the end of the run) in one real AWS account, us-east-1. The account is a member of an
+organization with three other accounts; they remain uncovered in this run. Configuration: Hermes
+`nousresearch/hermes-agent:stable@sha256:444b4259…` (0.21.7), model `deepseek-v4.1-flash`, OCSF 1.9.0, PyIceberg 0.12.0.
+
+### Offline and local profile
+
+| Check | Result |
+| --- | --- |
+| `pytest tests` (Windows, Python 3.12; no live AWS) | **624 passed, 7 skipped** |
+| On-disk local Iceberg profile (create, write, read, reconnect, schema evolution) | passed |
+| Local maintenance (compaction, snapshot expiry, orphan cleanup) and commits during maintenance | passed |
+| Crash/rebuild (`test_storage_live.py`): delete the cache, rebuild from current-state tables; uncommitted scan needs a rerun; commit without acknowledgement not duplicated; unreachable store blocked | passed |
+| CE-02…CE-04 lifecycle regressions (truncated absence, unknown visibility, tracked account, persisted failed attempt) | passed |
+| CE-07 collection scopes, raw page recording and resume, including concurrent source scopes | passed |
+| CE-08 episode reducer (observed vs ingested, applied receipt, first closure, recurrence, suppression/manual closure) | passed |
+| CE-09 durable scan/decision path: no `latest.json`, `decisions.json` or `history/` written; legacy state refused | passed |
+| `tools/demo.py` | synthetic board + IaC match, no AWS or model |
+| `terraform validate` of `deploy/aws-single` | valid |
+
+### AWS Spot (fresh stack, destroyed after the run)
+
+| Check | Result |
+| --- | --- |
+| `terraform apply` from nothing | 20 resources; boot finished in 298 s |
+| Host and boundary checks (`tools/spot_release_test.py`) | **49 of 49 PASS**, 0 FAIL |
+| Tightened IAM revalidation (`rgce-storage-quick`, 228889e) | **45 of 45 PASS** with browser/chat skipped; raw, warehouse, snapshot and outbox checks included; stack destroyed |
+| rgtriage version / services / core plugins / skills | 0.5.0; desk, Hermes, validation and scan timer active; core plugins at 0.5.0 |
+| First scan and board | board produced; report names the account and coverage |
+| Raw evidence | object under `raw/` in the stack bucket, exactly one for the check |
+| Iceberg facts | `warehouse/` objects present; `rgtriage history` returned a **non-null snapshot ID** and **outbox 0** |
+| Dashboard (Playwright, Chrome) | Knowledge tab renders 39 concepts; GitHub tab renders and offers Connect GitHub; no browser errors or failed API calls |
+| Agent | "hi" answered in 24 s with the live attention board, blind spots and next actions (recorded, not judged) |
+| Boundaries | no WebUI/API exposure, GitHub key isolated, operator token gate, validation user cannot read the key or metadata, Kanban off, card filed for people |
+| Teardown | `terraform destroy` removed all 20 resources, bucket included |
+
+Defects found and fixed during this validation: PyIceberg called `glue:CreateDatabase` even though Terraform had made the
+database (the role is denied that call in this account); collection worker threads shared one SQLite connection; Access
+Analyzer pages contain Python datetimes; a resource `details` dict was written into a string column; PyArrow
+`from_pylist` mishandled a nested OCSF struct with a map; the Hermes plugin enable raced the container start.
+
+After the first full run, the Glue grant was tightened: `CreateDatabase` was removed and explicit denies were added for
+database deletion, crawlers, jobs, development endpoints, security configurations and catalog resource policies. A
+second fresh stack (`rgce-storage-quick`, commit `228889e`) passed all 45 host/storage/boundary checks with browser and
+chat skipped; it also committed a non-null history snapshot with an empty outbox and was destroyed. The full 49-check
+run (commit `fb1392d`) remains the source for the browser and chat evidence.
+
+Not validated: a real S3 or Glue outage during a live scan/decision (covered by local on-disk fault tests, not AWS
+fault injection), replacing the Spot instance and rebuilding from S3 (covered by local on-disk rebuild tests), real
+GitHub publish/merge/reconcile, the full OCSF schema beyond the pinned CE subset, other regions/models, the three
+uncovered accounts, and AWS cost of raw retention. A local-profile pass is not a claim about AWS durability or cost.
+
+## v0.3.0
 
 Validated 2026-10-21 by the maintainer's agent session against one real AWS account (us-east-1), with the operator's
 approval for the deployments and the account changes listed below. Raw evidence (screenshots, logs, transcripts) is kept

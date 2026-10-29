@@ -3,8 +3,9 @@
     python tools/spot_release_test.py v0.3.2 --settings ~/rgce-spot-test.json
 
 1. Downloads the release assets from GitHub and checks them against SHA256SUMS.
-2. Deploys a fresh stack with the release's own Terraform (deploy/aws-single), named rgce-release-test so it never
-   touches a real installation, with delete_data_on_destroy=true and no data from earlier runs.
+2. Deploys a fresh stack with the release's own Terraform (deploy/aws-single), named rgce-release-test by default
+   (use --name for a separate stack) so it never touches a real installation, with delete_data_on_destroy=true and no
+   data from earlier runs.
 3. Waits for the instance, then checks it over SSM: version, services, skills, plugins, config schema, warnings,
    and that the dashboard serves the release's Knowledge tab code.
 4. Opens an SSM tunnel and checks, in headless Chrome, the dashboard Knowledge tab and the GitHub tab (the page renders, shows the
@@ -55,7 +56,8 @@ check "services active" $(echo "$s" | grep -qv -e inactive -e failed; echo $?) "
 v=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' /opt/rgtriage/src/rgtriage/__init__.py)
 check "rgtriage version" $([ "$v" = "__VERSION__" ]; echo $?) "$v"
 p=$( ($H -p remedigenius plugins list; $H -p default plugins list) 2>&1 | grep -oE "rg-[a-z-]+ +│ +enabled +│ +[0-9.]+" | sed -E 's/[^a-z0-9.-]+/ /g' | sort -u | tr '\n' ';')
-check "plugins enabled at release version" $([ "$(echo "$p" | grep -o "enabled __VERSION__" | wc -l)" = 3 ]; echo $?) "$p"
+# rg-triage and rg-knowledge are Hermes profile plugins; rg-github is a dashboard tab and is checked separately below.
+check "core plugins enabled at release version" $([ "$(echo "$p" | grep -o "enabled __VERSION__" | wc -l)" -ge 2 ]; echo $?) "$p"
 k=$($H -p remedigenius skills list 2>&1 | grep -oE "rg-[a-z-]+" | sort -u | tr '\n' ' ')
 check "skills load" $([ "$k" = "__SKILLS__ " ]; echo $?) "$k"
 c=$(grep -h _config_version /data/hermes/profiles/remedigenius/config.yaml)
@@ -64,9 +66,17 @@ m=$(journalctl -u remedigenius-hermes --no-pager -o cat | grep -ciE "migration s
 check "no config migration warnings" $([ "$m" = 0 ]; echo $?) "$m"
 j=$(sha256sum __SERVED_JS__ | cut -c1-16)
 check "dashboard serves the release Knowledge tab" $([ "$j" = "__JS_SHA__" ]; echo $?) "$j"
-D="setpriv --reuid=10000 --regid=10000 --clear-groups env PYTHONPATH=/opt/rgtriage/src RGTRIAGE_HOME=/data/rgtriage HOME=/data/rgtriage/.home AWS_DEFAULT_REGION=__REGION__ /opt/rgtriage/venv/bin/python -m rgtriage"
+D="setpriv --reuid=10000 --regid=10000 --clear-groups env PYTHONPATH=/opt/rgtriage/src RGTRIAGE_HOME=/data/rgtriage RGTRIAGE_DURABLE=1 RGTRIAGE_CONFIG=/data/rgconfig/triage.yaml HOME=/data/rgtriage/.home AWS_DEFAULT_REGION=__REGION__ /opt/rgtriage/venv/bin/python -m rgtriage"
 for i in $(seq 1 30); do b=$($D digest --limit 3 2>&1); echo "$b" | grep -qiE "P[1-4]|no open findings" && break; sleep 10; done
 echo "$b" | grep -qiE "P[1-4]|no open findings"; check "first scan produced a board" $? "$(echo "$b" | head -1 | cut -c1-120)"
+bucket=$(python3 -c "import json; print(json.load(open('/opt/remedigenius/config.json'))['bucket'])" 2>/dev/null)
+r=$(aws s3api list-objects-v2 --bucket "$bucket" --prefix raw/ --max-keys 1 --query 'KeyCount' --output text 2>&1)
+check "raw evidence exists once in S3" $([ "$r" = "1" ]; echo $?) "$r"
+w=$(aws s3api list-objects-v2 --bucket "$bucket" --prefix warehouse/ --max-keys 1 --query 'KeyCount' --output text 2>&1)
+check "Iceberg warehouse exists in S3" $([ "$w" = "1" ]; echo $?) "$w"
+h=$($D history --limit 1 --json 2>&1)
+echo "$h" | grep -Eq '"snapshot_id": [0-9]+'; check "history reads a committed snapshot (not an empty store)" $? "$(echo "$h" | head -1 | cut -c1-120)"
+echo "$h" | grep -q '"outbox_events": 0'; check "the scan outbox is empty after the commit" $? "$(echo "$h" | grep -o '"outbox_events": [0-9]*' | head -1)"
 c=$($H -p default config get kanban.dispatch_in_gateway 2>&1 | tail -1)
 check "Kanban dispatcher off" $([ "$c" = "false" ]; echo $?) "$c"
 if [ -x /usr/local/bin/rgdesk ]; then
@@ -322,6 +332,7 @@ def main():
     ap.add_argument("tag", help="release tag, e.g. v0.3.2")
     ap.add_argument("--settings", required=True, type=Path, help="JSON file with your Terraform variables (kept out of the repo)")
     ap.add_argument("--repo", default="IaCGenius/RemediGenius")
+    ap.add_argument("--name", default=NAME, help=f"stack name (default {NAME}); use a separate name for a throwaway run")
     ap.add_argument("--workdir", type=Path, help="default: .rgce/release-test-TAG")
     ap.add_argument("--local", type=Path, help="test a local build (tools/package_release.py --release) instead of downloading")
     ap.add_argument("--keep", action="store_true", help="leave the stack running for manual testing (destroy it yourself)")
@@ -348,7 +359,8 @@ def main():
     with zipfile.ZipFile(files[f"remedigenius-ce-{version}-source.zip"]) as z:
         z.extractall(source)
     stack = source / f"remedigenius-ce-{version}" / "deploy" / "aws-single"
-    tfvars = {**settings, "name": NAME, "source_zip": spot_zip.as_posix(), "delete_data_on_destroy": True, "region": region}
+    name = args.name
+    tfvars = {**settings, "name": name, "source_zip": spot_zip.as_posix(), "delete_data_on_destroy": True, "region": region}
     (stack / "release-test.auto.tfvars.json").write_text(json.dumps(tfvars, indent=1), encoding="utf-8")
     state = work / "terraform.tfstate"  # outside the extracted source, so a re-run can still destroy
     tf = [terraform, f"-chdir={stack}"]
@@ -356,10 +368,10 @@ def main():
     results: list[tuple[str, bool, str]] = []
     briefing = ""
     try:
-        say("terraform apply (release Terraform, stack", NAME + ") ...")
+        say("terraform apply (release Terraform, stack", name + ") ...")
         run(tf + ["init", "-input=false", "-no-color"])
         run(tf + ["apply", "-input=false", "-no-color", "-auto-approve", f"-state={state}"])
-        instance = Instance(region, NAME)
+        instance = Instance(region, name)
         say("instance", instance.wait_online(), "online; waiting for boot")
         say(instance.shell("cloud-init status --wait >/dev/null 2>&1; cloud-init status", timeout=1200).strip())
         script = (HOST_CHECKS.replace("__VERSION__", version).replace("__SKILLS__", " ".join(skills))

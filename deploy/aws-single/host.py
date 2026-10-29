@@ -24,6 +24,7 @@ SOURCE = ROOT / 'source'
 UID = 10000                               # Hermes container user; also the desk service user
 HERMES_HOME = Path('/data/hermes')
 DESK = Path('/data/rgtriage')
+CONFIG = Path('/data/rgconfig')          # triage.yaml only; facts and cache are rebuilt from S3/Iceberg
 VUID = 10002                              # validation service user: runs Terraform, tflint and cfn-lint; no access to the GitHub key
 VALIDATE_HOME = Path('/var/lib/rgvalidate')
 VALIDATE_SOCKET = Path('/run/rgvalidate/validate.sock')
@@ -40,7 +41,8 @@ LOGIN = HERMES_HOME / 'remedigenius-login.json'
 CONTAINER = 'remedigenius'
 SUBNET = '172.29.242.0/24'
 PROFILE = 'remedigenius'
-PACKAGES = ['boto3==1.42.89', 'PyYAML==6.0.3', 'cfn-lint==1.57.2']  # cfn-lint: deterministic CloudFormation checks before a PR
+PACKAGES = ['boto3==1.42.89', 'PyYAML==6.0.3', 'cfn-lint==1.57.2',  # cfn-lint: deterministic CloudFormation checks before a PR
+            'pyiceberg[sql-sqlite,pyarrow]==0.12.0', 'pyarrow==19.0.1', 'sqlalchemy==2.0.41']
 TERRAFORM = ('1.12.2', '1eaed12ca41fcfe094da3d76a7e9aa0639ad3409c43be0103ee9f5a1ff4b7437')
 TFLINT = ('0.63.1', '8441a7d97df20431f19c9b9d27ff4c63e308c964e86660bc7cc0cf7bbe0725e8')
 # Inside the container the desk paths are identical, so no path translation is needed.
@@ -90,7 +92,7 @@ def install_runtime():
 def wrapper_script() -> str:
     """`sudo rgdesk <rgtriage args>`: run the desk CLI as the desk user with the desk environment (operator use over SSM)."""
     return ("#!/bin/sh\n"
-            f"exec sudo -u '#{UID}' env PYTHONPATH={CODE.as_posix()} RGTRIAGE_HOME={DESK.as_posix()} RGGITHUB_HOME={GITHUB.as_posix()} "
+            f"exec sudo -u '#{UID}' env PYTHONPATH={CODE.as_posix()} RGTRIAGE_HOME={DESK.as_posix()} RGTRIAGE_DURABLE=1 RGTRIAGE_CONFIG={(CONFIG / 'triage.yaml').as_posix()} RGGITHUB_HOME={GITHUB.as_posix()} "
             f"RGGITHUB_IAC_DIR={IAC.as_posix()} RGVALIDATE_SOCKET={VALIDATE_SOCKET.as_posix()} RGTRIAGE_PROPOSALS=/opt/data/proposals "
             f"HOME={DESK.as_posix()}/.home "
             f"{(VENV / 'bin/python').as_posix()} -m rgtriage \"$@\"\n")
@@ -122,19 +124,20 @@ def install_zip_binary(name, version, digest, url):
 def desk(*args, user=None, **kw):
     """Run the rgtriage CLI with the host venv (as root unless a user is given)."""
     env = dict(os.environ, PYTHONPATH=str(CODE), RGTRIAGE_HOME=str(DESK), HOME=str(DESK / '.home'),
-               AWS_STS_REGIONAL_ENDPOINTS='regional')
+               RGTRIAGE_CONFIG=str(CONFIG / 'triage.yaml'), RGGITHUB_HOME=str(GITHUB),
+               RGTRIAGE_DURABLE='1', AWS_STS_REGIONAL_ENDPOINTS='regional')
     prefix = ['setpriv', f'--reuid={UID}', f'--regid={UID}', '--clear-groups'] if user else []
     return run(*prefix, str(VENV / 'bin/python'), '-m', 'rgtriage', *args, env=env, **kw)
 
 
 def restore_state(cfg):
     """Durable copy first: an empty disk (new Spot instance) is filled from the latest S3 checkpoints."""
-    for path in (HERMES_HOME, DESK, GITHUB):
+    for path in (HERMES_HOME, DESK, CONFIG, GITHUB):
         path.mkdir(parents=True, exist_ok=True)
     result = desk('durable', 'restore', '--url', durable_url(cfg), '--home', f'hermes={HERMES_HOME}',
-                  '--home', f'desk={DESK}', '--home', f'github={GITHUB}', '--owner', f'{UID}:{UID}', capture_output=True)
+                  '--home', f'config={CONFIG}', '--home', f'github={GITHUB}', '--owner', f'{UID}:{UID}', capture_output=True)
     print(result.stdout.strip())
-    for path in (HERMES_HOME, DESK, GITHUB, HERMES_HOME / 'proposals', DESK / '.home', DESK / '.lineage', IAC, HERMES_HOME / 'work'):
+    for path in (HERMES_HOME, DESK, CONFIG, GITHUB, HERMES_HOME / 'proposals', DESK / '.home', DESK / '.lineage', IAC, HERMES_HOME / 'work'):
         path.mkdir(parents=True, exist_ok=True)
         os.chown(path, UID, UID)
     GITHUB.chmod(0o700)  # only the desk user; the folder is not mounted into the Hermes container
@@ -197,7 +200,7 @@ def write_desk_profile(cfg):
     Everything else in the file is the operator's (it is kept in the S3 checkpoints). Other organization
     accounts and delegated-administrator status are found by the desk at every scan, not configured here.
     """
-    profile = DESK / 'triage.yaml'
+    profile = CONFIG / 'triage.yaml'
     main_account = {'name': cfg['name'], 'account_id': cfg['account_id'], 'role_arn': cfg['audit_role_arn'],
                     'criticality': 'business_critical'}
     initial = {'name': cfg['name'], 'regions': cfg.get('regions') or [cfg['region']],
@@ -208,7 +211,13 @@ def write_desk_profile(cfg):
                           'boost': {'resource_types': ['AwsIamUser', 'AwsIamRole', 'AwsIamAccessKey'],
                                     'signals': ['identity_risk', 'root_usage'], 'points': 5}}],
                'iac_paths': [str(IAC)],
-               'organization': {'discover': True, 'member_role_name': cfg.get('member_role_name') or 'RemediGeniusReadOnly'}}
+               'organization': {'discover': True, 'member_role_name': cfg.get('member_role_name') or 'RemediGeniusReadOnly'},
+               'storage': {'profile': 'aws', 'namespace': cfg['name'], 'installation_id': cfg['name'],
+                           'warehouse_uri': cfg['warehouse'], 'catalog_database': cfg['glue_database'],
+                           'raw_prefix': 'raw', 'buffer_limit_mb': 256,
+                           'maintenance': {'snapshot_retention_days': 14, 'min_snapshots': 5,
+                                           'target_file_size_mb': 128, 'interval_hours': 24,
+                                           'orphan_retention_hours': 72}}}
     request = {'exists': profile.exists(), 'initial': initial, 'members': member_accounts(cfg),
                'header': '# RemediGenius-CE desk profile. Edit freely; it is saved to S3. Terraform only adds member accounts.\n'}
     result = run(str(VENV / 'bin/python'), '-c', MERGE, str(profile), input=json.dumps(request), capture_output=True).stdout
@@ -372,7 +381,7 @@ def sync_profile(source: Path, hermes_home: Path):
 
 
 def units(cfg: dict) -> dict:
-    env = (f'Environment=RGTRIAGE_HOME={DESK.as_posix()}\nEnvironment=PYTHONPATH={CODE.as_posix()}\n'
+    env = (f'Environment=RGTRIAGE_HOME={DESK.as_posix()}\nEnvironment=RGTRIAGE_DURABLE=1\nEnvironment=RGTRIAGE_CONFIG={(CONFIG / "triage.yaml").as_posix()}\nEnvironment=PYTHONPATH={CODE.as_posix()}\n'
            f'Environment=HOME={DESK.as_posix()}/.home\nEnvironment=AWS_DEFAULT_REGION={cfg["region"]}\n'
            f'Environment=AWS_STS_REGIONAL_ENDPOINTS=regional\nEnvironment=TF_PLUGIN_CACHE_DIR={DESK.as_posix()}/.home/plugins\n'
            f'Environment=REMEDIGENIUS_MODEL_NAME={cfg.get("model_name") or ""}\n'
@@ -382,9 +391,10 @@ def units(cfg: dict) -> dict:
            f'Environment=RGVALIDATE_SOCKET={VALIDATE_SOCKET.as_posix()}\n'
            f'Environment=RGTRIAGE_OPERATOR_TOKEN_FILE={OPERATOR_TOKEN.as_posix()}\n')
     harden = (f'User={UID}\nGroup={UID}\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\n'
-              f'ReadWritePaths={DESK.as_posix()} {GITHUB.as_posix()} {IAC.as_posix()}\n')
+              f'ReadWritePaths={DESK.as_posix()} {CONFIG.as_posix()} {GITHUB.as_posix()} {IAC.as_posix()}\n')
     python = (VENV / 'bin/python').as_posix()
-    homes = f'--home hermes={HERMES_HOME.as_posix()} --home desk={DESK.as_posix()} --home github={GITHUB.as_posix()}'
+    homes = (f'--home hermes={HERMES_HOME.as_posix()} --home config={CONFIG.as_posix()} '
+             f'--home github={GITHUB.as_posix()}')
     store = durable_url(cfg)
     memory = int(cfg.get('container_memory_mb', 6144))
     mounts = ' '.join(CONTAINER_MOUNTS)
@@ -545,10 +555,20 @@ if changed:
 
 
 def enable_knowledge_tab():
-    """The dashboard serves user plugins only when enabled: in the profile (tab list) and at its launch scope (API)."""
+    """The dashboard serves user plugins only when enabled: in the profile (tab list) and at its launch scope (API).
+
+    The Hermes container may still be starting when the rest of the boot is ready; retry the profile-scope enable
+    instead of failing the whole boot on a race.
+    """
     in_container('python', '-c', ENABLE_PROFILE_PLUGIN)
     for name in ('rg-knowledge', 'rg-github'):
-        in_container('hermes', '-p', 'default', 'plugins', 'enable', name, capture_output=True)
+        for attempt in range(30):
+            got = in_container('hermes', '-p', 'default', 'plugins', 'enable', name, check=False, capture_output=True)
+            if got.returncode == 0:
+                break
+            time.sleep(2)
+        else:
+            raise RuntimeError(f"could not enable dashboard plugin {name}: {got.stderr.strip()[-300:]}")
 
 
 KANBAN_OFF = ('kanban.dispatch_in_gateway', 'kanban.auto_decompose')

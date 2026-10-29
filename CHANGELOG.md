@@ -1,5 +1,67 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
+## v0.5.0
+
+**The Spot instance is disposable; S3 and Iceberg hold everything that matters.** This is a fresh-install release:
+the v0.4 JSON desk state is detected and refused, not imported. The Hermes home, `triage.yaml` and the OKF bundle keep
+their existing path. See [docs/STORAGE.md](docs/STORAGE.md), [docs/SCHEMA.md](docs/SCHEMA.md),
+[docs/RECOVERY.md](docs/RECOVERY.md) and [docs/UPGRADING.md](docs/UPGRADING.md).
+
+**New**
+- **Raw evidence first.** Every collected AWS response page is written once to S3 under `raw/`, content-addressed by
+  SHA-256 and write-once. A fact is not committed unless its raw object is confirmed. A bounded local buffer (256 MB)
+  holds pages through a storage outage and collection pauses visibly rather than dropping evidence.
+- **Findings in OCSF 1.9.0.** Inspector, GuardDuty, IAM Access Analyzer, AWS Config and Security Hub map to reviewed
+  OCSF classes; Security Hub v2 exposure findings keep AWS's own record. Desk fields live in a documented CE extension;
+  unmapped source fields stay in the raw object and the extension.
+- **Apache Iceberg as the system of record.** PyIceberg runs in the desk process against a Glue catalog and S3
+  warehouse on Spot, or a SQL catalog and folder on the workstation. Findings, scans, coverage, decisions, verification
+  attempts, fix events, GitHub operations, signals and current-state tables have versioned schemas. Table maintenance
+  (compaction, snapshot expiry, orphan cleanup) runs in-process; no Athena job, Spark or always-on service is required.
+- **A local SQLite cache and commit outbox.** Facts, views and outbox rows commit in one local transaction; the cache is
+  rebuildable. A controller lock keeps one active desk per storage namespace. Conflicting event-ID reuse is
+  quarantined instead of resolved by timestamp.
+- **Idempotent commit loop.** One Iceberg commit per completed scan, plus immediate commits for decisions and GitHub
+  intents/results. Batch IDs and content hashes in snapshot summaries make a commit before a lost acknowledgement
+  non-duplicating. A decision is acknowledged only after its commit; otherwise the desk says *saved locally, not yet
+  durable*. A GitHub intent is committed before any call.
+- **Recovery on new compute.** A replacement instance reads the installation ID from configuration, verifies the
+  catalog, rebuilds the cache from current-state tables, starts a new recovery epoch and re-runs unfinished scans. A
+  merged pull request found while the desk was down is reconciled read-only; no automatic numbered follow-up is made.
+- **`rgtriage history`** (and the agent's `history` action): current facts, committed history at an `--as-of` snapshot,
+  finding episodes with `--timeline`, and evidence-id resolution. Every answer carries the commit watermark,
+  not-yet-durable counts and the evidence-set manifest; incomplete coverage is labelled with its blind spots.
+- **Finding episodes** keep observed and ingested time apart, record applied time only from an explicit receipt, close
+  only on a complete target-bound passing proof, keep the first closure across repeated proofs, and create a recurrence
+  for newer positive evidence. Suppression, accepted risk, false positives and manual resolution never become
+  remediation.
+- **Lifecycle correctness fixes:** truncated/capped/denied reads cannot verify or resolve a finding; unknown visibility
+  preserves verified history; a proof no longer falls back to another configured account; failed and inconclusive
+  attempts persist even when the lifecycle state does not change.
+- **Resumable collection:** source/account/region/filter scopes, page counts and outcomes live in the cache; raw pages
+  are recorded as they arrive; one failed source keeps its partial coverage without erasing the others.
+- **Spot deployment:** adds the scoped Glue database, `raw/` and `warehouse/` bucket prefixes, scoped IAM, a raw
+  retention setting (default 90 days), and a small `/data/rgconfig` home for `triage.yaml`. PyIceberg and PyArrow are
+  installed in the desk runtime.
+- **Storage health:** `rgtriage doctor` and the service log report installation, epoch, commit watermark and age,
+  outbox, not-yet-durable decisions, raw backlog, last maintenance, checkpoint age and unresolved operations.
+  `rgtriage maintain [--dry-run]` runs table maintenance for operators.
+
+**Removed**
+- The v0.4 JSON desk state (`latest.json`, `decisions.json`, `history/`) is no longer written or imported. An existing
+  v0.4 desk state on a fresh cache stops the desk with instructions to move or delete it. Whole-home desk checkpoints
+  are gone; only the Hermes home, configuration and GitHub configuration are checkpointed.
+
+**Not in this release**
+- CE-16…CE-23 (campaigns, lineage, deployment receipts, attestations and the evidence-aware graph) remain for a later
+  release. Their query handlers return `unsupported` rather than fabricated data.
+
+**Validation:** 624 tests passed and 7 skipped offline; a fresh AWS Spot stack passed 49 of 49 host, storage, boundary,
+dashboard and chat checks, then was destroyed. After the Glue grant was tightened (no catalog administration or ETL), a
+second fresh stack passed all 45 host/storage/boundary checks. Details, including the defects these runs found and the
+remaining gaps, are in [docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md). A local-profile pass is not a claim
+about AWS durability or cost.
+
 ## v0.4.0
 
 **New**

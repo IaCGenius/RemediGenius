@@ -122,7 +122,9 @@ def write_desk_profile(args):
             "    boost: {resource_types: [AwsS3Bucket, AwsRdsDbInstance, AwsDynamoDbTable], points: 5}\n"
             "  - text: Detect and stop misuse of privileged identities\n"
             "    boost: {resource_types: [AwsIamUser, AwsIamRole, AwsIamAccessKey], signals: [identity_risk, root_usage], points: 5}\n"
-            f"iac_paths: [{'/data/iac' if args.iac else ''}]\n")
+            f"iac_paths: [{'/data/iac' if args.iac else ''}]\n"
+            f"storage:\n  profile: local\n  namespace: remedigenius\n  installation_id: workstation-{account}\n"
+            "  maintenance: {snapshot_retention_days: 14, min_snapshots: 5, target_file_size_mb: 128, interval_hours: 24, orphan_retention_hours: 72}\n")
     docker("run", "--rm", "-i", "-v", f"{VOLUMES['desk']}:/data/rgtriage", "--entrypoint", "sh", DESK_IMAGE, "-c",
            "cat > /data/rgtriage/triage.yaml", input=text)
 
@@ -145,6 +147,7 @@ def start_desk(args):
            "-v", f"{VOLUMES['creds']}:/creds:ro", "-v", f"{VOLUMES['desk']}:/data/rgtriage",
            "-v", f"{VOLUMES['hermes']}:/opt/data:ro", "-v", f"{VOLUMES['socket']}:/run/rgtriage",
            "-v", f"{host_path(args.data / 'durable')}:/durable", "-e", f"AWS_DEFAULT_REGION={args.region}",
+           "-e", "RGTRIAGE_DURABLE=1",
            "-e", f"REMEDIGENIUS_MODEL_NAME={args.model_name or ''}", "-e", f"REMEDIGENIUS_MODEL_BASE_URL={args.model_base_url or ''}"]
     if args.iac:
         run += ["-v", f"{host_path(Path(args.iac))}:/data/iac:ro"]

@@ -39,8 +39,8 @@ def test_desk_service_is_hardened_checkpoints_to_s3_and_watches_spot(host):
         assert directive in desk
     assert "serve --socket /run/rgtriage/rgtriage.sock --durable s3://bucket-x/state" in desk
     assert "RGTRIAGE_WIKI_DIR" not in desk and "rg-wiki" not in desk  # the WebUI and its wiki view are gone
-    assert "ReadWritePaths=/data/rgtriage /data/rggithub /data/iac" in desk
-    assert "--home hermes=/data/hermes --home desk=/data/rgtriage" in desk and "--spot" in desk
+    assert "ReadWritePaths=/data/rgtriage /data/rgconfig /data/rggithub /data/iac" in desk
+    assert "--home hermes=/data/hermes --home config=/data/rgconfig" in desk and "--spot" in desk
     assert "ExecStopPost=" in desk and "durable checkpoint" in desk  # final checkpoint on shutdown
     assert "OnUnitActiveSec=4h" in units["remedigenius-scan.timer"]
 
@@ -329,3 +329,12 @@ def test_the_agent_container_waits_for_the_desks_socket_before_it_starts(host):
     assert "[ ! -S /run/rgtriage/rgtriage.sock ]" in wait and "-lt 60" in wait and "exit 0" in wait     # waits at most a minute, never blocks the boot
     assert "$$n" in wait and "$n" not in wait.replace("$$n", "")                                          # systemd would otherwise expand it
     assert unit.index("ExecStartPre=/bin/sh -c") < unit.index("ExecStartPre=-/usr/bin/docker rm") < unit.index("ExecStart=/usr/bin/docker run")
+
+
+def test_glue_permission_is_scoped_to_the_installation_database():
+    iam = (ROOT / "deploy/aws-single/iam.tf").read_text(encoding="utf-8")
+    assert "glue:GetDatabase" in iam and "glue:CreateTable" in iam and "glue:GetPartitions" in iam
+    assert "table/${var.name}/*" in iam
+    assert 'Action = ["glue:CreateDatabase"]' not in iam  # not an allow anymore
+    assert "glue:CreateDatabase" in iam and "glue:StartJobRun" in iam  # explicit deny
+    assert 'Effect = "Deny"' in iam

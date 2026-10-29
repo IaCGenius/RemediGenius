@@ -1,5 +1,34 @@
 # Upgrading RemediGenius Community Edition
 
+## To v0.5.0 (from v0.4.x)
+
+v0.5.0 is a **fresh-install release**. The desk's facts moved from JSON files and whole-home archives to S3 raw
+objects and Iceberg tables ([STORAGE.md](STORAGE.md)). It does not import the v0.4 JSON desk state: if the desk finds
+`latest.json` or `decisions.json` on a fresh cache it stops with instructions to move or delete the old desk state.
+The Hermes home (conversations, dashboard settings) and the OKF knowledge bundle keep their existing path.
+
+- **Spot:** deploy a new stack (recommended) or rebuild the archive and let the new boot create the storage. Copy
+  anything you want from the v0.4 deployment first: `triage.yaml`, the knowledge bundle and any exported knowledge.
+  The v0.4 tag remains available if you need to run the old deployment side by side. The new stack creates the Glue
+  database and the `raw/` and `warehouse/` prefixes in its private bucket.
+- **Docker workstation:** use a new data folder (`~/RemediGenius-CE` by default, or `--data`); the old folder's JSON
+  state is not imported. The local Iceberg profile (SQL catalog plus warehouse) lives in the desk state volume.
+- **Existing Hermes:** install the new profile as usual; the desk's durable storage is local by default.
+
+What changes:
+
+- Every collected response is written once to `raw/` before a fact references it; findings are OCSF 1.9.0 rows.
+- Decisions are acknowledged only after their Iceberg commit; a failed commit says *saved locally, not yet durable*.
+- A replaced Spot instance rebuilds its cache from the current-state tables and a new recovery epoch; the desk state
+  archive is no longer restored.
+- Table maintenance (compaction, snapshot expiry, orphan cleanup) runs in the desk process. No Athena job or Spark
+  cluster is required.
+- New `rgtriage history` command (and the agent's `history` action) for current facts, committed history, episodes
+  and evidence ids.
+
+Not changed: the read-only AWS guard, the agent's credential boundary, one operator per installation, and the model
+provider you configure.
+
 ## To v0.4.0 (from v0.3.x)
 
 Spot: rebuild the archive, `terraform apply`, then replace the instance (the same steps as within v0.3.x). The new instance restores your state

@@ -473,7 +473,9 @@ def test_boot_installs_and_enables_the_github_tab_next_to_the_knowledge_tab():
     source = (ROOT / "deploy/aws-single/host.py").read_text(encoding="utf-8")
     assert "'rg-github'" in source and "dashboard-plugins/rg-github" in source and "OPERATOR_TOKEN_IN_CONTAINER" in source
     assert "for name in ('rg-knowledge', 'rg-github')" in source
-    assert "= 3 ]" in (ROOT / "tools/spot_release_test.py").read_text(encoding="utf-8")                # the release test expects three RemediGenius plugins
+    spot = (ROOT / "tools/spot_release_test.py").read_text(encoding="utf-8")
+    assert "-ge 2 ]" in spot  # rg-triage and rg-knowledge are profile plugins; rg-github is a dashboard tab
+    assert "dashboard GitHub tab renders and offers Connect GitHub" in spot
 
 
 # ---------------------------------------------------------------- the console parses the desk's output: it must be pure JSON

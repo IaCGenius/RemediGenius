@@ -10,6 +10,18 @@ from . import config
 
 DECISION_STATUSES = ("acknowledged", "investigating", "fixing", "accepted_risk", "false_positive", "suppressed", "resolved")
 
+_REPOSITORY = None
+
+
+def use(repository) -> None:
+    """Route reads and writes through the durable repository (v0.5.0)."""
+    global _REPOSITORY
+    _REPOSITORY = repository
+
+
+def repository():
+    return _REPOSITORY
+
 
 def _write(path: Path, data, compact: bool = False) -> None:
     tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.tmp")  # concurrent scans must not share a temp file
@@ -30,16 +42,18 @@ def latest_path() -> Path:
 
 
 def load_latest() -> dict | None:
-    return _read(latest_path(), None)
+    return _REPOSITORY.load_latest() if _REPOSITORY is not None else _read(latest_path(), None)
 
 
 def load_decisions() -> dict:
-    return _read(config.home() / "decisions.json", {})
+    return _REPOSITORY.load_decisions() if _REPOSITORY is not None else _read(config.home() / "decisions.json", {})
 
 
 def save_decision(key: str, status: str, reason: str, by: str = "operator", fix: dict | None = None) -> dict:
     if status not in DECISION_STATUSES:
         raise ValueError(f"status must be one of {', '.join(DECISION_STATUSES)}")
+    if _REPOSITORY is not None:
+        return _REPOSITORY.decide(key, status, reason, by, fix)
     decisions = load_decisions()
     previous = decisions.get(key) or {}
     decisions[key] = {"status": status, "reason": reason, "by": by,
@@ -60,6 +74,20 @@ def _origin(f: dict) -> tuple:
 
 def _coverage(scan: dict | None) -> dict:
     return {(c["source"], c.get("account_id"), c["region"]): c for c in (scan or {}).get("coverage", [])}
+
+
+def coverage_complete(entry: dict | None) -> bool:
+    """One predicate for "this read could have seen the finding".
+
+    Status must be ok, the page must not be truncated or capped, and a recorded completeness must say ok. A legacy
+    entry without a completeness field falls back to status + truncation; an explicit unknown is not complete.
+    """
+    if not entry or entry.get("status") != "ok" or entry.get("truncated"):
+        return False
+    completeness = entry.get("completeness")
+    if completeness is not None:
+        return str(completeness) in ("ok", "complete")
+    return True
 
 
 def _time(value) -> datetime | None:
@@ -94,8 +122,8 @@ def mark_changes(scan: dict) -> dict:
     for k, f in prev_keys.items():
         origin = _origin(f)
         now, before = cur_cov.get(origin, {}), prev_cov.get(origin, {})
-        if (k not in cur_keys and now.get("status") == "ok" and not now.get("truncated")
-                and not before.get("truncated") and not scan.get("stored_overflow")):
+        if (k not in cur_keys and coverage_complete(now) and coverage_complete(before)
+                and not scan.get("stored_overflow")):
             resolved.append({"key": k, "title": f["title"], "priority": f.get("priority"), "resource": f["resource"].get("name")})
     baselines = [{"source": c["source"], "account": c["account"], "region": c["region"],
                   "total": c.get("total", c.get("count", 0))}
@@ -120,8 +148,11 @@ def cap_findings(scan: dict, limit: int) -> None:
     scan["stored_overflow"] = max(0, overflow)
 
 
-def save_scan(scan: dict) -> dict:
-    """Write latest.json (compact), a small status file, and a history of key->priority snapshots."""
+def save_scan(scan: dict, run=None) -> dict:
+    """Commit the scan to durable storage, or (legacy/test path only) write latest.json."""
+    if _REPOSITORY is not None:
+        return _REPOSITORY.save_scan(scan, run)
+    # Legacy path: latest.json (compact), a small status file and a history of key->priority snapshots.
     history = config.home() / "history"
     history.mkdir(exist_ok=True)
     stamp = scan["scanned_at"].replace(":", "").replace("-", "")
@@ -137,7 +168,15 @@ def save_scan(scan: dict) -> dict:
 
 
 def write_latest(scan: dict) -> None:
+    if _REPOSITORY is not None:
+        return _REPOSITORY.write_latest(scan)
     _write(latest_path(), scan, compact=True)
+
+
+def persist_decisions(decisions: dict) -> None:
+    if _REPOSITORY is not None:
+        return _REPOSITORY.persist_decisions(decisions)
+    _write(config.home() / "decisions.json", decisions)
 
 
 def find(scan: dict, ref: str) -> dict | None:
@@ -153,11 +192,13 @@ def find(scan: dict, ref: str) -> dict | None:
 
 
 def load_onboarding() -> dict | None:
-    return _read(config.home() / "onboarding.json", None)
+    return _REPOSITORY.load_onboarding() if _REPOSITORY is not None else _read(config.home() / "onboarding.json", None)
 
 
 def save_onboarding(report: dict, profile: dict) -> None:
     """Keep the last onboarding report; `readable` lets investigations reach discovered accounts between scans."""
+    if _REPOSITORY is not None:
+        return _REPOSITORY.save_onboarding(report, profile)
     readable = {a["account_id"]: a["name"] for a in profile["accounts"] if a.get("discovered")}
     _write(config.home() / "onboarding.json", {**report, "readable": readable})
 

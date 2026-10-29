@@ -26,7 +26,7 @@ from pathlib import Path
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from . import __version__, accounts, aws, collect, config, digest, fixes, iac, knowledge, okf, playbooks, prioritize, store
+from . import __version__, accounts, aws, collect, config, digest, fixes, health, iac, knowledge, okf, playbooks, prioritize, store
 
 PRIORITY_ORDER = ("P1", "P2", "P3", "P4")
 
@@ -107,6 +107,20 @@ def cmd_doctor(args):
         except FileNotFoundError as exc:
             advice.append(str(exc))
     _out("\n" + digest.SCOPE_NOTE)
+    repository = store.repository()
+    if repository is not None:
+        storage_health = health.snapshot(repository)
+        _out(f"\nDurable storage: {repository.storage_profile.kind} · namespace {repository.storage_profile.namespace} · "
+             f"installation {storage_health.get('installation_id')} · state {storage_health['state']}")
+        mark = storage_health.get("commit_watermark")
+        _out(f"  commit: {('sequence %s · snapshot %s' % (mark['sequence'], mark.get('snapshot_id'))) if mark else 'nothing yet'}"
+             f" · not yet durable: {storage_health.get('outbox_events', 0)} event(s), "
+             f"{storage_health.get('undurable_decisions', 0)} decision(s)")
+        _out(f"  raw buffer: {storage_health.get('raw_backlog', 0)} object(s) "
+             f"({storage_health.get('raw_backlog_bytes', 0)} bytes) · unresolved operations "
+             f"{storage_health.get('unresolved_operations', 0)}")
+        if storage_health.get("reason"):
+            _out(f"  reason: {storage_health['reason']}")
     _out(model_line())
     if advice:
         _out("\nRecommendations:")
@@ -120,7 +134,13 @@ def run_scan(sources=None, progress=None) -> dict:
         onboarding = accounts.discover(profile, store.load_onboarding())
     except Exception as exc:  # onboarding must never stop the configured accounts from being scanned
         onboarding = {"mode": "unknown", "admin": {}, "notes": [f"account discovery failed: {type(exc).__name__}: {exc}"[:240]]}
-    findings, coverage = collect.collect(profile, sources, progress, skip=accounts.skip_pairs(onboarding))
+    repository = store.repository()
+    run = None
+    if repository is not None:
+        from . import collection
+
+        run = collection.CollectionRun(repository.cache, repository.raw, f"scan-{collect.now_iso().replace(':', '').replace('-', '')}")
+    findings, coverage = collect.collect(profile, sources, progress, skip=accounts.skip_pairs(onboarding), run=run)
     footprint = _footprints(profile)
     try:
         fix_records = fixes.advance({"findings": findings, "coverage": coverage}, profile)
@@ -146,7 +166,7 @@ def run_scan(sources=None, progress=None) -> dict:
         scan["knowledge"] = {"error": f"{type(exc).__name__}: {exc}"[:240]}
     scan["issues"] = prioritize.build_issues(findings)  # before capping, so issue counts cover every finding read
     store.cap_findings(scan, int(profile["max_stored_findings"]))
-    store.save_scan(scan)
+    store.save_scan(scan, run)
     write_outputs(scan)
     return scan
 
@@ -380,7 +400,10 @@ def cmd_decide(args):
         if args.pr and fix["state"] in ("decided", "stalled"):
             fix["state"] = "pr"
     for key in keys:
-        decision = store.save_decision(key, args.status, args.reason, args.by, fix=fix)
+        try:
+            decision = store.save_decision(key, args.status, args.reason, args.by, fix=fix)
+        except RuntimeError as exc:
+            sys.exit(str(exc))
     for item in scan["findings"]:
         if item["key"] in keys:
             item["decision"] = decision
@@ -410,6 +433,76 @@ def cmd_fixes(args):
         _out(f"- {r.get('state')}: {r.get('title', '')[:90]} on {r.get('resource')} · ref {r.get('key')} · owner "
              f"{r.get('owner') or '?'} · PR {r.get('pr') or '-'} · last proof check "
              f"{check.get('at', 'never')} {'passed' if check.get('passed') else ('failed ' + json.dumps(check.get('observed') or check.get('error'), default=str)[:120] if check else '')}")
+
+
+def cmd_history(args):
+    """Current facts, committed history and evidence resolution from the desk's durable store."""
+    from . import cache as cache_module
+    from . import contracts, iceberg_store, queries, rawstore
+
+    profile = config.load()
+    storage_profile = contracts.storage_profile(profile, config.home())
+    region = os.environ.get("AWS_REGION") or (profile.get("regions") or ["us-east-1"])[0]
+    try:
+        storage = iceberg_store.IcebergStore.open(storage_profile, region=region)
+        storage.ensure_tables()
+    except Exception as exc:
+        sys.exit(f"Durable storage is not ready: {type(exc).__name__}: {exc}. See docs/STORAGE.md.")
+    cache = cache_module.Cache(timeout=2)
+    raw = rawstore.from_config(profile, storage_profile, home=config.home())
+    service = queries.QueryService(cache, storage, raw)
+    try:
+        if args.evidence:
+            result = service.dispatch("evidence", {"sha256": args.evidence})
+        elif args.timeline:
+            result = service.dispatch("timeline", {"finding_key": args.finding, "as_of": args.as_of,
+                                                   "limit": args.limit})
+        elif args.current:
+            result = service.dispatch("current", {"finding_key": args.finding, "account": args.account,
+                                                  "region": args.region, "limit": args.limit})
+        else:
+            result = service.dispatch("history", {"finding_key": args.finding, "as_of": args.as_of,
+                                                  "account": args.account, "region": args.region, "limit": args.limit})
+    except queries.QueryError as exc:
+        sys.exit(str(exc))
+    finally:
+        cache.close()
+    if args.json:
+        _json(result)
+        return
+    if result["query"] == "evidence":
+        _out(f"Evidence {result['sha256']}: {'verified' if result['verified'] else 'NOT verified'}"
+             + (f" · {result.get('key')}" if result.get("key") else "")
+             + (f" · {result['reason']}" if result.get("reason") else ""))
+        return
+    mark = result["durability"]["watermark"]
+    _out(f"Installation {result['installation_id']} · namespace {storage_profile.namespace}")
+    _out(f"Committed: {('sequence %s · snapshot %s' % (mark['sequence'], mark.get('snapshot_id'))) if mark else 'nothing yet'}")
+    _out(f"Not yet durable: {result['durability']['outbox_events']} event(s), "
+         f"{result['durability']['undurable_decisions']} decision(s)")
+    if result["query"] == "timeline":
+        _out("Finding episodes (observed and ingested time kept separate):")
+        for key, episodes in result["findings"].items():
+            for episode in episodes:
+                _out(f"  {key} #{episode['episode']} {episode['status']} · observed {episode['first_observed_at']} "
+                     f"· applied {episode['applied_at'] or 'unknown'} · verified {episode['verified_at'] or '-'}"
+                     + (f" · recurrence {episode['recurrence_at']}" if episode.get("recurrence_at") else ""))
+        return
+    if result["query"] == "history":
+        manifest = result.get("manifest") or {}
+        state = "complete" if manifest.get("complete") else "INCOMPLETE"
+        _out(f"Evidence set: {state}" + (f" · run {manifest['run_id']}" if manifest.get("run_id") else "")
+             + (f" · {manifest['reason']}" if manifest.get("reason") else ""))
+        for spot in (manifest.get("blind_spots") or [])[:6]:
+            _out(f"  blind spot: {spot.get('source')} {spot.get('account_id')} {spot.get('region')} "
+                 f"{spot.get('status')}{' truncated' if spot.get('truncated') else ''}")
+        _out(f"As of: {result.get('as_of') or 'latest'} · snapshot {result.get('snapshot_id')}")
+    _out(f"Rows: {result['count']}" + (" (truncated)" if result.get("truncated") else ""))
+    for row in result["rows"]:
+        ce = row.get("ce") or {}
+        _out(f"  {ce.get('priority') or '-':<3} {ce.get('finding_key') or row.get('finding_key') or row.get('key') or '-':<16} "
+             f"{row.get('class_uid', '-')} {row.get('account_id', '')}/{row.get('region', '')} "
+             f"{row.get('observed_at', '')} raw {str(row.get('raw_sha256') or '')[:16]}")
 
 
 def cmd_card(args):
@@ -695,8 +788,40 @@ def cmd_serve_validate(args):
     validators.serve(args.socket, scratch=args.scratch, workers=args.workers, group=args.group)
 
 
+def cmd_maintain(args):
+    """Compact files, expire snapshots and remove orphan data files (operators; never the agent)."""
+    repository = store.repository()
+    if repository is None:
+        sys.exit("Durable storage is not configured (set RGTRIAGE_DURABLE=1 and a storage profile).")
+    result = repository.storage.maintenance(dry_run=args.dry_run)
+    if not args.dry_run:
+        repository.cache.set_meta("last_maintenance", result["at"])
+    _json(result)
+
+
 def cmd_serve(args):
     from . import durable, server
+    repository = store.repository()
+    if repository is not None:
+        report = repository.recover()
+        print(f"recovery: {json.dumps(report.as_dict(), default=str)}", flush=True)
+        if report.state == "blocked":
+            sys.exit(f"storage recovery is blocked: {report.reason}")
+        import threading
+        import time
+
+        def maintain():
+            time.sleep(3600)
+            while True:
+                try:
+                    result = repository.storage.maintenance()
+                    repository.cache.set_meta("last_maintenance", result["at"])
+                    print(f"storage maintenance: {result.get('at')}", flush=True)
+                except Exception as exc:
+                    print(f"storage maintenance failed: {type(exc).__name__}: {exc}", flush=True)
+                time.sleep(max(3600, repository.storage.maintenance_settings.interval_hours * 3600))
+
+        threading.Thread(target=maintain, daemon=True).start()
     try:
         print(f"knowledge: {json.dumps(knowledge.seed())}", flush=True)  # shipped concepts follow the installed version
     except Exception as exc:
@@ -1060,6 +1185,15 @@ def main(argv=None):
     p.set_defaults(func=cmd_decide)
     p = sub.add_parser("fixes", help="fix records from decision to verified closure"); p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_fixes)
+    p = sub.add_parser("history", help="current facts and committed history from durable storage")
+    p.add_argument("--current", action="store_true", help="current state instead of history")
+    p.add_argument("--timeline", action="store_true", help="finding episodes with applied and verified time")
+    p.add_argument("--finding", help="one finding key")
+    p.add_argument("--as-of", help="ISO date/time or a date (for example 2026-06-15)")
+    p.add_argument("--account"); p.add_argument("--region")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--evidence", help="resolve a raw evidence SHA-256 without returning its bytes")
+    p.add_argument("--json", action="store_true"); p.set_defaults(func=cmd_history)
     p = sub.add_parser("card", help="Kanban card text for one change: AWS CLI fix, IaC prompt, verify read")
     p.add_argument("ref", nargs="+"); p.add_argument("--offline", action="store_true", help="no live read for exact commands")
     p.add_argument("--text", dest="json", action="store_false", help="print markdown instead of JSON")
@@ -1090,6 +1224,8 @@ def main(argv=None):
     p.add_argument("--evidence"); p.add_argument("--change"); p.add_argument("--effect"); p.add_argument("--risk"); p.add_argument("--rollback")
     p.add_argument("--number", type=int); p.add_argument("--branch"); p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_github)
+    p = sub.add_parser("maintain", help="compact Iceberg files, expire snapshots and clean orphan data files")
+    p.add_argument("--dry-run", action="store_true"); p.set_defaults(func=cmd_maintain)
     p = sub.add_parser("serve", help="desk API on a Unix socket for the containerized agent; checkpoints state")
     p.add_argument("--socket", required=True)
     p.add_argument("--durable", default="", help="s3://bucket/prefix or a folder for durable checkpoints")
@@ -1142,6 +1278,15 @@ def main(argv=None):
     p.set_defaults(func=cmd_improve)
 
     args = parser.parse_args(argv)
+    if os.environ.get("RGTRIAGE_DURABLE") == "1" and args.func not in (cmd_init, cmd_durable, cmd_serve_validate):
+        from . import repository
+
+        try:
+            store.use(repository.Repository.open())
+        except repository.LegacyState as exc:
+            sys.exit(str(exc))
+        except Exception as exc:
+            sys.exit(f"Durable desk storage is not ready: {type(exc).__name__}: {exc}. See docs/STORAGE.md.")
     try:
         args.func(args)
     except FileNotFoundError as exc:

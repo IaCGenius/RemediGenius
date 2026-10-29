@@ -1,8 +1,8 @@
 # RemediGenius Community Edition on one AWS Spot instance
 
 A persistent RemediGenius-CE deployment in your account: one Spot instance in an Auto Scaling group and a private S3
-bucket for durable state. The instance is disposable. If AWS reclaims it, the group launches a new one and it restores
-itself from S3.
+bucket for raw evidence, Iceberg facts and checkpoints. The instance is disposable. If AWS reclaims it, the group
+launches a new one and it rebuilds from S3.
 
 ```mermaid
 flowchart LR
@@ -11,8 +11,8 @@ flowchart LR
     H[Hermes container<br/>profile remedigenius<br/>no AWS credentials, egress: HTTPS only]
     D -- /run/rgtriage/rgtriage.sock --> H
   end
-  D -- checkpoints every 2 min, after scans/decisions,<br/>on stop and on Spot interruption notice --> S[(Private S3 bucket<br/>state/)]
-  S -- restore at boot --> D
+  D -- raw pages, one Iceberg batch per scan and decision,<br/>Hermes checkpoint every 2 min --> S[(Private S3 bucket<br/>raw/ · warehouse/ · state/)]
+  S -- rebuild cache and restore Hermes home at boot --> D
   You -- SSM port forward --> H
 ```
 
@@ -49,7 +49,8 @@ terraform apply -var-file=local.tfvars
 | `running` | `true` | `false` scales to zero; state stays in S3 |
 | `spot_instance_types` / `container_memory_mb` | `t3.large, t3a.large` / `6144` | |
 | `public_ip` | `true` | `false` for a private subnet with NAT |
-| `delete_data_on_destroy` | `false` | `true` lets `terraform destroy` delete the bucket and all checkpoints |
+| `delete_data_on_destroy` | `false` | `true` lets `terraform destroy` delete the bucket, raw evidence and Iceberg facts |
+| `raw_retention_days` | `90` | expire `raw/` response objects; `0` keeps them. Facts in Iceberg are not expired by this |
 
 First boot takes about 5 minutes: packages, the pinned Hermes image, the desk runtime and a pinned, checksum-verified
 Terraform binary for fix validation.
@@ -68,8 +69,11 @@ reinstalled after an instance replacement).
 
 ## What the stack creates
 
-- **S3 bucket** (private, versioned, TLS-only, SSE-S3). `state/` holds checkpoints (old versions expire after 30 days);
-  `source/` holds the archive the instance verifies by SHA-256 at boot.
+- **S3 bucket** (private, versioned, TLS-only, SSE-S3). `raw/` holds every collected response once, keyed by SHA-256;
+  `warehouse/` holds the Iceberg tables; `state/` holds the Hermes home checkpoints (old versions expire after 30
+  days); `source/` holds the archive the instance verifies by SHA-256 at boot.
+- **Glue database** `<name>` for the Iceberg catalog. The instance role may use only that database and the `raw/` and
+  `warehouse/` prefixes.
 - **Instance role** with SSM core, its bucket, the model secret (+ KMS decrypt via Secrets Manager), and `sts:AssumeRole`
   on the audit role and any `member_role_arns`. It does **not** have AWS security read permissions itself.
 - **Audit role** with `SecurityAudit` + `ViewOnlyAccess` and an explicit deny on credential and data reads (secrets,
@@ -86,9 +90,10 @@ reinstalled after an instance replacement).
 | `remedigenius-scan.timer` | scheduled scan (3 minutes after boot, then every `scan_interval_hours`) |
 | `remedigenius-hermes.service` | the pinned Hermes container: profile `remedigenius`, dashboard on `127.0.0.1:9120`, egress limited to HTTPS (no metadata, no private ranges) |
 
-Desk state is in `/data/rgtriage`, the Hermes home in `/data/hermes`, and proposals the agent saves in `/opt/data/proposals`
-(inside the Hermes home). IaC repositories go in `/data/iac` (clone them through an SSM session), mounted
-read-only into the agent. Logs: `journalctl -u remedigenius-desk -u remedigenius-validate -u remedigenius-scan -u remedigenius-hermes`.
+The desk cache is in `/data/rgtriage` (rebuildable), `triage.yaml` in `/data/rgconfig`, the Hermes home in
+`/data/hermes`, and proposals the agent saves in `/opt/data/proposals` (inside the Hermes home). Raw evidence and
+Iceberg facts are in the stack's S3 bucket, so a replacement instance does not restore a desk state archive. IaC
+repositories go in `/data/iac` (clone them through an SSM session), mounted read-only into the agent. Logs: `journalctl -u remedigenius-desk -u remedigenius-validate -u remedigenius-scan -u remedigenius-hermes`.
 The GitHub App key is kept apart in `/data/rggithub`; operators run the desk CLI with `sudo rgdesk ...`.
 
 ## Member accounts

@@ -33,6 +33,24 @@ resource "aws_iam_role_policy" "host" {
     { Effect = "Allow", Action = ["s3:ListBucket"], Resource = aws_s3_bucket.data.arn },
     { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource = "${aws_s3_bucket.data.arn}/state/*" },
     { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${aws_s3_bucket.data.arn}/source/*" },
+    # Raw evidence and the Iceberg warehouse are written by the desk, never by the agent.
+    { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+    Resource = ["${aws_s3_bucket.data.arn}/raw/*", "${aws_s3_bucket.data.arn}/warehouse/*"] },
+    # Glue catalog for Iceberg: only this installation's database and its tables.
+    { Effect = "Allow",
+      Action = ["glue:GetDatabase", "glue:GetTables", "glue:GetTable", "glue:CreateTable", "glue:UpdateTable",
+        "glue:DeleteTable", "glue:GetPartitions", "glue:GetPartition", "glue:BatchCreatePartition",
+      "glue:BatchUpdatePartition", "glue:BatchDeletePartition"],
+      Resource = [aws_glue_catalog_database.ce.arn,
+        "arn:aws:glue:${var.region}:${var.account_id}:table/${var.name}/*",
+    "arn:aws:glue:${var.region}:${var.account_id}:catalog"] },
+    # The Glue database is Terraform's; the desk may read it and manage only its own tables. These explicit denies
+    # keep a future broad policy from turning the instance into a catalog/ETL administrator.
+    { Effect = "Deny",
+      Action = ["glue:CreateDatabase", "glue:DeleteDatabase", "glue:CreateCrawler", "glue:StartCrawler",
+        "glue:CreateJob", "glue:StartJobRun", "glue:CreateDevEndpoint", "glue:CreateSecurityConfiguration",
+      "glue:PutResourcePolicy", "glue:DeleteResourcePolicy"],
+    Resource = "*" },
     {
       # The common read role in any account of this account's own organization (none when not in an organization).
       Effect    = "Allow", Action = "sts:AssumeRole", Resource = "arn:aws:iam::*:role/${var.member_role_name}",

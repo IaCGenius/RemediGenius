@@ -72,15 +72,19 @@ for the five-minute orientation.
 - **No silent changes.** The agent cannot edit your repositories (only a proposals folder), cannot read credential
   files, and every triage decision goes through Hermes's approval prompt. Knowledge it learns stays a draft until a
   person approves it in the Knowledge tab.
-- **Durable state.** Conversations, decisions and scan history are checkpointed to S3 (Spot) or a folder on your
-  machine (workstation). A replaced Spot instance or a wiped Docker volume restores itself.
+- **Durable state.** Raw evidence and facts are written to S3 (Spot) or the local durable folder (workstation) before
+  they are trusted: every collected response once, and Iceberg tables for findings, scans, decisions and fix or GitHub
+  events. Conversations and settings keep the Hermes checkpoint. A replaced Spot instance or wiped Docker volume
+  rebuilds its cache and restores itself.
 
-Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) · [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md) · [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md) · [docs/IAM.md](docs/IAM.md) · [docs/LIMITS.md](docs/LIMITS.md)
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/STORAGE.md](docs/STORAGE.md) · [docs/SCHEMA.md](docs/SCHEMA.md) · [docs/RECOVERY.md](docs/RECOVERY.md) · [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) · [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md) · [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md) · [docs/IAM.md](docs/IAM.md) · [docs/LIMITS.md](docs/LIMITS.md)
 
 ## Validated configuration
 
 AWS us-east-1 · Hermes `nousresearch/hermes-agent:stable@sha256:444b4259…` (0.21.7) · model `deepseek-v4.1-flash`
-(OpenAI-compatible endpoint). Other Hermes-supported models work but are your choice. Evidence and exact scope:
+(OpenAI-compatible endpoint) · OCSF 1.9.0 · PyIceberg 0.12.0. Durable storage was validated on a fresh Spot stack:
+raw evidence and the Iceberg warehouse in S3, a committed history snapshot, empty outbox, dashboard and chat; the stack
+was destroyed afterwards. Other Hermes-supported models work but are your choice. Evidence and exact scope:
 [docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md).
 
 Provided as-is under Apache-2.0. You choose your model provider and AWS account and are responsible for their

@@ -110,6 +110,15 @@ variable "delete_data_on_destroy" {
   type    = bool
   default = false
 }
+variable "raw_retention_days" {
+  type        = number
+  default     = 90
+  description = "Expire raw/ AWS response objects after this many days (0 keeps them). Facts in Iceberg do not expire with them."
+  validation {
+    condition     = var.raw_retention_days >= 0 && floor(var.raw_retention_days) == var.raw_retention_days
+    error_message = "Choose a whole number of days (0 keeps raw evidence)."
+  }
+}
 
 check "model_endpoint" {
   assert {
@@ -163,6 +172,28 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
       noncurrent_days = 30
     }
   }
+  dynamic "rule" {
+    for_each = var.raw_retention_days > 0 ? [1] : []
+    content {
+      id     = "expire-old-raw-evidence"
+      status = "Enabled"
+      filter {
+        prefix = "raw/"
+      }
+      expiration {
+        days = var.raw_retention_days
+      }
+      noncurrent_version_expiration {
+        noncurrent_days = 30
+      }
+    }
+  }
+}
+
+# Iceberg facts live in this Glue database; the warehouse prefix is in the same private bucket.
+resource "aws_glue_catalog_database" "ce" {
+  name        = var.name
+  description = "RemediGenius-CE Iceberg facts (findings, scans, coverage, decisions, operations)"
 }
 resource "aws_s3_bucket_policy" "tls" {
   bucket = aws_s3_bucket.data.id
@@ -202,6 +233,9 @@ locals {
     model_secret        = var.model_secret_arn, model_name = var.model_name, model_base_url = var.model_base_url,
     scan_interval_hours = var.scan_interval_hours, watch_deliver = var.watch_deliver,
     container_memory_mb = var.container_memory_mb,
+    glue_database       = aws_glue_catalog_database.ce.name,
+    warehouse           = "s3://${aws_s3_bucket.data.id}/warehouse",
+    raw_retention_days  = var.raw_retention_days,
     image               = "nousresearch/hermes-agent:stable@sha256:444b42594e7f467425872fc35e077a227d377f0fe0726bc818706d62175fad8b"
   }
 }
@@ -276,6 +310,14 @@ output "data_notice" {
 
 output "bucket" {
   value = aws_s3_bucket.data.id
+}
+output "glue_database" {
+  value       = aws_glue_catalog_database.ce.name
+  description = "Iceberg catalog database for the desk facts."
+}
+output "warehouse" {
+  value       = "s3://${aws_s3_bucket.data.id}/warehouse"
+  description = "Iceberg warehouse prefix (same private bucket as raw evidence and checkpoints)."
 }
 output "autoscaling_group" {
   value = aws_autoscaling_group.host.name

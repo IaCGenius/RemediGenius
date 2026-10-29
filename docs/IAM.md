@@ -21,7 +21,7 @@ The Hermes agent never holds AWS credentials.
 
 | Identity | Permissions | Used by |
 | --- | --- | --- |
-| Instance role `<name>` | SSM core; its bucket (`state/` read/write, `source/` read); the model secret, plus `kms:Decrypt` on that secret's customer-managed key via Secrets Manager only; `sts:AssumeRole` on the audit role, plus `RemediGeniusReadOnly` in any account of its own organization (`aws:ResourceOrgID` = `${aws:PrincipalOrgID}`; nothing when not in an organization) or explicit `member_role_arns` | the host bootstrap and desk service (state, secret, role assumption) |
+| Instance role `<name>` | SSM core; its bucket (`state/` read/write, `source/` read, `raw/` and `warehouse/` read/write/delete); the Glue database `<name>` and its tables; the model secret, plus `kms:Decrypt` on that secret's customer-managed key via Secrets Manager only; `sts:AssumeRole` on the audit role, plus `RemediGeniusReadOnly` in any account of its own organization (`aws:ResourceOrgID` = `${aws:PrincipalOrgID}`; nothing when not in an organization) or explicit `member_role_arns` | the host bootstrap and desk service (raw evidence, Iceberg facts, checkpoints, secret, role assumption) |
 | Audit role `<name>-audit` | `SecurityAudit`, `ViewOnlyAccess`, policy evaluations (IAM simulator, Access Analyzer checks), explicit deny on credential/data reads | every AWS read in this account |
 | Member read role `RemediGeniusReadOnly` ([template](../deploy/aws-single/member-read-role.yaml), deploy as a StackSet) | same as the audit role; trusts only the desk identity (`TrustedPrincipalArn`) within your organization | AWS reads in member accounts; see [MULTI-ACCOUNT.md](MULTI-ACCOUNT.md) |
 | Hermes container | none. IMDSv2 hop limit 1 and the egress firewall block instance metadata | — |
@@ -29,8 +29,22 @@ The Hermes agent never holds AWS credentials.
 The instance role itself has no AWS security read permissions. No inbound port is open; operators reach the dashboard
 through SSM port forwarding, which needs `ssm:StartSession` on the instance.
 
-The S3 bucket holds checkpoints of conversations, decisions and settings, which may include the model key.
-Restrict access to the whole bucket.
+The S3 bucket holds raw AWS responses, the Iceberg warehouse and Hermes home checkpoints, which may include the model
+key. Restrict access to the whole bucket.
+
+**The Glue grant is on the EC2 instance role, not the audit role.** The instance role is assumed by the host and the
+desk through instance metadata; it is the only identity that writes the CE catalog. The grant names the catalog ARN,
+only the database `<name>` and only tables under `<name>/*`, and allows: `GetDatabase`, `GetTables`, `GetTable`,
+`CreateTable`, `UpdateTable`, `DeleteTable`, the partition reads/batches. `CreateDatabase` is not allowed: Terraform
+creates the database, and the desk verifies it with `GetDatabase` before creating tables. An explicit deny blocks
+`CreateDatabase`, `DeleteDatabase`, crawlers, jobs, development endpoints, security configurations and catalog resource
+policies, so a future broad policy cannot turn the instance into a Glue/ETL administrator. It cannot read or change
+another Glue database.
+
+This is the effective boundary: a scoped inline policy plus explicit denies, not a separate AWS `PermissionsBoundary`.
+The role has no AWS security read permissions; those stay on the audit role, and target-account collection remains
+read-only through the audit and member roles. A formal `PermissionsBoundary` would duplicate the SSM and app policy
+surface and needs its own Spot validation; it is a possible follow-up, not part of this release.
 
 ## Docker workstation
 

@@ -64,8 +64,9 @@ the desk container. They are short-lived for SSO/role profiles and long-lived fo
 
 ## Durable storage
 
-The desk checkpoints two homes, the Hermes home (conversations, settings, memory) and the desk state
-(`triage.yaml`, decisions, scan history), into `~/RemediGenius-CE/durable/`. It does this every 2 minutes, right after
+The desk writes raw evidence and Iceberg facts in the desk state volume (the local storage profile) and checkpoints the
+Hermes home (conversations, settings, memory) and the desk configuration into `~/RemediGenius-CE/durable/`. The SQLite
+cache is rebuildable; see [STORAGE.md](STORAGE.md). It checkpoints every 2 minutes, right after
 scans and decisions, and on `stop`. If Docker volumes are lost, the next `start` restores them from that folder. A new home
 can never overwrite existing checkpoints by accident: it must descend from the latest checkpoint.
 

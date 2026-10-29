@@ -223,7 +223,7 @@ def _card_status() -> str:
 # ------------------------------------------------------------------ tool
 
 ACTIONS = ("digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "onboarding", "playbook", "report",
-           "knowledge", "remember", "fixes", "card", "cards", "github")
+           "knowledge", "remember", "fixes", "card", "cards", "github", "history")
 GITHUB_OPS = ("status", "publish", "pr_status", "refresh")
 KNOWLEDGE_VIEWS = ("overview", "search", "show", "for", "gaps", "review", "validate")
 
@@ -290,6 +290,19 @@ def handle(params: dict, **_kwargs) -> str:
         args = ["knowledge", view] + ([arg] if arg else []) + (["--limit", str(p.get("limit", 8))] if view == "search" else [])
     elif action == "fixes":
         args = ["fixes"]
+    elif action == "history":
+        # Committed facts only, with the commit watermark and evidence-set completeness. It never writes.
+        if p.get("sha256"):
+            args += ["--evidence", p["sha256"]]
+        else:
+            if p.get("current"):
+                args.append("--current")
+            if p.get("timeline"):
+                args.append("--timeline")
+            for key in ("finding", "as_of", "account", "region"):
+                if p.get(key):
+                    args += [f"--{key.replace('_', '-')}", str(p[key])]
+            args += ["--limit", str(p.get("limit", 20))]
     elif action == "github":
         # Structured, narrow GitHub access. The desk holds the credentials and enforces repository, branch and PR-base policy;
         # connecting, configuring and disconnecting are operator commands on the host, not available here.
@@ -373,6 +386,11 @@ SCHEMA = {
         "properties": {
             "action": {"type": "string", "enum": list(ACTIONS)},
             "ref": {"type": "string", "description": "finding ref (12 hex chars) from the board/list"},
+            "finding": {"type": "string", "description": "history: finding key"},
+            "as_of": {"type": "string", "description": "history: ISO date/time or date (2026-06-15)"},
+            "current": {"type": "boolean", "description": "history: current state instead of committed history"},
+            "timeline": {"type": "boolean", "description": "history: finding episodes with applied and verified time"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "history: raw evidence id to resolve"},
             "priority": {"type": "string", "description": "P1, P2, P3, P4 or comma list"},
             "source": {"type": "string", "description": "securityhub, guardduty, inspector, accessanalyzer, config, cloudwatch, health"},
             "category": {"type": "string", "enum": ["threat", "vulnerability", "exposure", "posture", "operational", "health", "data"]},

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:remedigenius-ce:watermark:1",
+  "title": "RemediGenius-CE commit watermark v1",
+  "description": "The last Iceberg commit this installation knows about. Current-state tables carry the watermark they reflect.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["installation_id", "namespace", "epoch", "sequence", "committed_at", "snapshot_id"],
+  "properties": {
+    "installation_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "namespace": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+$"},
+    "epoch": {"type": "string", "minLength": 1, "maxLength": 128},
+    "sequence": {"type": "integer", "minimum": 0},
+    "committed_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$"},
+    "snapshot_id": {"oneOf": [{"type": "null"}, {"type": "integer"}]}
+  }
+}

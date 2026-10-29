@@ -41,7 +41,7 @@ def check_proof(proof: dict, account: dict, region: str) -> dict:
     """Run the proof read and compare. Returns {passed, observed, error}."""
     service, op = proof["service"], proof["operation"].replace("-", "_")
     if not aws.is_read_operation(aws.snake_to_pascal(op)):
-        return {"passed": False, "error": f"{op} is not a read-only operation"}
+        return {"passed": False, "outcome": "error", "error": f"{op} is not a read-only operation"}
     recorded = os.environ.get("RGTRIAGE_EVAL_AWS")
     try:
         if recorded:
@@ -51,9 +51,26 @@ def check_proof(proof: dict, account: dict, region: str) -> dict:
             client = aws.client(aws.session_for(account, region), service, region)
             result = getattr(client, op)(**(proof.get("parameters") or {}))
     except (ClientError, BotoCoreError, aws.WriteBlocked, AttributeError) as exc:
-        return {"passed": False, "error": str(exc)[:240]}
+        return {"passed": False, "outcome": "error", "error": str(exc)[:240]}
     observed = {k: _get(result, k) for k in (proof.get("expect") or {})}
-    return {"passed": bool(observed) and all(observed[k] == v for k, v in proof["expect"].items()), "observed": observed}
+    passed = bool(observed) and all(observed[k] == v for k, v in proof["expect"].items())
+    return {"passed": passed, "outcome": "pass" if passed else "fail", "observed": observed}
+
+
+def _visibility(scan: dict, fix: dict, finding: dict | None) -> str:
+    """present, absent (a complete read says it is gone) or unknown (the desk could not see the source)."""
+    if finding is not None:
+        return "present"
+    tracked = str(fix.get("account") or "")
+    matches = [c for c in scan.get("coverage", []) if c.get("source") == fix.get("source")
+               and c.get("region") == fix.get("region") and str(c.get("account_id") or "") == tracked]
+    if not tracked or not matches:
+        return "unknown"
+    return "absent" if any(store.coverage_complete(c) for c in matches) else "unknown"
+
+
+def _active(finding: dict | None) -> bool:
+    return finding is not None and str(finding.get("workflow", "NEW")).upper() not in ("RESOLVED", "SUPPRESSED")
 
 
 def advance(scan: dict, profile: dict, decisions: dict | None = None, check=check_proof) -> list[dict]:
@@ -68,26 +85,38 @@ def advance(scan: dict, profile: dict, decisions: dict | None = None, check=chec
         if not fix:
             continue
         finding = by_key.get(key)
-        if finding is not None:
-            active = str(finding.get("workflow", "NEW")).upper() not in ("RESOLVED", "SUPPRESSED")
-        else:  # gone from the scan counts as fixed only if that source was actually read there this time
-            active = not any(c["status"] == "ok" and c["source"] == fix.get("source") and c["region"] == fix.get("region")
-                             and str(c.get("account_id")) == str(fix.get("account")) for c in scan.get("coverage", []))
+        visibility = _visibility(scan, fix, finding)
+        positive = _active(finding)
+        if fix.get("visibility") != visibility:
+            fix.update(visibility=visibility, visibility_at=_now())
+            changed = True
         state = fix.get("state", "decided")
-        if d["status"] == "resolved" and state == "verified" and active:
+        if d["status"] == "resolved" and state == "verified" and positive:
             fix.update(state="reopened", reopened_at=_now())
             d["status"] = "fixing"
             changed = True
         elif d["status"] == "fixing":
             result = None
             if fix.get("proof"):
-                account = accounts.get(str((finding or {}).get("account") or fix.get("account"))) or \
-                    (profile.get("accounts") or [{}])[0]
-                result = check(fix["proof"], account, (finding or {}).get("region") or fix.get("region") or "us-east-1")
+                tracked = str((finding or {}).get("account") or fix.get("account") or "")
+                account = accounts.get(tracked)
+                if not tracked:
+                    result = {"passed": False, "outcome": "inconclusive",
+                              "error": "tracked account is unknown; proof not evaluated"}
+                elif account is None:
+                    result = {"passed": False, "outcome": "inconclusive",
+                              "error": f"tracked account {tracked} is not configured; proof not evaluated"}
+                else:
+                    result = dict(check(fix["proof"], account,
+                                        (finding or {}).get("region") or fix.get("region") or "us-east-1"))
+                    result.setdefault("outcome", "pass" if result.get("passed") else
+                                      ("error" if result.get("error") else "fail"))
+                # Every attempt is persisted, even when the lifecycle state does not move (CE-04).
                 fix["last_check"] = {"at": _now(), **result}
+                changed = True
             new = state
-            if result and result.get("passed"):
-                new = "verified" if not active else "deployed"
+            if result and result.get("passed") and visibility != "unknown":
+                new = "verified" if not positive else "deployed"
             elif fix.get("pr") and state in ("decided", "stalled"):
                 new = "pr"
             since = fix.get("changed_at") or d.get("at")
@@ -99,12 +128,13 @@ def advance(scan: dict, profile: dict, decisions: dict | None = None, check=chec
                 changed = True
             if new == "verified":
                 d.update(status="resolved", reason=f"verified: proof of done passed at {fix['last_check']['at']} "
-                                                   f"and the finding is no longer active ({d.get('reason', '')})"[:500])
+                                                   f"and a complete read shows the finding is gone ({d.get('reason', '')})"[:500])
+                changed = True
         records.append({"key": key, "status": d["status"], **fix,
                         "title": (finding or {}).get("title") or fix.get("title", ""),
                         "resource": ((finding or {}).get("resource") or {}).get("name") or fix.get("resource", "")})
     if changed:
-        store._write(store.config.home() / "decisions.json", decisions)
+        store.persist_decisions(decisions)
     return records
 
 

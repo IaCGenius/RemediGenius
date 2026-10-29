@@ -18,7 +18,7 @@ import urllib.request
 from pathlib import Path
 
 ALLOWED = {"digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "onboarding", "playbook", "report", "watch",
-           "knowledge", "knowledge-edit", "improve", "fixes", "card", "github"}
+           "knowledge", "knowledge-edit", "improve", "fixes", "card", "github", "history"}
 # Over the socket the agent may only ask for these GitHub operations; connect, configure and disconnect are operator-only on the host.
 GITHUB_OPS = {"status", "publish", "pr-status", "refresh"}
 # The web console's human-logged-in backend may also set GitHub up. Those operations are accepted only with the operator token, which only
@@ -28,7 +28,7 @@ OPERATOR_FLAGS = {"--json", "--repo", "--base", "--reviewer", "--org", "--redire
 GITHUB_FLAGS = {"--ref", "--file", "--title", "--topic", "--evidence", "--change", "--effect", "--risk", "--rollback", "--number", "--branch", "--json"}
 MAX_REQUEST = 64 * 1024
 MAX_OUTPUT = 400 * 1024
-TIMEOUT = {"scan": 900, "watch": 900, "validate": 600, "improve": 1200, "github": 900}
+TIMEOUT = {"scan": 900, "watch": 900, "validate": 600, "improve": 1200, "github": 900, "history": 180}
 
 
 CHECKPOINT = {"store": None, "homes": {}, "lock": threading.Lock()}
