@@ -62,6 +62,20 @@ def _coverage(scan: dict | None) -> dict:
     return {(c["source"], c.get("account_id"), c["region"]): c for c in (scan or {}).get("coverage", [])}
 
 
+def coverage_complete(entry: dict | None) -> bool:
+    """One predicate for "this read could have seen the finding".
+
+    Status must be ok, the page must not be truncated or capped, and a recorded completeness must say ok. A legacy
+    entry without a completeness field falls back to status + truncation; an explicit unknown is not complete.
+    """
+    if not entry or entry.get("status") != "ok" or entry.get("truncated"):
+        return False
+    completeness = entry.get("completeness")
+    if completeness is not None:
+        return str(completeness) in ("ok", "complete")
+    return True
+
+
 def _time(value) -> datetime | None:
     try:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
@@ -94,8 +108,8 @@ def mark_changes(scan: dict) -> dict:
     for k, f in prev_keys.items():
         origin = _origin(f)
         now, before = cur_cov.get(origin, {}), prev_cov.get(origin, {})
-        if (k not in cur_keys and now.get("status") == "ok" and not now.get("truncated")
-                and not before.get("truncated") and not scan.get("stored_overflow")):
+        if (k not in cur_keys and coverage_complete(now) and coverage_complete(before)
+                and not scan.get("stored_overflow")):
             resolved.append({"key": k, "title": f["title"], "priority": f.get("priority"), "resource": f["resource"].get("name")})
     baselines = [{"source": c["source"], "account": c["account"], "region": c["region"],
                   "total": c.get("total", c.get("count", 0))}

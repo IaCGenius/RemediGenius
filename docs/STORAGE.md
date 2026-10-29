@@ -190,7 +190,7 @@ The contract is CE-01. The rest of the release fills it in; this table is update
 | CE-06 raw responses to S3 | `rgtriage/rawstore.py` | done |
 | CE-12 Iceberg profiles and maintenance | `rgtriage/iceberg_store.py` | done |
 | CE-13 commit loop | `rgtriage/commit.py` | done |
-| CE-02…CE-04 lifecycle fixes | `rgtriage/fixes.py` | planned |
+| CE-02…CE-04 lifecycle fixes | `rgtriage/fixes.py`, `rgtriage/store.py` | done |
 | CE-07 resumable collection | `rgtriage/collect.py` | planned |
 | CE-08 episodes and lifecycle | `rgtriage/lifecycle.py` | planned |
 | CE-09 command cut-over | `rgtriage/repository.py` | planned |
