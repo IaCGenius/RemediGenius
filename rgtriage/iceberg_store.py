@@ -148,6 +148,17 @@ class IcebergStore:
         return {name: self.append_rows(name, rows, batch_id=batch_id, content_hash=content_hash)
                 for name, rows in rows_by_table.items() if rows}
 
+    def overwrite_rows(self, name: str, rows: list[dict], *, snapshot_properties: dict | None = None) -> int:
+        """Replace a small current-state table in one snapshot (used by CE-10)."""
+        import pyarrow as pa
+        from pyiceberg.expressions import AlwaysTrue
+
+        table = self.table(name)
+        arrow = pa.Table.from_pylist(rows, schema=schemas.pyarrow_schema(name, table.schema()))
+        table.overwrite(arrow, overwrite_filter=AlwaysTrue(), snapshot_properties=snapshot_properties or {})
+        table.refresh()
+        return len(rows)
+
     def scan_rows(self, name: str, *, limit: int | None = None, snapshot_id: int | None = None) -> list[dict]:
         table = self.table(name)
         scan = table.scan(snapshot_id=snapshot_id, limit=limit)

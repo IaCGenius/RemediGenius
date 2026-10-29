@@ -109,8 +109,12 @@ remediation playbook. The agent writes a diff, saves it to the proposals folder 
 
 ## Durable state
 
-`rgtriage/durable.py` checkpoints two homes, the Hermes home and the desk state, to S3 (Spot) or a local folder
-(workstation):
+The desk's facts are not in an archive any more. Every collected AWS response is in S3 `raw/`, and findings, scans,
+coverage, decisions, fix and GitHub events are Iceberg tables in `warehouse/` ([STORAGE.md](STORAGE.md)). Local
+SQLite is a cache and commit outbox that a new instance rebuilds; current-state tables make that rebuild fast.
+
+`rgtriage/durable.py` still checkpoints the Hermes home, the GitHub configuration and the small configuration home
+(`triage.yaml`) to S3 on Spot, or to the local folder on the workstation:
 
 - consistent copies of live SQLite databases (online backup); per-file SHA-256 manifest; the pointer is written last
 - unchanged homes are skipped; 10 snapshots kept per home
@@ -118,6 +122,7 @@ remediation playbook. The agent writes a diff, saves it to the proposals folder 
 - **lineage**: a home may only replace checkpoints it descends from. A fresh machine whose restore did not run is
   refused (`DIVERGED`) instead of overwriting good state.
 - triggers: every 2 minutes, after scans and decisions, on service stop, and on an EC2 Spot interruption notice
+- the desk state home is no longer part of the archive; facts and the cache are rebuilt from S3/Iceberg
 
 ## Concepts borrowed from the AWS Well-Architected Agent
 

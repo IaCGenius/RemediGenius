@@ -90,9 +90,10 @@ reinstalled after an instance replacement).
 | `remedigenius-scan.timer` | scheduled scan (3 minutes after boot, then every `scan_interval_hours`) |
 | `remedigenius-hermes.service` | the pinned Hermes container: profile `remedigenius`, dashboard on `127.0.0.1:9120`, egress limited to HTTPS (no metadata, no private ranges) |
 
-Desk state is in `/data/rgtriage`, the Hermes home in `/data/hermes`, and proposals the agent saves in `/opt/data/proposals`
-(inside the Hermes home). IaC repositories go in `/data/iac` (clone them through an SSM session), mounted
-read-only into the agent. Logs: `journalctl -u remedigenius-desk -u remedigenius-validate -u remedigenius-scan -u remedigenius-hermes`.
+The desk cache is in `/data/rgtriage` (rebuildable), `triage.yaml` in `/data/rgconfig`, the Hermes home in
+`/data/hermes`, and proposals the agent saves in `/opt/data/proposals` (inside the Hermes home). Raw evidence and
+Iceberg facts are in the stack's S3 bucket, so a replacement instance does not restore a desk state archive. IaC
+repositories go in `/data/iac` (clone them through an SSM session), mounted read-only into the agent. Logs: `journalctl -u remedigenius-desk -u remedigenius-validate -u remedigenius-scan -u remedigenius-hermes`.
 The GitHub App key is kept apart in `/data/rggithub`; operators run the desk CLI with `sudo rgdesk ...`.
 
 ## Member accounts

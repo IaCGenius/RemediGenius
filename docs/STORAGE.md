@@ -207,7 +207,7 @@ The contract is CE-01. The rest of the release fills it in; this table is update
 | CE-07 resumable collection | `rgtriage/collect.py` | planned |
 | CE-08 episodes and lifecycle | `rgtriage/lifecycle.py` | planned |
 | CE-09 command cut-over | `rgtriage/repository.py` | planned |
-| CE-10 current-state tables | `rgtriage/current.py` | planned |
+| CE-10 current-state tables | `rgtriage/current.py` | done |
 | CE-11 rebuild and reconciliation | `rgtriage/recovery.py` | planned |
 | CE-14 scoped history queries | `rgtriage/queries.py`, `rgtriage history` | done |
 | CE-15 crash/outage proof and health | `rgtriage/health.py`, `tests/test_storage_live.py` | planned |

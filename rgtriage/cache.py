@@ -541,18 +541,20 @@ class Cache:
             "SELECT * FROM collection_progress WHERE run_id = ? ORDER BY account, region, source", (run_id,))]
 
     # ---------------------------------------------------------------- views
-    def put_view(self, name: str, payload: Any, staged_rowid: int | None = None) -> None:
-        text = contracts.canonical_json(payload)
+    def put_view(self, name: str, payload: Any, staged_rowid: int | None = None,
+                 watermark: dict | None = None) -> None:
         with self.transaction() as conn:
             rowid = int(staged_rowid if staged_rowid is not None else
                         conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM events_local").fetchone()[0])
-            self._put_view(conn, name, payload, rowid)
+            self._put_view(conn, name, payload, rowid, watermark)
 
-    def _put_view(self, conn: sqlite3.Connection, name: str, payload: Any, staged_rowid: int) -> None:
-        conn.execute("INSERT INTO views(name, payload, staged_rowid, watermark, updated_at) VALUES(?, ?, ?, NULL, ?) "
+    def _put_view(self, conn: sqlite3.Connection, name: str, payload: Any, staged_rowid: int,
+                  watermark: dict | None = None) -> None:
+        conn.execute("INSERT INTO views(name, payload, staged_rowid, watermark, updated_at) VALUES(?, ?, ?, ?, ?) "
                      "ON CONFLICT(name) DO UPDATE SET payload = excluded.payload, staged_rowid = excluded.staged_rowid, "
-                     "watermark = NULL, updated_at = excluded.updated_at",
+                     "watermark = excluded.watermark, updated_at = excluded.updated_at",
                      (name, contracts.canonical_json(payload), int(staged_rowid),
+                      json.dumps(watermark, sort_keys=True) if watermark else None,
                       contracts.format_time(contracts.utc_now())))
 
     def get_view(self, name: str) -> dict | None:

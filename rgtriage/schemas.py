@@ -224,7 +224,8 @@ def current_findings() -> Schema:
         _f(4, "class_uid", IntegerType()), _f(5, "severity_id", IntegerType()), _f(6, "status_id", IntegerType()),
         _f(7, "priority", StringType()), _f(8, "issue_key", StringType()), _f(9, "title", StringType()),
         _f(10, "resource", _resource(100)), _f(11, "event_day", DateType()),
-        _f(12, "watermark", _watermark(200), True), _f(13, "updated_at", TimestamptzType(), True))
+        _f(12, "watermark", _watermark(200), True), _f(13, "updated_at", TimestamptzType(), True),
+        _f(14, "payload", StringType(), doc="Canonical CE finding JSON for the board view"))
 
 
 def current_fixes() -> Schema:

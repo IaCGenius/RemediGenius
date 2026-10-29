@@ -72,8 +72,10 @@ for the five-minute orientation.
 - **No silent changes.** The agent cannot edit your repositories (only a proposals folder), cannot read credential
   files, and every triage decision goes through Hermes's approval prompt. Knowledge it learns stays a draft until a
   person approves it in the Knowledge tab.
-- **Durable state.** Conversations, decisions and scan history are checkpointed to S3 (Spot) or a folder on your
-  machine (workstation). A replaced Spot instance or a wiped Docker volume restores itself.
+- **Durable state.** Raw evidence and facts are written to S3 (Spot) or the local durable folder (workstation) before
+  they are trusted: every collected response once, and Iceberg tables for findings, scans, decisions and fix or GitHub
+  events. Conversations and settings keep the Hermes checkpoint. A replaced Spot instance or wiped Docker volume
+  rebuilds its cache and restores itself.
 
 Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/STORAGE.md](docs/STORAGE.md) · [docs/SCHEMA.md](docs/SCHEMA.md) · [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) · [docs/IMPROVEMENT.md](docs/IMPROVEMENT.md) · [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md) · [docs/IAM.md](docs/IAM.md) · [docs/LIMITS.md](docs/LIMITS.md)
 
