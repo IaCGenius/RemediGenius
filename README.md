@@ -82,7 +82,9 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/STORAGE.md](docs/
 ## Validated configuration
 
 AWS us-east-1 · Hermes `nousresearch/hermes-agent:stable@sha256:444b4259…` (0.21.7) · model `deepseek-v4.1-flash`
-(OpenAI-compatible endpoint). Other Hermes-supported models work but are your choice. Evidence and exact scope:
+(OpenAI-compatible endpoint) · OCSF 1.9.0 · PyIceberg 0.12.0. Durable storage was validated on a fresh Spot stack:
+raw evidence and the Iceberg warehouse in S3, a committed history snapshot, empty outbox, dashboard and chat; the stack
+was destroyed afterwards. Other Hermes-supported models work but are your choice. Evidence and exact scope:
 [docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md).
 
 Provided as-is under Apache-2.0. You choose your model provider and AWS account and are responsible for their
