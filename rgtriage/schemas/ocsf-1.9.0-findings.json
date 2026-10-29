@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:remedigenius-ce:ocsf-findings:1.9.0",
+  "title": "RemediGenius-CE OCSF 1.9.0 findings subset",
+  "description": "The OCSF finding fields CE writes and reads. The full OCSF schema is authoritative for other consumers; this subset is pinned for validation in the CE tests.",
+  "x-ocsf-version": "1.9.0",
+  "type": "object",
+  "required": [
+    "metadata", "category_uid", "class_uid", "activity_id", "type_uid", "time", "severity_id",
+    "status_id", "finding_info", "cloud", "resources", "unmapped"
+  ],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": ["version", "product"],
+      "properties": {
+        "version": {"const": "1.9.0"},
+        "product": {
+          "type": "object",
+          "required": ["name"],
+          "properties": {
+            "name": {"type": "string"},
+            "vendor_name": {"type": "string"},
+            "feature_name": {"type": "string"}
+          }
+        }
+      }
+    },
+    "category_uid": {"const": 2},
+    "class_uid": {"enum": [2001, 2002, 2003, 2004]},
+    "class_name": {"type": "string"},
+    "activity_id": {"type": "integer", "minimum": 0},
+    "type_uid": {"type": "integer", "minimum": 0},
+    "time": {"type": ["integer", "null"]},
+    "severity_id": {"enum": [0, 1, 2, 3, 4, 5, 6, 99]},
+    "status_id": {"enum": [0, 1, 2, 3, 4, 5, 99]},
+    "finding_info": {
+      "type": "object",
+      "required": ["uid", "title"],
+      "properties": {
+        "uid": {"type": "string", "minLength": 1},
+        "title": {"type": "string"},
+        "desc": {"type": "string"},
+        "created_time": {"type": ["integer", "null"]},
+        "modified_time": {"type": ["integer", "null"]},
+        "first_seen_time": {"type": ["integer", "null"]},
+        "last_seen_time": {"type": ["integer", "null"]},
+        "types": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "cloud": {
+      "type": "object",
+      "required": ["provider"],
+      "properties": {
+        "provider": {"type": "string"},
+        "region": {"type": "string"},
+        "account_uid": {"type": "string"}
+      }
+    },
+    "resources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["uid", "type"],
+        "properties": {
+          "uid": {"type": "string"},
+          "type": {"type": "string"},
+          "name": {"type": "string"},
+          "region": {"type": "string"},
+          "account_uid": {"type": "string"},
+          "tags": {"type": "object", "additionalProperties": {"type": "string"}},
+          "data": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "vulnerabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["uid"],
+        "properties": {
+          "uid": {"type": "string"},
+          "cve_uid": {"type": "string"},
+          "cve_desc": {"type": "string"},
+          "title": {"type": "string"},
+          "severity": {"type": "string"},
+          "is_exploit_available": {"type": "boolean"},
+          "epss_score": {"type": ["number", "null"]},
+          "fix_available": {"type": "boolean"},
+          "package_name": {"type": "string"},
+          "package_version": {"type": "string"},
+          "package_manager": {"type": "string"}
+        }
+      }
+    },
+    "compliance": {
+      "type": ["object", "null"],
+      "properties": {
+        "status_id": {"type": "integer"},
+        "status": {"type": "string"},
+        "control": {"type": "string"},
+        "standards": {"type": "array", "items": {"type": "string"}},
+        "requirements": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "unmapped": {
+      "type": "object",
+      "required": ["ce"],
+      "properties": {
+        "ce": {
+          "type": "object",
+          "required": ["finding_key", "source", "mapping"],
+          "properties": {
+            "finding_key": {"type": "string"},
+            "source": {"type": "string"},
+            "priority": {"type": ["string", "null"]},
+            "reasons": {"type": "array", "items": {"type": "string"}},
+            "issue_key": {"type": "string"},
+            "scope": {
+              "type": "object",
+              "properties": {
+                "account": {"type": "string"},
+                "region": {"type": "string"},
+                "source": {"type": "string"},
+                "filter_hash": {"type": "string"}
+              }
+            },
+            "raw_sha256": {"type": "string"},
+            "raw_key": {"type": "string"},
+            "observed_at": {"type": "string"},
+            "ingested_at": {"type": "string"},
+            "coverage_status": {"type": "string"},
+            "truncated": {"type": "boolean"},
+            "mapping": {"enum": ["native", "passthrough", "fallback"]},
+            "mapping_error": {"type": "string"}
+          }
+        },
+        "fields": {"type": "object"},
+        "source_keys": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

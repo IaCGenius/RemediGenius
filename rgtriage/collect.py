@@ -685,6 +685,7 @@ def normalize_exposure(f: dict, region: str) -> dict:
     # AWS's correlated evidence (traits, related resources, attack path) travels with the finding as AWS wrote it.
     keep = {k: v for k, v in f.items() if k not in ("metadata", "raw_data", "unmapped", "finding_info", "cloud", "remediation")}
     finding["context"]["exposure"] = _trim({"types": info.get("types"), **keep}, 4000)
+    finding["ocsf"] = f  # CE-24: store AWS's own OCSF record instead of re-mapping it lossily
     return finding
 
 

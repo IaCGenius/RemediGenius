@@ -9,7 +9,7 @@ description = "RemediGenius Community Edition (RemediGenius-CE): AWS security tr
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
-dependencies = ["PyYAML>=6,<7", "boto3>=1.42,<2"]
+dependencies = ["PyYAML>=6,<7", "boto3>=1.42,<2", "pyiceberg[sql-sqlite,pyarrow]>=0.12,<1"]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10", "jsonschema>=4,<5"]

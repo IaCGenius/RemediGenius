@@ -174,7 +174,7 @@ The contract is CE-01. The rest of the release fills it in; this table is update
 | Issue | Module | State |
 | --- | --- | --- |
 | CE-01 data contract | `rgtriage/contracts.py`, `rgtriage/schemas/`, this document | done |
-| CE-24 OCSF mapping and Iceberg schemas | `rgtriage/schemas.py` | planned |
+| CE-24 OCSF mapping and Iceberg schemas | `rgtriage/ocsf.py`, `rgtriage/schemas.py` | done |
 | CE-05 SQLite cache, outbox, controller lock | `rgtriage/cache.py` | done |
 | CE-06 raw responses to S3 | `rgtriage/rawstore.py` | done |
 | CE-12 Iceberg profiles and maintenance | `rgtriage/iceberg_store.py` | planned |
@@ -188,5 +188,5 @@ The contract is CE-01. The rest of the release fills it in; this table is update
 | CE-14 scoped history queries | `rgtriage/queries.py` | planned |
 | CE-15 crash/outage proof and health | `rgtriage/health.py`, `tests/test_storage_live.py` | planned |
 
-See also: [ARCHITECTURE.md](ARCHITECTURE.md) · [DATA-FLOW.md](DATA-FLOW.md) · [LIMITS.md](LIMITS.md) ·
-[IAM.md](IAM.md) · [UPGRADING.md](UPGRADING.md).
+See also: [ARCHITECTURE.md](ARCHITECTURE.md) · [SCHEMA.md](SCHEMA.md) · [DATA-FLOW.md](DATA-FLOW.md) ·
+[LIMITS.md](LIMITS.md) · [IAM.md](IAM.md) · [UPGRADING.md](UPGRADING.md).
