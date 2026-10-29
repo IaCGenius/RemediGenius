@@ -20,6 +20,8 @@ modules/lambda-kiosk/build/
 build/
 .rgce/
 playwright-output/
+.playwright-mcp/
+.claude/
 
 modules/approved-reader/build/
 modules/assurance-schedule/.build/
