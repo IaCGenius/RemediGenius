@@ -56,7 +56,8 @@ check "services active" $(echo "$s" | grep -qv -e inactive -e failed; echo $?) "
 v=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' /opt/rgtriage/src/rgtriage/__init__.py)
 check "rgtriage version" $([ "$v" = "__VERSION__" ]; echo $?) "$v"
 p=$( ($H -p remedigenius plugins list; $H -p default plugins list) 2>&1 | grep -oE "rg-[a-z-]+ +│ +enabled +│ +[0-9.]+" | sed -E 's/[^a-z0-9.-]+/ /g' | sort -u | tr '\n' ';')
-check "plugins enabled at release version" $([ "$(echo "$p" | grep -o "enabled __VERSION__" | wc -l)" = 3 ]; echo $?) "$p"
+# rg-triage and rg-knowledge are Hermes profile plugins; rg-github is a dashboard tab and is checked separately below.
+check "core plugins enabled at release version" $([ "$(echo "$p" | grep -o "enabled __VERSION__" | wc -l)" -ge 2 ]; echo $?) "$p"
 k=$($H -p remedigenius skills list 2>&1 | grep -oE "rg-[a-z-]+" | sort -u | tr '\n' ' ')
 check "skills load" $([ "$k" = "__SKILLS__ " ]; echo $?) "$k"
 c=$(grep -h _config_version /data/hermes/profiles/remedigenius/config.yaml)
