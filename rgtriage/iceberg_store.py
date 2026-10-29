@@ -163,6 +163,16 @@ class IcebergStore:
         snapshots = self.snapshots(name)
         return str((snapshots[-1].summary or {}).get("ce.batch_id", "")) if snapshots else ""
 
+    def snapshot_for_batch(self, name: str, batch_id: str) -> int | None:
+        for snapshot in reversed(self.snapshots(name)):
+            if (snapshot.summary or {}).get("ce.batch_id") == batch_id:
+                return snapshot.snapshot_id
+        return None
+
+    def last_snapshot_id(self, name: str) -> int | None:
+        snapshots = self.snapshots(name)
+        return snapshots[-1].snapshot_id if snapshots else None
+
     # ---------------------------------------------------------------- maintenance
     def maintenance(self, *, dry_run: bool = False, now: datetime | None = None) -> dict:
         """Compact small files, expire old snapshots and remove unreferenced data files."""

@@ -404,16 +404,27 @@ class Cache:
                      (event.event_id, contracts.format_time(contracts.utc_now())))
         return "new", int(cursor.lastrowid)
 
-    def pending_batch(self, limit: int = 500) -> list[StagedEvent]:
-        rows = self.conn.execute(
-            "SELECT e.rowid AS rowid, e.* FROM outbox o JOIN events_local e ON e.event_id = o.event_id "
-            "WHERE e.state = 'pending' ORDER BY o.seq LIMIT ?", (limit,)).fetchall()
+    def pending_batch(self, limit: int = 500, kinds: tuple[str, ...] | None = None) -> list[StagedEvent]:
+        sql = ("SELECT e.rowid AS rowid, e.* FROM outbox o JOIN events_local e ON e.event_id = o.event_id "
+               "WHERE e.state = 'pending'")
+        args: list = []
+        if kinds:
+            sql += f" AND e.kind IN ({', '.join('?' for _ in kinds)})"
+            args.extend(kinds)
+        sql += " ORDER BY o.seq LIMIT ?"
+        args.append(limit)
+        rows = self.conn.execute(sql, args).fetchall()
         return [StagedEvent(event=self._event(row), payload=json.loads(row["payload"]), rowid=int(row["rowid"]))
                 for row in rows]
 
-    def pending_count(self) -> int:
-        return int(self.conn.execute("SELECT COUNT(*) FROM outbox o JOIN events_local e ON e.event_id = o.event_id "
-                                     "WHERE e.state = 'pending'").fetchone()[0])
+    def pending_count(self, kinds: tuple[str, ...] | None = None) -> int:
+        sql = ("SELECT COUNT(*) FROM outbox o JOIN events_local e ON e.event_id = o.event_id "
+               "WHERE e.state = 'pending'")
+        args = ()
+        if kinds:
+            sql += f" AND e.kind IN ({', '.join('?' for _ in kinds)})"
+            args = tuple(kinds)
+        return int(self.conn.execute(sql, args).fetchone()[0])
 
     def undurable_decisions(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM outbox o JOIN events_local e ON e.event_id = o.event_id "
@@ -428,6 +439,10 @@ class Cache:
                                   source=row["scope_source"], filter_hash=row["scope_filter_hash"]),
             observed_at=row["observed_at"], ingested_at=row["ingested_at"], payload_hash=row["payload_hash"],
             raw_ref=raw, batch_id=None)
+
+    def event_state(self, event_id: str) -> str | None:
+        row = self.conn.execute("SELECT state FROM events_local WHERE event_id = ?", (event_id,)).fetchone()
+        return row["state"] if row else None
 
     def event(self, event_id: str) -> StagedEvent | None:
         row = self.conn.execute("SELECT rowid AS rowid, * FROM events_local WHERE event_id = ?", (event_id,)).fetchone()
