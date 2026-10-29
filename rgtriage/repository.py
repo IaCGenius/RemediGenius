@@ -96,7 +96,7 @@ class Repository:
             digest = contracts.payload_hash(finding)
             facts.append((self._event(finding, finding_scope, "observation", observed, ingested, digest, ref), finding))
         self.cache.stage_facts(facts, views={"latest_scan": scan, "current_findings": {"findings": scan.get("findings", [])}})
-        result = self.committer.commit_pending()
+        result = self.committer.commit_pending(max_batch=max(500, len(facts)))
         mark = self.cache.watermark()
         if mark:
             self.current.refresh_from_scan(scan, self.load_decisions(), mark)

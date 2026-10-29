@@ -44,6 +44,9 @@ resource "aws_iam_role_policy" "host" {
       Resource = [aws_glue_catalog_database.ce.arn,
         "arn:aws:glue:${var.region}:${var.account_id}:table/${var.name}/*",
     "arn:aws:glue:${var.region}:${var.account_id}:catalog"] },
+    # PyIceberg's create_namespace_if_not_exists calls CreateDatabase even when Terraform already made the database.
+    { Effect = "Allow", Action = ["glue:CreateDatabase"],
+    Resource = ["arn:aws:glue:${var.region}:${var.account_id}:catalog"] },
     {
       # The common read role in any account of this account's own organization (none when not in an organization).
       Effect    = "Allow", Action = "sts:AssumeRole", Resource = "arn:aws:iam::*:role/${var.member_role_name}",
