@@ -1,5 +1,29 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
+## Unreleased
+
+**Faster Spot replacement: a baked host image and a deployment split.** The first boot spent about 300 seconds installing
+what never changes. A release image now carries the runtime and the pinned Hermes image, and the maintainer's stack
+separates durable infrastructure from disposable compute. Not yet validated on AWS; the record will be added to
+[docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md) when it is.
+
+**New**
+- **`deploy/ami`** builds one host image per release with EC2 Image Builder: docker, the pinned wheel set in
+  `/opt/rgtriage/venv`, Terraform and tflint, and `nousresearch/hermes-agent` pre-pulled by digest. The release archive
+  is baked too and re-verified at boot, so a first boot becomes config, restore and systemd instead of downloads.
+- **`deploy/aws-static`** keeps the bucket, Glue database and both IAM roles; **`deploy/aws-private`** keeps only the
+  security group, launch template and Spot ASG. State lives in an S3 bucket from **`deploy/bootstrap`** with native
+  lock files, so there is no DynamoDB table to run.
+- **`tools/spot_cycle.py up|down|status`** parks and starts the private stack in minutes; the bucket, Glue database and
+  roles stay put, and no instance is left running after `down`.
+- `deploy/aws-single` gains an optional `ami_id`: empty keeps today's install-at-boot behaviour, so the community path
+  and the release gate are unchanged.
+
+**Changed**
+- `host.py --bake` prepares the image with the same code the instance runs; `/opt/rgtriage/.baked` records the version,
+  the Hermes digest and the wheel pins. A boot refuses an image baked for a different digest, and re-installs wheels only
+  when the release pins a different set.
+
 ## v0.5.0
 
 **The Spot instance is disposable; S3 and Iceberg hold everything that matters.** This is a fresh-install release:

@@ -7,6 +7,7 @@ runs Hermes in the pinned container with the `remedigenius` profile and no AWS c
 The desk service checkpoints both homes to S3 every 2 minutes, after scans and decisions,
 on shutdown, and as soon as AWS announces a Spot interruption.
 """
+import argparse
 import hashlib
 import json
 import os
@@ -36,6 +37,7 @@ RUNDIR = Path('/run/rgtriage')
 SOCKET = RUNDIR / 'rgtriage.sock'
 VENV = Path('/opt/rgtriage/venv')
 CODE = Path('/opt/rgtriage/src')          # readable copy of the rgtriage package for uid 10000
+BAKED = Path('/opt/rgtriage/.baked')      # written by `host.py --bake` inside deploy/ami; absent on a plain AL2023 host
 PACKAGE = Path('/opt/remedigenius/package')
 LOGIN = HERMES_HOME / 'remedigenius-login.json'
 CONTAINER = 'remedigenius'
@@ -73,20 +75,50 @@ def ensure_user():
         run('useradd', '--system', '--uid', str(VUID), '--gid', str(VUID), '--no-create-home', '--shell', '/sbin/nologin', 'rgvalidate')
 
 
+def baked_marker():
+    """The bake record from a host image, or None on a plain AL2023 boot."""
+    try:
+        return json.loads(BAKED.read_text())
+    except (OSError, ValueError):
+        return None
+
+
 def install_runtime():
     ensure_user()
     if not (VENV / 'bin/python').exists():
         run('dnf', 'install', '-y', '-q', 'python3.11', 'python3.11-pip', 'unzip')
         run('python3.11', '-m', 'venv', str(VENV))
-    run(str(VENV / 'bin/pip'), 'install', '--quiet', '--disable-pip-version-check', *PACKAGES)
+    # A baked image already has the pinned wheels. Re-install only when this release pins a different set,
+    # so a newer release on an older image still gets the packages its own host.py asks for.
+    marker = baked_marker()
+    if marker is None or marker.get('packages') != PACKAGES:
+        run(str(VENV / 'bin/pip'), 'install', '--quiet', '--disable-pip-version-check', *PACKAGES)
     if CODE.exists():
         shutil.rmtree(CODE)
     shutil.copytree(SOURCE / 'rgtriage', CODE / 'rgtriage', ignore=shutil.ignore_patterns('__pycache__'))
     for path in [CODE, *CODE.rglob('*')]:
         path.chmod(0o755 if path.is_dir() else 0o644)
     install_wrapper()
+    # Both binaries short-circuit when the pinned version is already present, so this is cheap on a baked image.
     install_zip_binary('terraform', *TERRAFORM, 'https://releases.hashicorp.com/terraform/{v}/terraform_{v}_linux_amd64.zip')
     install_zip_binary('tflint', *TFLINT, 'https://github.com/terraform-linters/tflint/releases/download/v{v}/tflint_linux_amd64.zip')
+
+
+def bake(image: str, version: str) -> None:
+    """Prepare a host image: runtime, pinned Hermes image, release archive. Runs inside deploy/ami, not at boot."""
+    install_runtime()
+    run('systemctl', 'enable', '--now', 'docker')
+    run('docker', 'pull', image)
+    archive = ROOT / 'source.zip'
+    BAKED.parent.mkdir(parents=True, exist_ok=True)
+    BAKED.write_text(json.dumps({
+        'version': version,
+        'image': image,
+        'source_sha256': hashlib.sha256(archive.read_bytes()).hexdigest() if archive.exists() else '',
+        'packages': PACKAGES,
+    }, indent=1) + '\n')
+    BAKED.chmod(0o444)
+    print(f"baked {version or 'unknown version'}: {image}")
 
 
 def wrapper_script() -> str:
@@ -604,6 +636,10 @@ def ensure_kanban_off():
 
 def main():
     cfg = json.loads((ROOT / 'config.json').read_text())
+    marker = baked_marker()
+    if marker and marker.get('image') != cfg.get('image'):
+        raise SystemExit(f"this image was baked for {marker.get('image')} but the stack asks for {cfg.get('image')}; "
+                         "bake a new image with deploy/ami instead of mixing them")
     install_runtime()
     restore_state(cfg)
     retire_webui()
@@ -670,4 +706,14 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description="RemediGenius-CE host bootstrap (no arguments at first boot).")
+    parser.add_argument('--bake', action='store_true', help="prepare a host image instead of booting the desk (deploy/ami)")
+    parser.add_argument('--image', default='', help="Hermes image digest to pre-pull when baking")
+    parser.add_argument('--version', default='', help="release version recorded in the bake marker")
+    args = parser.parse_args()
+    if args.bake:
+        if not args.image:
+            raise SystemExit('--bake needs --image <registry>/<name>@sha256:...')
+        bake(args.image, args.version)
+    else:
+        main()
