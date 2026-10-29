@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:remedigenius-ce:raw-ref:1",
+  "title": "RemediGenius-CE raw object reference v1",
+  "description": "A pointer to one collected AWS response stored once under S3 raw/, addressed by the SHA-256 of its bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sha256", "key", "bytes", "scope", "operation", "observed_at", "parameters_hash"],
+  "properties": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!.*\\.\\.)(?!/)[^\\\\]+$"
+    },
+    "bytes": {"type": "integer", "minimum": 0},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account", "region", "source", "filter_hash"],
+      "properties": {
+        "account": {"type": "string", "maxLength": 128, "pattern": "^[A-Za-z0-9._-]*$"},
+        "region": {"type": "string", "maxLength": 128, "pattern": "^[A-Za-z0-9._-]*$"},
+        "source": {"type": "string", "maxLength": 128, "pattern": "^[A-Za-z0-9._-]*$"},
+        "filter_hash": {"type": "string", "pattern": "^(|[0-9a-f]{64})$"}
+      }
+    },
+    "operation": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+$"},
+    "observed_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$"},
+    "parameters_hash": {"type": "string", "pattern": "^(|[0-9a-f]{64})$"}
+  }
+}

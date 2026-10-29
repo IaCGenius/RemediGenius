@@ -103,6 +103,20 @@ def normalize(data: dict) -> dict:
     data.setdefault("max_stored_findings", 20000)
     data.setdefault("rollup_limit", 25)
     data["detail_limits"] = {**DEFAULT_DETAIL_LIMITS, **(data.get("detail_limits") or {})}
+    # Durable storage contract (v0.5.0). `auto` uses AWS when a warehouse URI is configured, otherwise the
+    # workstation profile. Both profiles are authoritative for their installation; see docs/STORAGE.md.
+    if not isinstance(data.get("storage", {}), dict):
+        raise ValueError("storage must be a mapping")
+    storage = data.setdefault("storage", {})
+    storage.setdefault("profile", "auto")
+    storage.setdefault("namespace", "remedigenius")
+    storage.setdefault("raw_prefix", "raw")
+    storage.setdefault("warehouse_uri", "")
+    storage.setdefault("catalog_database", "")
+    storage.setdefault("buffer_limit_mb", 256)
+    storage["maintenance"] = {"snapshot_retention_days": 14, "min_snapshots": 5, "target_file_size_mb": 128,
+                              "interval_hours": 24, "orphan_retention_hours": 72,
+                              **(storage.get("maintenance") or {})}
     # Accounts in the organization that have the common read role are found and read automatically.
     data["organization"] = {"discover": True, "member_role_name": "RemediGeniusReadOnly", "criticality": "business_critical",
                             **(data.get("organization") or {})}
@@ -130,6 +144,13 @@ def proposals_dir() -> Path:
         if candidate and Path(candidate).is_dir():
             return Path(candidate)
     return home() / "proposals"
+
+
+def storage(home_path: Path | None = None):
+    """The active storage profile (contracts.StorageProfile) for this installation."""
+    from . import contracts
+
+    return contracts.storage_profile(load(), home_path or home())
 
 
 def iac_roots(profile: dict | None = None) -> list[Path]:
