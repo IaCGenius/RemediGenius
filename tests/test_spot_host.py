@@ -39,8 +39,8 @@ def test_desk_service_is_hardened_checkpoints_to_s3_and_watches_spot(host):
         assert directive in desk
     assert "serve --socket /run/rgtriage/rgtriage.sock --durable s3://bucket-x/state" in desk
     assert "RGTRIAGE_WIKI_DIR" not in desk and "rg-wiki" not in desk  # the WebUI and its wiki view are gone
-    assert "ReadWritePaths=/data/rgtriage /data/rggithub /data/iac" in desk
-    assert "--home hermes=/data/hermes --home desk=/data/rgtriage" in desk and "--spot" in desk
+    assert "ReadWritePaths=/data/rgtriage /data/rgconfig /data/rggithub /data/iac" in desk
+    assert "--home hermes=/data/hermes --home config=/data/rgconfig" in desk and "--spot" in desk
     assert "ExecStopPost=" in desk and "durable checkpoint" in desk  # final checkpoint on shutdown
     assert "OnUnitActiveSec=4h" in units["remedigenius-scan.timer"]
 

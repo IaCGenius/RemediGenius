@@ -17,10 +17,12 @@ flowchart TB
     SH[Security Hub] & GD[GuardDuty] & IN[Inspector] & AA[Access Analyzer] & CF[Config] & CW[CloudWatch alarms] & HE[Health]
   end
   subgraph Desk[Desk service - only component with AWS credentials]
-    C[collect<br/>read-only botocore guard] --> N[normalize + dedupe] --> P[prioritize + group] --> B[board.md · latest.json · report.html]
+    C[collect<br/>read-only botocore guard] --> N[normalize + dedupe] --> P[prioritize + group] --> B[board.md · report.html]
+    C --> R[(raw evidence<br/>S3 raw/ or durable folder)]
+    P --> I[(Iceberg facts<br/>findings · scans · coverage · decisions)]
     L[IaC locator + terraform validate]
     KB[(knowledge<br/>OKF bundle)] --> P
-    K[checkpoints]
+    K[Hermes, config and GitHub checkpoints]
   end
   subgraph Agent[Hermes container - no AWS credentials]
     PL[plugin rg-triage<br/>tool · session-start board · guards] --- SK[skills rg-triage · rg-investigate · rg-iac-fix · rg-onboard · rg-knowledge]

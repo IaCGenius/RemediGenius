@@ -1,4 +1,31 @@
-# Release validation — RemediGenius Community Edition v0.3.0
+# Release validation — RemediGenius Community Edition
+
+## v0.5.0 — offline and local-profile only (2026-10-29)
+
+Validated on the release branch on the maintainer's Windows workstation. **The AWS Spot run has not happened yet**, so
+this section makes no claim about S3/Glue behaviour, cost or live AWS durability. It will be replaced/extended by the
+Spot record before the release is published.
+
+| Check | Result |
+| --- | --- |
+| `pytest tests` (Windows, Python 3.12; no live AWS) | **620 passed, 7 skipped** in 5m40s |
+| On-disk local Iceberg profile (create, write, read, reconnect, schema evolution) | passed |
+| Local maintenance (compaction, snapshot expiry, orphan cleanup) and commits during maintenance | passed |
+| Crash/rebuild (`test_storage_live.py`): delete the cache, rebuild from current-state tables; uncommitted scan needs a rerun; commit without acknowledgement not duplicated; unreachable store blocked | passed |
+| CE-02…CE-04 lifecycle regressions (truncated absence, unknown visibility, tracked account, persisted failed attempt) | passed |
+| CE-07 collection scopes, raw page recording and resume | passed |
+| CE-08 episode reducer (observed vs ingested, applied receipt, first closure, recurrence, suppression/manual closure) | passed |
+| CE-09 durable scan/decision path: no `latest.json`, `decisions.json` or `history/` written; legacy state refused | passed |
+| `tools/demo.py` | synthetic board + IaC match, no AWS or model |
+| `terraform validate` of `deploy/aws-single` | valid |
+
+Not validated in this run: S3 conditional writes and real Glue catalog behaviour, the Spot crash/reboot cycle, real
+GitHub publish/merge/reconcile, the full OCSF schema beyond the pinned CE subset, AWS cost of raw retention, and
+interoperability with third-party OCSF/Iceberg consumers. `tests/test_iceberg_store.py` and
+`tests/test_storage_live.py` include AWS-profile tests that skip unless `RGTRIAGE_AWS_STORAGE_TEST=1` is set against a
+disposable stack.
+
+## v0.3.0
 
 Validated 2026-10-21 by the maintainer's agent session against one real AWS account (us-east-1), with the operator's
 approval for the deployments and the account changes listed below. Raw evidence (screenshots, logs, transcripts) is kept

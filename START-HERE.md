@@ -30,6 +30,8 @@ Already running Hermes? [docs/LOCAL-HERMES.md](docs/LOCAL-HERMES.md) adds the pr
 - The dashboard opens on the `remedigenius` profile and a model is configured (validated: `deepseek-v4.1-flash`).
   **Without a working model key the desk can still scan, but cannot chat.** Never paste a key into chat.
 - The desk's first scan has run (about 3 minutes after start, then every 6 hours). `/triage` shows it.
+- `rgtriage doctor` shows durable storage as healthy (a commit watermark, no buffered raw objects). If it says
+  degraded or blocked, read [docs/RECOVERY.md](docs/RECOVERY.md) before relying on an answer.
 - Coverage lines say which sources were read. "Not enabled" or "access denied" is a blind spot, not a clean result.
 - In an AWS Organization, the `Accounts:` line says how many accounts are read fully, findings-only or not covered.
   Other accounts need one read-only role, deployed once as a StackSet. Ask the agent "help me onboard the other
