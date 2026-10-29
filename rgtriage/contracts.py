@@ -130,6 +130,24 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def jsonable(value: Any) -> Any:
+    """Turn SDK objects (datetime, date, Decimal, bytes) into canonical JSON values without dropping fields."""
+    from datetime import date as _date
+    from decimal import Decimal
+
+    if isinstance(value, (datetime, _date)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, dict):
+        return {str(key): jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [jsonable(item) for item in value]
+    return value
+
+
 def payload_hash(value: Any) -> str:
     return _sha256_text(canonical_json(value))
 

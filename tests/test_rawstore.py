@@ -98,6 +98,15 @@ def test_put_is_content_addressed_and_write_once(memory):
     assert len(memory.objects) == 2
 
 
+def test_sdk_datetimes_in_a_page_are_stored_as_json_strings(memory):
+    from datetime import datetime, timezone
+
+    item = store(memory)
+    result = item.put_json({"Findings": [{"createdAt": datetime(2026, 6, 15, 10, 0, tzinfo=timezone.utc)}]},
+                           scope=SCOPE, operation="ListFindings", observed_at=NOW)
+    assert item.get_json(result.ref)["Findings"][0]["createdAt"].startswith("2026-06-15T10:00:00")
+
+
 def test_get_returns_the_original_page_and_verification_is_hash_based(memory):
     item = store(memory)
     result = put(item)

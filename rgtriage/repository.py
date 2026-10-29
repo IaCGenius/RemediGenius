@@ -62,6 +62,7 @@ class Repository:
 
     # ---------------------------------------------------------------- scan
     def save_scan(self, scan: dict, run: collection.CollectionRun | None = None) -> dict:
+        scan = contracts.jsonable(scan)
         observed = scan.get("scanned_at") or contracts.format_time(contracts.utc_now())
         ingested = contracts.format_time(contracts.utc_now())
         scope = contracts.Scope(account="", region="", source="desk")

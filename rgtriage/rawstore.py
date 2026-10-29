@@ -278,7 +278,7 @@ class RawStore:
         return RawPut(ref=ref, durable=True)
 
     def put_json(self, value: Any, **kwargs) -> RawPut:
-        return self.put(contracts.canonical_json(value).encode("utf-8"), **kwargs)
+        return self.put(contracts.canonical_json(contracts.jsonable(value)).encode("utf-8"), **kwargs)
 
     def _confirm_existing(self, ref: contracts.RawRef) -> None:
         head = self.backend.head(ref.key)
