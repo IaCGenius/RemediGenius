@@ -354,9 +354,14 @@ def schema_problems(existing: Schema, expected: Schema) -> list[str]:
 
 def create_tables(catalog, namespace: str = "remedigenius", *, dry_run: bool = False) -> dict:
     """Create missing tables and verify existing ones. Never overwrite a table or a schema."""
+    from pyiceberg.exceptions import NoSuchNamespaceError
+
     if dry_run:
         return {"namespace": namespace, "tables": {name: "planned" for name in TABLES}}
-    catalog.create_namespace_if_not_exists(namespace)
+    try:
+        catalog.load_namespace_properties(namespace)
+    except NoSuchNamespaceError:
+        catalog.create_namespace(namespace)
     existing = set(catalog.list_tables(namespace))
     result = {"namespace": namespace, "created": [], "verified": []}
     for name in TABLES:
