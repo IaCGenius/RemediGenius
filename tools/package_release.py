@@ -3,8 +3,8 @@
   python tools/package_release.py --spot dist/spot.zip          # Spot host archive only (for Terraform source_zip)
   python tools/package_release.py --release 0.3.0               # dist/v0.3.0: spot zip, source zip, wheel, SHA256SUMS, RELEASE.json
 
-Archives use fixed timestamps so identical source gives identical bytes. Nothing is uploaded and
-no credentials are read.
+Archives use fixed timestamps and the *committed* bytes (read from the git index), so identical source gives identical
+bytes no matter what the checkout's line endings are. Nothing is uploaded and no credentials are read.
 """
 import argparse
 import hashlib
@@ -29,14 +29,45 @@ def files(parts):
                 yield p
 
 
+def committed_blobs(paths) -> dict:
+    """The bytes git holds, never the working copy, in one `git cat-file --batch` call.
+
+    A Windows checkout can leave CRLF in a file whose committed form is LF (`.gitattributes` says eol=lf but nothing
+    rewrites a file an editor already touched). Reading the working copy then ships a different byte than the commit,
+    which is how the v0.6.0 image ended up baked from an archive a fresh build no longer reproduced. Fail closed for an
+    unstaged file: a release archive only ships what was committed.
+    """
+    relative = sorted({path.relative_to(ROOT).as_posix() for path in paths})
+    query = "".join(f":{name}\n" for name in relative).encode()
+    result = subprocess.run(["git", "cat-file", "--batch"], cwd=ROOT, input=query, capture_output=True)
+    if result.returncode != 0:
+        raise SystemExit(result.stderr.decode("utf-8", "replace")[:300] or "git cat-file failed")
+    blobs, position, out = {}, 0, result.stdout
+    for name in relative:
+        end = out.index(b"\n", position)
+        header = out[position:end].decode()
+        position = end + 1
+        if header.endswith(" missing"):
+            raise SystemExit(f"{name} is not in the git index; add it before packaging a release")
+        size = int(header.rsplit(" ", 1)[1])
+        blobs[name] = out[position:position + size]
+        position += size + 1  # git appends a newline after each blob
+    return blobs
+
+
+def committed_bytes(path: Path) -> bytes:
+    return committed_blobs([path])[path.relative_to(ROOT).as_posix()]
+
+
 def write_zip(output: Path, paths, prefix: str = "") -> str:
     output.parent.mkdir(parents=True, exist_ok=True)
+    entries = committed_blobs(paths)
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(set(paths)):
-            entry = zipfile.ZipInfo(prefix + path.relative_to(ROOT).as_posix(), (2020, 1, 1, 0, 0, 0))
+        for name in sorted(entries):
+            entry = zipfile.ZipInfo(prefix + name, (2020, 1, 1, 0, 0, 0))
             entry.compress_type = zipfile.ZIP_DEFLATED
             entry.external_attr = 0o644 << 16
-            archive.writestr(entry, path.read_bytes())
+            archive.writestr(entry, entries[name])
     return hashlib.sha256(output.read_bytes()).hexdigest()
 
 

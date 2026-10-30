@@ -93,6 +93,7 @@ failed six ways on its first real deployment.
 
 ## Pointers
 
+- `docs/TESTING.md` — how to run each tier, bake the image and gate a release, and the invariants they hold.
 - `docs/RELEASE-VALIDATION.md` — what each release proved and did not prove.
 - `docs/IAM.md` — instance role, scoped Glue grant, why the denies exist.
 - `docs/RECOVERY.md`, `docs/UPGRADING.md` — fresh-install behaviour and the refused v0.4 state.

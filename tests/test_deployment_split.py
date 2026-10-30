@@ -55,6 +55,28 @@ def test_the_release_gate_asserts_the_baked_boot_path():
     assert "baked image: release archive already verified" in checks
 
 
+def test_a_crlf_working_copy_cannot_change_a_release_archive(tmp_path, monkeypatch):
+    """The v0.6.0 image was baked from an archive a Windows checkout had rewritten with CRLF."""
+    import subprocess
+
+    spec = importlib.util.spec_from_file_location("package_release_tool", ROOT / "tools/package_release.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "a.yaml").write_bytes(b"version: 1\nname: x\n")
+    for command in (["git", "init", "-q"], ["git", "add", "a.yaml"],
+                    ["git", "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "one"]):
+        subprocess.run(command, cwd=repo, check=True)
+    (repo / "a.yaml").write_bytes(b"version: 1\r\nname: x\r\n")  # the working copy diverges after the commit
+    monkeypatch.setattr(tool, "ROOT", repo)
+    assert tool.committed_bytes(repo / "a.yaml") == b"version: 1\nname: x\n"
+    unstaged = repo / "b.yaml"
+    unstaged.write_bytes(b"x\n")
+    with pytest.raises(SystemExit, match="not in the git index"):
+        tool.committed_bytes(unstaged)
+
+
 # ------------------------------------------------------------------ the split
 
 def test_durable_infrastructure_is_its_own_root_without_compute():
