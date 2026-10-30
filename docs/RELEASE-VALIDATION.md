@@ -6,7 +6,8 @@ Validated on the release branch `release/v0.6.0` on the maintainer's Windows wor
 stacks in one real AWS account, us-east-1. Every stack was deleted at the end of its run, bucket included. The account is
 a member of an organization with three other accounts; they remain uncovered. Configuration: Hermes
 `nousresearch/hermes-agent:stable@sha256:444b4259…` (0.21.7), model `deepseek-v4.1-flash`, OCSF 1.9.0, PyIceberg 0.12.0,
-and a host image baked per release (`deploy/ami`, `ami-0445cfd93d63d8dd8` for `0.6.0`).
+and a host image baked per release (`deploy/ami`, `ami-0dc48c08564e17790` for `0.6.0`, baked from the release archive
+`4aea9037…`).
 
 ### Offline and local profile
 
@@ -23,13 +24,18 @@ and a host image baked per release (`deploy/ami`, `ami-0445cfd93d63d8dd8` for `0
 
 ### AWS Spot (fresh stack, destroyed after the run)
 
-Two runs. The first (`rgce-v060-gate`, stack destroyed) reported **53 of 54 checks** with one failure; the second
-(`rgce-v060-gate2`, stack destroyed) reported **54 of 54 PASS, 0 FAIL** after the fix below.
+Three runs, each on its own stack and image, all destroyed (20 resources, bucket included):
+
+| Run | Result |
+| --- | --- |
+| `rgce-v060-gate` | **53 of 54** — the plugin manifests shipped `0.5.0` (defect 1) |
+| `rgce-v060-gate2` | **54 of 54** on image `ami-0445cfd93d63d8dd8`, archive `8d450f99…`, but that archive was not reproducible from the commit (defect 3), so this run is superseded |
+| `rgce-v060-gate3` | **54 of 54 PASS, 0 FAIL** on image `ami-0dc48c08564e17790`, archive `4aea9037…` — **the run this release rests on** |
 
 | Check | Result |
 | --- | --- |
-| `terraform apply` from nothing | 20 resources; cloud-init finished at 240 s (`Up 239.75 seconds`) |
-| **Baked boot path** | the cloud-init log carries `baked image: release archive already verified 8d450f99…` — the image's archive was used, not downloaded |
+| `terraform apply` from nothing | 20 resources; cloud-init finished at 265 s (`Up 264.75 seconds`) |
+| **Baked boot path** | the cloud-init log carries `baked image: release archive already verified 4aea9037…` — the image's archive was used, not downloaded |
 | Host and boundary checks (`tools/spot_release_test.py`) | **54 of 54 PASS**, 0 FAIL |
 | rgtriage version / core plugins / skills | 0.6.0; `rg-triage`, `rg-knowledge` and `rg-github` all report 0.6.0; five skills load |
 | First scan and board | board produced for the stack; report names the account and coverage |
@@ -50,8 +56,14 @@ Defects found and fixed during this validation:
 2. **The gate could not tell which first-boot path ran.** The gate now requires the baked-archive line in the
    cloud-init log, so a silent fallback to downloading is a failure instead of a slower pass. This is what the
    "baked boot path" row above asserts.
+3. **The archive was built from the working copy, not the commit.** Seven files my edits had left with CRLF shipped that
+   way while git held LF, so the image was baked from an archive that a fresh build did not reproduce
+   (`8d450f99…` versus `395e2877…` at the same commit). It was found by comparing the rebuilt digest with the baked one
+   before tagging, not by any check. `tools/package_release.py` now reads the committed bytes with `git cat-file --batch`
+   and refuses an unstaged file, `tests/test_deployment_split.py` reproduces the CRLF case in a temporary repository, and
+   `docs/TESTING.md` states the invariant: **the archive baked into the image must be the archive you publish**.
 
-Boot time, stated precisely: 240 s is **cloud-init's own counter** at "RemediGenius-CE ready" on the baked image. It is
+Boot time, stated precisely: 265 s is **cloud-init's own counter** at "RemediGenius-CE ready" on the baked image. It is
 not comparable to the 137 s figure measured earlier for "boot to desk socket"; this release did not re-measure that
 boundary the same way, and the two numbers should not be quoted interchangeably.
 
