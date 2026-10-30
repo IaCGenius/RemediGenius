@@ -322,7 +322,11 @@ def normalize_inspector(f: dict) -> dict:
         finding["context"]["packages"] = packages
     if res.get("type") == "AWS_ECR_CONTAINER_IMAGE":
         img = (res.get("details") or {}).get("awsEcrContainerImage") or {}
-        finding["context"]["image"] = {"repository": img.get("repositoryName"), "tags": img.get("imageTags"), "base": img.get("platform")}
+        # `platform` is the runtime platform, not a base image. The old `base` value was this platform; it is cleared so
+        # nothing downstream can present it as base-image identity (CE-20).
+        finding["context"]["image"] = {"repository": img.get("repositoryName"), "tags": img.get("imageTags"),
+                                       "digest": img.get("imageId"), "platform": img.get("platform"),
+                                       "base": "", "base_known": False}
     return finding
 
 
