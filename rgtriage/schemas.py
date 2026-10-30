@@ -252,6 +252,29 @@ def current_operations() -> Schema:
         _f(9, "repo", StringType()), _f(10, "base_branch", StringType()), _f(11, "proposal_digest", StringType()))
 
 
+def campaigns() -> Schema:
+    """One row per campaign version: the scope is the digest, the approval names the person who froze it."""
+    return Schema(
+        _f(1, "campaign_id", StringType(), True), _f(2, "version", LongType(), True), _f(3, "title", StringType()),
+        _f(4, "status", StringType(), True), _f(5, "membership_digest", StringType(), True),
+        _f(6, "member_count", LongType(), True), _f(7, "derivation_version", StringType()),
+        _f(8, "approved_by", StringType()), _f(9, "approved_at", TimestamptzType()),
+        _f(10, "approval_digest", StringType()), _f(11, "created_at", TimestamptzType(), True),
+        _f(12, "updated_at", TimestamptzType(), True))
+
+
+def campaign_members() -> Schema:
+    """Complete membership, one row per target per version. `ordinal` is the pagination cursor."""
+    return Schema(
+        _f(1, "campaign_id", StringType(), True), _f(2, "version", LongType(), True),
+        _f(3, "ordinal", LongType(), True, "stable position inside this version"),
+        _f(4, "target_id", StringType(), True), _f(5, "finding_key", StringType()),
+        _f(6, "target_kind", StringType(), True), _f(7, "account_id", StringType()), _f(8, "region", StringType()),
+        _f(9, "resource_id", StringType()), _f(10, "resource_generation", StringType()),
+        _f(11, "state", StringType(), True), _f(12, "evidence_sha256", StringType()),
+        _f(13, "added_at", TimestamptzType(), True))
+
+
 TABLES = {
     "findings": findings,
     "signals": signals,
@@ -265,6 +288,8 @@ TABLES = {
     "current_fixes": current_fixes,
     "current_decisions": current_decisions,
     "current_operations": current_operations,
+    "campaigns": campaigns,
+    "campaign_members": campaign_members,
 }
 TABLE_DOCS = {
     "findings": "OCSF 1.9.0 findings, one row per observation; authority for what AWS reported",
@@ -279,12 +304,15 @@ TABLE_DOCS = {
     "current_fixes": "Current fix records for fast rebuild",
     "current_decisions": "Current decisions for fast rebuild",
     "current_operations": "Open GitHub operations for recovery",
+    "campaigns": "Campaign versions: scope digest, member count and the approval that froze them",
+    "campaign_members": "Complete campaign membership per version; ordinal is the pagination cursor",
 }
 PARTITION_COLUMNS = {
     "findings": ("account_id", "region", "class_uid", "event_day"),
     "signals": ("account_id", "source"),
     "coverage": ("account_id", "source"),
     "current_findings": ("account_id",),
+    "campaign_members": ("account_id",),
 }
 
 
