@@ -227,6 +227,9 @@ def test_spot_cycle_can_start_park_and_report(monkeypatch):
     source = (ROOT / "tools/spot_cycle.py").read_text(encoding="utf-8")
     assert 'choices=["up", "down", "status"]' in source
     assert "-var=running={'true' if running else 'false'}" in source
+    # Terraform lets the last assignment win. `-var-file` must come first, or a settings file's
+    # "running": true would override the flag and `down` would start an instance.
+    assert source.index('f"-var-file={path}"') < source.index("-var=running=")
     assert "use_lockfile=true" in source
     assert "terraform" in source and "describe-auto-scaling-groups" in source
     # Terraform resolves -var-file inside the module directory; a relative path failed on the first real run.
