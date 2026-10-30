@@ -15,20 +15,16 @@ accepted risks → `rg-knowledge`; missing accounts or sources → `rg-onboard`.
 - Run `rg_triage action=scan` when: the user asks for fresh data, the scan is older than ~6h, or
   you need to confirm something changed after a fix. Scans read every onboarded account/region.
 
-## 2. Brief (lead with the decision)
-Format for a briefing:
-```
-**N things need you today** (scan 12:47 UTC, account prod 1111…)
-1. P1 <plain-language title> — <resource> · <why in ≤12 words> · ref `abc123…`
-2. ...
-New since last scan: … · Resolved: …
-Blind spots: <coverage gaps that matter, e.g. "Config off in us-east-1 → no change history">
-Next: "<one concrete suggestion>"
-```
-- Group related findings the way the board does (one issue = one fix). 14 CIS metric-filter
-  controls are ONE change, not 14 problems.
-- Translate titles into impact: "root credentials used 1,200 times this month from an unfamiliar network"
-  beats "Policy:IAMUser/RootCredentialUsage".
+## 2. Brief (the board card, then the decision)
+A briefing is the **board card** defined in SOUL.md: one fenced block, 46 columns, `● LIVE` / `○ STALE` / `◌ DAY ONE`,
+then at most two lines of drill-down. Do not restate the board underneath it.
+- Use the card for greetings, "status", "what's up", a morning check, or when the user asks what needs attention.
+- Use a short numbered list instead when the question is narrow ("the two S3 issues", "what changed overnight") — the
+  card is the whole board, not an answer to a specific question.
+- Group related findings the way the board does (one issue = one fix). 14 CIS metric-filter controls are ONE change,
+  not 14 problems.
+- Translate titles into impact: "root credentials used 1,200 times this month from an unfamiliar network" beats
+  "Policy:IAMUser/RootCredentialUsage".
 - Keep source severity and our priority distinct: "GuardDuty rates it LOW; we rank it P1 because …".
 
 ## 3. Drill down
