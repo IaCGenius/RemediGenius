@@ -291,6 +291,19 @@ def deployment_receipts() -> Schema:
         _f(24, "payload", StringType(), doc="Canonical receipt payload as the producer sent it"))
 
 
+def relationships() -> Schema:
+    """Typed subject/predicate/object assertions with validity, evidence and how they were learned."""
+    return Schema(
+        _f(1, "assertion_id", StringType(), True), _f(2, "subject_key", StringType(), True),
+        _f(3, "subject_kind", StringType(), True), _f(4, "subject_scope", StringType()),
+        _f(5, "subject_identity", StringType(), True), _f(6, "predicate", StringType(), True),
+        _f(7, "object_key", StringType(), True), _f(8, "object_kind", StringType(), True),
+        _f(9, "object_scope", StringType()), _f(10, "object_identity", StringType(), True),
+        _f(11, "status", StringType(), True), _f(12, "valid_from", TimestamptzType()),
+        _f(13, "valid_to", TimestamptzType()), _f(14, "recorded_at", TimestamptzType(), True),
+        _f(15, "evidence", StringType()), _f(16, "derivation", StringType()), _f(17, "supersedes", StringType()))
+
+
 TABLES = {
     "findings": findings,
     "signals": signals,
@@ -307,6 +320,7 @@ TABLES = {
     "campaigns": campaigns,
     "campaign_members": campaign_members,
     "deployment_receipts": deployment_receipts,
+    "relationships": relationships,
 }
 TABLE_DOCS = {
     "findings": "OCSF 1.9.0 findings, one row per observation; authority for what AWS reported",
@@ -324,6 +338,7 @@ TABLE_DOCS = {
     "campaigns": "Campaign versions: scope digest, member count and the approval that froze them",
     "campaign_members": "Complete campaign membership per version; ordinal is the pagination cursor",
     "deployment_receipts": "PR, merge, build, deploy and verification receipts from existing CI/CD, kept as separate facts",
+    "relationships": "Typed, scoped, time-aware edges with evidence or an approved derivation",
 }
 PARTITION_COLUMNS = {
     "findings": ("account_id", "region", "class_uid", "event_day"),

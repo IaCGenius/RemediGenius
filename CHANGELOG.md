@@ -23,6 +23,12 @@ separates durable infrastructure from disposable compute. Not yet validated on A
   changed payload. A merged PR or a green build never marks a target deployed or verified; see
   [docs/RECEIPTS.md](docs/RECEIPTS.md).
 
+- **Operational relationship graph (CE-19).** Typed, scoped edges between images, packages, workloads, findings,
+  plans, deployments and owners are stored in `relationships` with their validity, evidence and how they were
+  learned. Only `observed` evidence or an approved derivation is authoritative; hypotheses are stored but can
+  never authorize closure or execution, retractions keep history, and an interrupted rebuild leaves the previous
+  graph active. See [docs/GRAPH.md](docs/GRAPH.md).
+
 **Changed**
 - `host.py --bake` prepares the image with the same code the instance runs; `/opt/rgtriage/.baked` records the version,
   the Hermes digest and the wheel pins. A boot refuses an image baked for a different digest, and re-installs wheels only
