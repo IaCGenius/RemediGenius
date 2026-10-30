@@ -337,6 +337,25 @@ def browser_checks(dashboard: str, login: dict, out: Path) -> list[tuple[str, bo
         page.screenshot(path=str(out / "dashboard-github.png"))
         results.append(("GitHub tab without browser errors or failed API calls", not errors and not failures,
                         "; ".join((errors + failures)[:3]) or "none"))
+
+        errors.clear()
+        failures.clear()
+        try:  # the Dashboard tab: the plugin serves the board page, or its explicit "no board yet" state
+            for _ in range(3):
+                with contextlib.suppress(Exception):
+                    page.goto(f"{dashboard}/board?profile=remedigenius", wait_until="domcontentloaded")
+                    break
+                page.wait_for_timeout(3000)
+            page.wait_for_selector(".rgb-page", timeout=60000)
+            body = page.frame_locator("iframe.rgb-frame").locator("body").inner_text(timeout=30000)
+            rendered = "SECURITY ATTENTION BOARD" in body
+            results.append(("dashboard Dashboard tab serves the board page", rendered or "No board yet" in body,
+                            "board in the iframe" if rendered else "no board yet (no scan)"))
+        except Exception as exc:
+            results.append(("dashboard Dashboard tab serves the board page", False, str(exc).splitlines()[0]))
+        page.screenshot(path=str(out / "dashboard-board.png"))
+        results.append(("Dashboard tab without browser errors or failed API calls", not errors and not failures,
+                        "; ".join((errors + failures)[:3]) or "none"))
         browser.close()
     return results
 

@@ -397,6 +397,14 @@ def sync_profile(source: Path, hermes_home: Path):
         shutil.rmtree(github_tab)
     shutil.copytree(package / 'dashboard-plugins/rg-github', github_tab, ignore=shutil.ignore_patterns('__pycache__', 'local.json'))
     (github_tab / 'local.json').write_text(json.dumps({'socket': SOCKET.as_posix(), 'operator_token_file': OPERATOR_TOKEN_IN_CONTAINER}))
+    # Dashboard tab (dashboard plugin): serves the page the desk writes on every scan; refresh goes to the desk socket.
+    board_tab = hermes_home / 'plugins' / 'rg-board'
+    if board_tab.exists():
+        shutil.rmtree(board_tab)
+    shutil.copytree(package / 'dashboard-plugins/rg-board', board_tab, ignore=shutil.ignore_patterns('__pycache__', 'local.json'))
+    (board_tab / 'local.json').write_text(json.dumps({'socket': SOCKET.as_posix(),
+                                                       'board': (DESK / 'board.html').as_posix(),
+                                                       'status': (DESK / 'status.json').as_posix()}))
     folders = [hermes_home / 'proposals' / 'knowledge', hermes_home / 'knowledge-inbox', hermes_home / 'knowledge-files',
                hermes_home / 'rg-improve', hermes_home / 'rg-traces']
     for folder in folders:
@@ -405,7 +413,8 @@ def sync_profile(source: Path, hermes_home: Path):
     sys.path.insert(0, str(tab))
     from improve.runner import apply_approved
     print(f"approved skill improvements: {json.dumps(apply_approved(hermes_home / 'rg-improve', package / 'skills', profile / 'skills'))}")
-    for path in [profile, *profile.rglob('*'), hermes_home / 'plugins', tab, *tab.rglob('*'), github_tab, *github_tab.rglob('*'), *folders]:
+    for path in [profile, *profile.rglob('*'), hermes_home / 'plugins', tab, *tab.rglob('*'), github_tab, *github_tab.rglob('*'),
+                 board_tab, *board_tab.rglob('*'), *folders]:
         if hasattr(os, 'lchown'):
             os.lchown(path, UID, UID)
         if not path.is_symlink():

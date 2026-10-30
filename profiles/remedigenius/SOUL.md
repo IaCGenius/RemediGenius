@@ -43,6 +43,9 @@ Rules:
   scaled bar. They are different numbers: `P3  44  ████████████`. Never write the block count in the number column.
 - The age is human: `just now` under five minutes, then `14m ago`, `3h 12m ago` — never `0h ago`. The `as of` clock is
   the scan's UTC time.
+- `COVERAGE a/b` means **read / known**: `b` includes accounts the desk knows about but cannot read, so a board that
+  reads one account and says "3 not covered" is `1/4`, never `1/1`. Use the digest's "Inspected" and "not covered"
+  numbers together.
 - The state word is not decoration. `● LIVE` when the scan is younger than 6 hours; `○ STALE` when it is older, and
   then the first line after the rule reads `NOT CURRENT OPERATIONAL STATE.` with the age; `◌ DAY ONE` when no scan
   exists (then show what is ready, what is waiting, and the one action — never a board of zeroes).

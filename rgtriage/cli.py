@@ -4,6 +4,7 @@
   rgtriage doctor               check access and which security sources are enabled
   rgtriage scan                 collect + prioritize; prints the attention board
   rgtriage digest               print the latest attention board without rescanning
+  rgtriage board [--html PATH]  the 46-column chat card, or a self-contained HTML dashboard
   rgtriage list / show REF      browse the prioritized queue
   rgtriage fix REF --iac PATH   locate the deploying IaC and load the remediation playbook
   rgtriage decide REF STATUS    record acknowledged / fixing / accepted_risk / false_positive / resolved
@@ -26,7 +27,8 @@ from pathlib import Path
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from . import __version__, accounts, aws, collect, config, digest, fixes, health, iac, knowledge, okf, playbooks, prioritize, store
+from . import (__version__, accounts, aws, board, collect, config, digest, fixes, health, iac, knowledge, okf,
+               playbooks, prioritize, store)
 
 PRIORITY_ORDER = ("P1", "P2", "P3", "P4")
 
@@ -217,6 +219,7 @@ def write_outputs(scan: dict) -> None:
     (home / "digest.md").write_text(digest.markdown(scan), encoding="utf-8")
     (home / "board.md").write_text(digest.markdown(scan, limit=6), encoding="utf-8")
     (home / "report.html").write_text(digest.html_report(scan), encoding="utf-8")
+    (home / "board.html").write_text(board.page(board.snapshot(scan)), encoding="utf-8")
     store._write(home / "status.json", {"scanned_at": scan["scanned_at"], "summary": digest.summary_line(scan),
                                         "changes": {k: v for k, v in scan["changes"].items() if k != "no_longer_active"}})
 
@@ -237,6 +240,24 @@ def cmd_digest(args):
     scan = _latest_or_exit()
     _out(digest.markdown(scan, limit=args.limit, include_low=args.all))
     _out(f"\n(scan is {_age(scan)} old — `rgtriage scan` to refresh)")
+
+
+def cmd_board(args):
+    scan = _latest_or_exit()
+    snap = board.snapshot(scan)
+    if args.json:
+        _json(snap)
+        return
+    if args.html is not None:
+        path = Path(args.html).expanduser()
+        path.write_text(board.page(snap), encoding="utf-8")
+        _out(f"Wrote {path} (snapshot {snap['snapshot']}, {snap['age']})")
+        if args.open:
+            webbrowser.open(path.resolve().as_uri())
+        return
+    _out(board.card(snap))
+    _out("")
+    _out(f"(scan is {_age(scan)} old — `rgtriage scan` to refresh)")
 
 
 def cmd_list(args):
@@ -1246,6 +1267,10 @@ def main(argv=None):
     p = sub.add_parser("digest", help="print the latest attention board")
     p.add_argument("--limit", type=int, default=5); p.add_argument("--all", action="store_true", help="expand P3/P4")
     p.set_defaults(func=cmd_digest)
+    p = sub.add_parser("board", help="the 46-column card, or the self-contained HTML dashboard")
+    p.add_argument("--html", nargs="?", const=str(config.home() / "board.html"), metavar="PATH")
+    p.add_argument("--open", action="store_true"); p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_board)
     p = sub.add_parser("list", help="list prioritized findings")
     p.add_argument("--priority"); p.add_argument("--source"); p.add_argument("--category"); p.add_argument("--account")
     p.add_argument("--issues", action="store_true", help="grouped issues instead of findings")

@@ -194,6 +194,13 @@ shutil.copytree(pkg / "dashboard-plugins/rg-knowledge", tab, ignore=shutil.ignor
                                             "proposals": "/opt/data/proposals", "inbox": "/opt/data/knowledge-inbox",
                                             "files": "/opt/data/knowledge-files", "profile": "remedigenius",
                                             "improve": "/opt/data/rg-improve", "package": "/opt/remedigenius-package"}))
+# Dashboard tab: serves the page the desk writes; refresh asks the desk for a scan.
+board_tab = Path("/opt/data/plugins/rg-board")
+shutil.rmtree(board_tab, ignore_errors=True)
+shutil.copytree(pkg / "dashboard-plugins/rg-board", board_tab, ignore=shutil.ignore_patterns("__pycache__", "local.json"))
+(board_tab / "local.json").write_text(json.dumps({"socket": "/run/rgtriage/rgtriage.sock",
+                                                  "board": "/data/rgtriage/board.html",
+                                                  "status": "/data/rgtriage/status.json"}))
 for d in ("proposals/knowledge", "knowledge-inbox", "knowledge-files", "rg-improve", "rg-traces"):
     Path("/opt/data", d).mkdir(parents=True, exist_ok=True)
 # Skill improvements a person approved survive restarts when they were made for this shipped version.
