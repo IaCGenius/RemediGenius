@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from . import campaigns, contracts, lifecycle, relationships
 
 HANDLERS = ("current", "history", "timeline", "evidence", "campaign", "campaigns", "receipts",
-            "relationships", "graph")
+            "relationships", "graph", "verifications")
 UNSUPPORTED = ()
 MAX_LIMIT = 500
 MAX_GRAPH_DEPTH = 2
@@ -305,6 +305,22 @@ class QueryService:
                 "durability": self._durability(), "nodes": sorted(nodes), "edges": edges[:limit],
                 "count": len(edges[:limit]), "truncated": len(edges) > limit}
 
+    def verifications(self, target_id: str = "", limit: int | None = None) -> dict:
+        """Every proof attempt for one target, newest first, with the verifier and rule version that made it."""
+        if not target_id:
+            raise QueryError("target_id is required")
+        limit = _limit(limit, 50)
+        rows = [row for row in (self.storage.scan_rows("target_verifications") if self.storage else [])
+                if row.get("target_id") == target_id]
+        rows.sort(key=lambda row: _at(row.get("observed_at")) or datetime.min.replace(tzinfo=timezone.utc),
+                  reverse=True)
+        latest = rows[0] if rows else None
+        return {"query": "verifications", "installation_id": self.installation_id, "durability": self._durability(),
+                "target_id": target_id, "count": len(rows), "rows": rows[:limit], "truncated": len(rows) > limit,
+                "latest": {key: latest.get(key) for key in ("outcome", "verified", "verifier", "predicate_version",
+                                                           "observed_at", "reason")} if latest else None,
+                "verified": bool(latest and latest.get("verified"))}
+
     def evidence(self, sha256: str) -> dict:
         """Resolve a raw evidence reference without returning the object bytes to the agent."""
         if not isinstance(sha256, str) or len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
@@ -339,6 +355,7 @@ class QueryService:
                    "receipts": {"target_id", "campaign_id", "limit"},
                    "relationships": {"subject", "object", "predicate", "status", "as_of", "limit"},
                    "graph": {"entity", "depth", "limit"},
+                   "verifications": {"target_id", "limit"},
                    "evidence": {"sha256"}}[handler]
         unknown = set(params) - allowed
         if unknown:

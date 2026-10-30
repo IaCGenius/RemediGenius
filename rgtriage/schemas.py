@@ -304,6 +304,21 @@ def relationships() -> Schema:
         _f(15, "evidence", StringType()), _f(16, "derivation", StringType()), _f(17, "supersedes", StringType()))
 
 
+def target_verifications() -> Schema:
+    """One row per proof attempt, bound to its target generation, artifact, predicate version and verifier."""
+    return Schema(
+        _f(1, "attempt_id", StringType(), True), _f(2, "predicate_id", StringType(), True),
+        _f(3, "predicate_version", StringType(), True), _f(4, "predicate_digest", StringType(), True),
+        _f(5, "rule", StringType(), True), _f(6, "installation_id", StringType(), True),
+        _f(7, "target_id", StringType(), True), _f(8, "account_id", StringType()), _f(9, "region", StringType()),
+        _f(10, "resource_generation", StringType()), _f(11, "artifact_digest", StringType()),
+        _f(12, "verifier", StringType(), True), _f(13, "outcome", StringType(), True),
+        _f(14, "verified", BooleanType(), True), _f(15, "reason", StringType()),
+        _f(16, "evidence_sha256", StringType()), _f(17, "truncated", BooleanType()), _f(18, "partial", BooleanType()),
+        _f(19, "clock_skew_seconds", LongType()), _f(20, "provider_acknowledged", BooleanType()),
+        _f(21, "observed_at", TimestamptzType(), True), _f(22, "received_at", TimestamptzType(), True))
+
+
 TABLES = {
     "findings": findings,
     "signals": signals,
@@ -321,6 +336,7 @@ TABLES = {
     "campaign_members": campaign_members,
     "deployment_receipts": deployment_receipts,
     "relationships": relationships,
+    "target_verifications": target_verifications,
 }
 TABLE_DOCS = {
     "findings": "OCSF 1.9.0 findings, one row per observation; authority for what AWS reported",
@@ -339,6 +355,7 @@ TABLE_DOCS = {
     "campaign_members": "Complete campaign membership per version; ordinal is the pagination cursor",
     "deployment_receipts": "PR, merge, build, deploy and verification receipts from existing CI/CD, kept as separate facts",
     "relationships": "Typed, scoped, time-aware edges with evidence or an approved derivation",
+    "target_verifications": "Every proof attempt bound to its target generation, artifact, rule version and verifier",
 }
 PARTITION_COLUMNS = {
     "findings": ("account_id", "region", "class_uid", "event_day"),
