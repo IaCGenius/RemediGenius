@@ -18,6 +18,10 @@ separates durable infrastructure from disposable compute. Not yet validated on A
   roles stay put, and no instance is left running after `down`.
 - `deploy/aws-single` gains an optional `ami_id`: empty keeps today's install-at-boot behaviour, so the community path
   and the release gate are unchanged.
+- **Deployment receipts (CE-17).** PR, merge, build, deploy and verification observations from existing CI/CD are recorded
+  as separate facts in `deployment_receipts`, with a producer allow-list, idempotent identity and quarantine for a
+  changed payload. A merged PR or a green build never marks a target deployed or verified; see
+  [docs/RECEIPTS.md](docs/RECEIPTS.md).
 
 **Changed**
 - `host.py --bake` prepares the image with the same code the instance runs; `/opt/rgtriage/.baked` records the version,

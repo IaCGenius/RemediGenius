@@ -64,6 +64,7 @@ record was not retained, mapping fails closed instead of re-mapping it lossily.
 | `current_operations` | open GitHub operations for recovery | — |
 | `campaigns` | one row per campaign version: scope digest, member count, and the approval that froze them | — |
 | `campaign_members` | complete membership per version; `ordinal` is the pagination cursor | `account_id` |
+| `deployment_receipts` | PR, merge, build, deploy and verification receipts from existing CI/CD, with producer, payload digest and outcome | — |
 
 `campaign_members` is the authoritative scope: the board preview is bounded on purpose, while decisions and approved
 actions read the frozen membership digest. A target discovered after approval starts a new campaign version and needs a

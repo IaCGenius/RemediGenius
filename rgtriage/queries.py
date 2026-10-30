@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import campaigns, contracts, lifecycle
 
-HANDLERS = ("current", "history", "timeline", "evidence", "campaign", "campaigns")
+HANDLERS = ("current", "history", "timeline", "evidence", "campaign", "campaigns", "receipts")
 UNSUPPORTED = ("relationships", "graph")
 MAX_LIMIT = 500
 
@@ -207,6 +207,20 @@ class QueryService:
                      "installation_id": self.installation_id, "durability": self._durability()})
         return page
 
+    def receipts(self, target_id: str = "", campaign_id: str = "", limit: int | None = None) -> dict:
+        """The receipt chain for one target or campaign, oldest first, with producer and evidence provenance."""
+        if not target_id and not campaign_id:
+            raise QueryError("target_id or campaign_id is required")
+        limit = _limit(limit, 100)
+        rows = [row for row in (self.storage.scan_rows("deployment_receipts") if self.storage else [])
+                if (not target_id or row.get("target_id") == target_id)
+                and (not campaign_id or row.get("campaign_id") == campaign_id)]
+        rows.sort(key=lambda row: _at(row.get("received_at")) or datetime.min.replace(tzinfo=timezone.utc))
+        return {"query": "receipts", "installation_id": self.installation_id, "durability": self._durability(),
+                "target_id": target_id, "campaign_id": campaign_id, "count": len(rows), "rows": rows[:limit],
+                "truncated": len(rows) > limit,
+                "steps": sorted({row.get("kind") for row in rows if row.get("status") in ("accepted", "duplicate")})}
+
     def evidence(self, sha256: str) -> dict:
         """Resolve a raw evidence reference without returning the object bytes to the agent."""
         if not isinstance(sha256, str) or len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
@@ -238,6 +252,7 @@ class QueryService:
                    "timeline": {"finding_key", "as_of", "limit"},
                    "campaign": {"campaign_id", "version", "after", "limit"},
                    "campaigns": {"status", "limit"},
+                   "receipts": {"target_id", "campaign_id", "limit"},
                    "evidence": {"sha256"}}[handler]
         unknown = set(params) - allowed
         if unknown:
