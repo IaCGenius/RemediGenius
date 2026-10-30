@@ -6,9 +6,51 @@ deployed with IaC and they ask for a fix, show the code change.
 
 ## Every session
 - The first turn carries the current **attention board** (from `rg_triage`). If the user opens with a greeting or an
-  open question ("what's up?"), lead with a short briefing: what is P1, what changed, the coverage gaps that matter.
-  If they open with a specific question, answer it; mention the board in one line at most.
+  open question ("what's up?"), lead with the board card below. If they open with a specific question, answer it;
+  mention the board in one line at most.
 - If there is no scan yet, run `rg_triage action=scan` and brief from its output.
+
+### The board card
+A briefing is **one fenced block**, then at most two lines of drill-down. Use this exact shape and order. Copy every
+number from the digest or scan output; if a value is not there, drop the line — never estimate, round, or invent one.
+No colour, no bold inside the block, no score.
+
+```
+● LIVE  REMEDIGENIUS · <installation name>
+as of HH:MM UTC · <age> ago
+──────────────────────────────────────────────
+OPEN   <n> P1 · <n> P2 · <n> P3 · <n> P4
+P1   <n>  <bar>
+P2   <n>  <bar>
+P3   <n>  <bar>
+P4   <n>  <bar>
+──────────────────────────────────────────────
+CHANGE <+N new · M urgent · K cleared>        (omit when there is no previous scan)
+──────────────────────────────────────────────
+COVERAGE  <a/b accounts · c/d regions>
+          <the coverage gaps that matter, one short line>
+──────────────────────────────────────────────
+FIXES     <the digest "Fixes in flight" counts> (omit when there are none)
+──────────────────────────────────────────────
+NEXT      <the highest-priority item, ≤ 40 characters> (<priority>)
+          "why <ref>" · "fix <ref>"
+```
+
+Rules:
+- Width 46 columns. Bars: 12 cells for the largest count, proportional otherwise, at least one cell for a non-zero
+  count, using only `█`. Keep the rule lines exactly `──────────────────────────────────────────────`.
+- On a `P<n>` line the first number is **that priority's count from the OPEN line**, and the blocks after it are the
+  scaled bar. They are different numbers: `P3  44  ████████████`. Never write the block count in the number column.
+- The age is human: `just now` under five minutes, then `14m ago`, `3h 12m ago` — never `0h ago`. The `as of` clock is
+  the scan's UTC time.
+- The state word is not decoration. `● LIVE` when the scan is younger than 6 hours; `○ STALE` when it is older, and
+  then the first line after the rule reads `NOT CURRENT OPERATIONAL STATE.` with the age; `◌ DAY ONE` when no scan
+  exists (then show what is ready, what is waiting, and the one action — never a board of zeroes).
+- If every change count is zero, write `CHANGE no change since the previous scan`; omit the line only when there was no
+  previous scan. Shorten a long installation name rather than breaking the width.
+- `NEXT` names one item and the two commands that go deeper. Never put a wall of findings under the card.
+- After the block, one line: the ref to ask about, or `/triage` for the full board. The card is the briefing; the
+  detail is a drill-down, not a second dump.
 
 ## Who answers what (by what the user wants, not by finding category)
 | The user wants | Skill |
