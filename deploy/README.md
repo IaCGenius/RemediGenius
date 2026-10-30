@@ -40,15 +40,51 @@ needed: keep the previous one until the new one has passed the gate, then deregi
 
 ## Every working session
 
+The desk is either **running** (one Spot instance) or **parked** (no compute at all). Parked is the resting state
+between sessions; nothing in this repository starts compute on its own.
+
 ```bash
-python tools/spot_cycle.py up --init      # ASG desired 1, ~2-3 minutes
-python tools/spot_cycle.py status
-python tools/spot_cycle.py down           # ASG desired 0; bucket, Glue and IAM stay
+python tools/spot_cycle.py status         # desired capacity and instance ids — the only state that matters
+python tools/spot_cycle.py up --init      # ASG desired 1, ~2-3 minutes, no re-provisioning
+python tools/spot_cycle.py down           # ASG desired 0; no instance runs
 ```
 
-Settings live in `.rgce/private-stack.json` (git-ignored) and are passed to Terraform as-is, so any variable of
-`deploy/aws-private` can be set there: `account_id`, `subnet_id`, `state_bucket`, `ami_id`, `source_zip`,
-`model_secret_arn`, `model_base_url`, `running`, and the rest.
+`down` is an apply of `-var running=false`, not a destroy. The security group, launch template, data bucket, Glue
+database and both IAM roles stay; the Spot instance and its encrypted 30 GB volume go. What still bills is S3 storage
+(evidence, Iceberg, Terraform state) and the Glue catalog — cents, not instance-hours. `up` touches none of it: it
+scales the same ASG back to one instance, which boots the baked image and rejoins the same installation.
+
+To prove it is at zero, ask AWS rather than the tool:
+
+```bash
+aws autoscaling describe-auto-scaling-groups --region us-east-1 \
+  --query "AutoScalingGroups[].[AutoScalingGroupName,DesiredCapacity,Instances[].InstanceId]" --output table
+aws ec2 describe-instances --region us-east-1 \
+  --filters Name=instance-state-name,Values=running,pending --output text
+```
+
+Both must show zero desired and no instances. Those are the two reads a coding tool should make before claiming the
+desk costs nothing.
+
+**A bare `terraform apply` is not how you park.** `running` defaults to `true`, and a settings file usually carries
+`"running": true`, so applying `deploy/aws-private` by hand starts compute. `spot_cycle.py` appends `-var=running=…`
+*after* `-var-file`; in Terraform the later assignment wins, so the flag is what parks it.
+`tests/test_deployment_split.py` locks that order, because reversing the two arguments would silently start an
+instance on every `down`.
+
+**Keep the release archive where the settings point.** Every apply hashes `source_zip` (`filesha256`) to compare the
+boot's archive with the stack's, so `up` fails if `dist/vX/remedigenius-ce-X-spot.zip` was deleted. The image is per
+release and per archive digest; a parked stack therefore needs both the image id and that file.
+
+Settings live outside the repository and are passed to Terraform as-is, so any variable of `deploy/aws-private` can be
+set there: `account_id`, `subnet_id`, `state_bucket`, `ami_id`, `source_zip`, `model_secret_arn`, `model_base_url`,
+`running`, and the rest. The tool's default is `.rgce/private-stack.json`; the maintainer's file is
+`.rgce/private.tfvars.json`, so pass `--settings .rgce/private.tfvars.json` if it is not at the default path. Never
+commit it — it holds the account id, the secret ARN and the subnet.
+
+The release gate is different again: `tools/spot_release_test.py` creates its own stack, runs the checks and destroys
+it (20 resources, bucket included) unless `--keep` is given. A gate run never leaves a Spot instance behind; a leftover
+one means the destroy failed and should be read, not ignored.
 
 ## What still has to be a full apply
 

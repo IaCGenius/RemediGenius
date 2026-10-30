@@ -54,6 +54,23 @@ baked from exactly such an archive, which a fresh build did not reproduce. Never
 The baked boot is what makes a Spot cycle short; the image build is the price of that, and it is per release **and per
 archive digest**. If the release archive changes, bake again before trusting a gate result.
 
+### Parking between sessions
+
+The private stack is not left running. `python tools/spot_cycle.py status` reports the ASG; `down` applies
+`-var running=false`, which takes desired capacity to 0 and leaves the bucket, Glue database and IAM in place; `up`
+scales the same ASG back to one instance on the baked image. Both ASGs in the account sit at 0 between sessions, so
+"is anything running?" is answered by two reads, not by memory:
+
+```bash
+aws autoscaling describe-auto-scaling-groups --region us-east-1 \
+  --query "AutoScalingGroups[].[AutoScalingGroupName,DesiredCapacity,Instances[].InstanceId]" --output table
+aws ec2 describe-instances --region us-east-1 --filters Name=instance-state-name,Values=running,pending --output text
+```
+
+`up` needs the release archive still present at the settings file's `source_zip` path, because the apply hashes it. The
+parked stack is therefore a pair: an `ami_id` and a `dist/vX/…-spot.zip`. Details and the precedence that makes `down`
+win over a settings file's `running: true` are in [deploy/README.md](../deploy/README.md#every-working-session).
+
 ### When a check fails
 
 Read the `detail` column first: every check records the value it saw. Common shapes:

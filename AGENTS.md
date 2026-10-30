@@ -17,15 +17,19 @@ actually fails, not how it is supposed to go.
 - The maintainer merges pull requests. Never merge, approve or push to `main`, and never tag a release on your own.
 - `.rgce/` is local-only and git-ignored: handoffs, the Spot settings file (account id, subnet, secret ARN), run logs,
   screenshots. Keep it that way; nothing private belongs in a tracked file.
+- The private stack rests at **zero**: both ASGs are at desired capacity 0 between sessions. Read
+  `deploy/aws-private` state with `python tools/spot_cycle.py status`; start it only when the maintainer asks, and park
+  it (`down`) when finished. `deploy/README.md` has the two AWS reads that prove nothing is running.
 
 ## Commands
 
 | Task | Command |
 | --- | --- |
-| Unit + local integration tests | `python -m pytest tests -q` (no live AWS; ~624 tests) |
+| Unit + local integration tests | `python -m pytest tests -q` (no live AWS; ~736 tests) |
 | One test area | `python -m pytest tests/test_iceberg_store.py -q` |
 | Synthetic board + IaC match, no AWS/model | `python tools/demo.py` |
 | Terraform check | `terraform -chdir=deploy/aws-single validate` |
+| Private stack: park / start / inspect | `python tools/spot_cycle.py down` (or `up`, `status`) — parked between sessions |
 | Release assets | `python tools/package_release.py --release <version>` |
 | Spot release validation | `python tools/spot_release_test.py v<version> --settings .rgce/spot-test-settings.json --local dist/v<version> --name <throwaway-stack>` |
 
