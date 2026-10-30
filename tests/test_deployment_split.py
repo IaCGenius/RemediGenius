@@ -29,8 +29,10 @@ VERSION_FILES = (
     ("profiles/remedigenius/plugins/rg-triage/plugin.yaml", r"^version:\s*\"?([0-9.]+)\"?\s*$"),
     ("profiles/remedigenius/dashboard-plugins/rg-knowledge/plugin.yaml", r"^version:\s*\"?([0-9.]+)\"?\s*$"),
     ("profiles/remedigenius/dashboard-plugins/rg-github/plugin.yaml", r"^version:\s*\"?([0-9.]+)\"?\s*$"),
+    ("profiles/remedigenius/dashboard-plugins/rg-board/plugin.yaml", r"^version:\s*\"?([0-9.]+)\"?\s*$"),
     ("profiles/remedigenius/dashboard-plugins/rg-knowledge/dashboard/manifest.json", r'"version":\s*"([^"]+)"'),
     ("profiles/remedigenius/dashboard-plugins/rg-github/dashboard/manifest.json", r'"version":\s*"([^"]+)"'),
+    ("profiles/remedigenius/dashboard-plugins/rg-board/dashboard/manifest.json", r'"version":\s*"([^"]+)"'),
 )
 
 

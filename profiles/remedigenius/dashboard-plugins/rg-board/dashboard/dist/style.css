@@ -1,0 +1,67 @@
+.rgb-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: calc(100vh - 120px);
+  min-height: 480px;
+}
+
+.rgb-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px 10px;
+}
+
+.rgb-title {
+  font-size: 14px;
+}
+
+.rgb-age {
+  color: #6b6b66;
+  font-size: 12px;
+}
+
+.rgb-btn {
+  appearance: none;
+  border: 1px solid #d6d3cb;
+  background: #ffffff;
+  color: #17171a;
+  border-radius: 7px;
+  padding: 7px 12px;
+  font: 600 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rgb-btn:hover:not(:disabled) {
+  border-color: #17171a;
+}
+
+.rgb-btn:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.rgb-err {
+  color: #b42318;
+  font-size: 12px;
+  padding: 0 2px 8px;
+}
+
+.rgb-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  .rgb-age { color: #a3a29c; }
+  .rgb-btn { background: #242420; color: #ecebe6; border-color: #3a3a35; }
+  .rgb-btn:hover:not(:disabled) { border-color: #ecebe6; }
+  .rgb-err { color: #f97066; }
+}

@@ -15,6 +15,7 @@ plugins:
     - rg-triage
     - rg-knowledge
     - rg-github
+    - rg-board
 # No terminal: AWS access goes only through the read-only rg_triage tool.
 # file: read IaC repositories; writes are limited to the proposals folder by the plugin.
 platform_toolsets:

@@ -47,9 +47,9 @@ baked from exactly such an archive, which a fresh build did not reproduce. Never
 
 | Step | Time |
 | --- | --- |
-| Local suite (736 tests) | ~7 min |
+| Local suite (743 tests) | ~7 min |
 | Image bake (EC2 Image Builder) | ~21 min |
-| Gate: apply, boot, 54 checks, destroy | ~10 min |
+| Gate: apply, boot, 56 checks, destroy | ~10 min |
 
 The baked boot is what makes a Spot cycle short; the image build is the price of that, and it is per release **and per
 archive digest**. If the release archive changes, bake again before trusting a gate result.
@@ -85,5 +85,6 @@ Fix in batches. One apply/boot/check/destroy cycle is ten minutes; guessing one 
 ## What the gate does not prove
 
 Read [RELEASE-VALIDATION.md](RELEASE-VALIDATION.md) after every run: it records what was not tested as carefully as what
-was. As of v0.6.0 that includes a real S3/Glue outage, Spot replacement mid-scan, real GitHub publish/merge, other
-regions or models, and a full campaign lifecycle on AWS (nothing yet derives a campaign from a scan).
+was. As of v0.7.0 that includes a real S3/Glue outage, Spot replacement mid-scan, real GitHub publish/merge, other
+regions or models, the Docker workstation path with the Dashboard tab, a manual refresh concurrent with the scheduled
+scan, and a full campaign lifecycle on AWS (nothing yet derives a campaign from a scan).

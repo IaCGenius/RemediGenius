@@ -1,0 +1,3 @@
+name: rg-board
+version: "0.7.0"
+description: RemediGenius-CE Board tab. The security attention board as a page: priorities, what changed, coverage and its gaps, verified fixes, and the decisions that need a person. Served from the snapshot the desk writes on every scan, so it never invents a live state.

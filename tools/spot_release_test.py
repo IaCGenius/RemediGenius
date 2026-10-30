@@ -298,12 +298,24 @@ def browser_checks(dashboard: str, login: dict, out: Path) -> list[tuple[str, bo
         page.on("console", lambda m: errors.append(m.text[:200]) if m.type == "error" else None)
         page.on("response", lambda r: failures.append(f"{r.status} {r.url.split('/', 3)[-1][:100]}")
                 if "/api/" in r.url and r.status >= 400 else None)
-        page.goto(f"{dashboard}/chat?profile=remedigenius", wait_until="networkidle")
-        page.fill("input[name=username]", login["username"])
-        page.fill("input[name=password]", login["password"])
-        page.click("button:has-text('SIGN IN')")
+        page.goto(f"{dashboard}/login", wait_until="networkidle")
+        page.wait_for_selector("input[name=username]", timeout=60000)
+        # The login page can render more than one provider form. Scope the fill to the basic one, or the POST carries
+        # empty credentials and every tab redirects back here.
+        page.wait_for_timeout(1500)
+        form = page.locator("form.provider-form[data-provider=basic]")
+        form.locator("input[name=username]").fill(login["username"])
+        form.locator("input[name=password]").fill(login["password"])
+        form.locator("button[type=submit]").click()
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(3000)
+        if page.locator("form.provider-form[data-provider=basic] .form-error").count() and \
+                page.locator("form.provider-form[data-provider=basic] .form-error").inner_text().strip():
+            form.locator("input[name=username]").fill(login["username"])
+            form.locator("input[name=password]").fill(login["password"])
+            form.locator("button[type=submit]").click()
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(3000)
         for _ in range(3):  # the chat page may still be navigating; a superseded navigation aborts
             with contextlib.suppress(Exception):
                 page.goto(f"{dashboard}/knowledge?profile=remedigenius", wait_until="domcontentloaded")
@@ -336,6 +348,25 @@ def browser_checks(dashboard: str, login: dict, out: Path) -> list[tuple[str, bo
             results.append(("dashboard GitHub tab renders and offers Connect GitHub", False, str(exc).splitlines()[0]))
         page.screenshot(path=str(out / "dashboard-github.png"))
         results.append(("GitHub tab without browser errors or failed API calls", not errors and not failures,
+                        "; ".join((errors + failures)[:3]) or "none"))
+
+        errors.clear()
+        failures.clear()
+        try:  # the Dashboard tab: the plugin serves the board page, or its explicit "no board yet" state
+            for _ in range(3):
+                with contextlib.suppress(Exception):
+                    page.goto(f"{dashboard}/board?profile=remedigenius", wait_until="domcontentloaded")
+                    break
+                page.wait_for_timeout(3000)
+            page.wait_for_selector(".rgb-page", timeout=60000)
+            body = page.frame_locator("iframe.rgb-frame").locator("body").inner_text(timeout=30000)
+            rendered = "SECURITY ATTENTION BOARD" in body
+            results.append(("dashboard Dashboard tab serves the board page", rendered or "No board yet" in body,
+                            "board in the iframe" if rendered else "no board yet (no scan)"))
+        except Exception as exc:
+            results.append(("dashboard Dashboard tab serves the board page", False, str(exc).splitlines()[0]))
+        page.screenshot(path=str(out / "dashboard-board.png"))
+        results.append(("Dashboard tab without browser errors or failed API calls", not errors and not failures,
                         "; ".join((errors + failures)[:3]) or "none"))
         browser.close()
     return results

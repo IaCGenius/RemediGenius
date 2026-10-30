@@ -1,5 +1,41 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
+## v0.7.0 — 2026-10-30
+
+**A board that lives in the chat, a page for the meeting, and a Dashboard that can refresh itself.** v0.6.0 made the
+remediation chain honest; this release makes the queue readable. One snapshot per scan is rendered three ways — a card
+in chat, a self-contained page, and a dashboard tab — and every rendering says when it was true.
+
+**New**
+- **Board card in chat.** A greeting produces one 46-column card: state and age, P1–P4 counts with bars, what changed,
+  coverage read over known, fixes in flight and one next action. The format lives in `SOUL.md`; `rgtriage board`
+  renders the exact same card in code. No posture score: P1/P2, verified fixes and coverage are the facts.
+- **Board page.** `rgtriage board [--html PATH]` writes a self-contained, print-ready page: KPI tiles, severity
+  distribution, needs-a-decision, verified fixes and the coverage matrix. Every scan writes `board.html` too. It is
+  static on purpose — the header carries the snapshot id and scan time, the footer says it is a snapshot.
+- **Dashboard tab (`rg-board`).** The page is served at `/board` behind the dashboard login, with the scan age and a
+  **Refresh now** button. Refresh asks the desk over its socket for a real `scan --quiet` and refuses to report success
+  unless `scanned_at` moved; the open tab polls `/status` every 60 seconds so a scheduled scan also swaps the page.
+- **Coverage is read over known.** One readable account beside three not covered is `1/4`, never `1/1`, on both the
+  card and the page. The gap line names the unscanned region and the unread accounts.
+
+**Changed**
+- `rgtriage scan` now writes `board.html` beside `report.html` and `status.json`.
+- `rg-triage` briefings defer to the board card; the long digest remains for `/triage` and `rgtriage digest`.
+- `deploy/aws-single` and `tools/workstation.py` install the Dashboard tab and write its `local.json` (socket, board,
+  status), so a fresh stack boots with it.
+- The release gate gains a browser check for the Dashboard tab, accepting the explicit "no board yet" state before the
+  first scan.
+
+**Validation**
+- **743 passed, 7 skipped** offline on Windows.
+- The card, page and tab were exercised on the private stack: the card matches the digest, the page shows 1/4 accounts
+  and strips score arithmetic, and **Refresh now** moved the snapshot from 11:52 to 13:09:45 UTC (11 P1, one new).
+  A manual refresh took about 4 minutes against scheduled runs of about 45 seconds.
+- **56 of 56** Spot checks on a fresh stack built from this release's own Terraform, with the boot asserted to use
+  the baked archive: image `ami-0b6510b5add4cd83a`, archive `055841aa…`, cloud-init 208 s, 20 resources created and
+  destroyed. See [docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md).
+
 ## v0.6.0 — 2026-10-30
 
 **A baked host image, a deployment split, and evidence-backed remediation.** The first boot spent about 300 seconds

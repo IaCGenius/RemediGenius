@@ -1,0 +1,14 @@
+{
+  "name": "rg-board",
+  "label": "Dashboard",
+  "description": "Security attention board: priorities, what changed, coverage and verified fixes, served from the snapshot the desk writes on every scan.",
+  "icon": "LayoutDashboard",
+  "version": "0.7.0",
+  "tab": {
+    "path": "/board",
+    "position": "before:knowledge"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}
