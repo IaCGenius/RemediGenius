@@ -165,12 +165,13 @@ class _Cache:
 
 
 def test_campaign_queries_are_registered_and_scoped():
-    assert "campaign" in queries.HANDLERS and "campaigns" in queries.HANDLERS
-    assert "campaign" not in queries.UNSUPPORTED and "relationships" in queries.UNSUPPORTED
+    assert {"campaign", "campaigns", "relationships", "graph"} <= set(queries.HANDLERS)
+    assert "campaign" not in queries.UNSUPPORTED
     service = queries.QueryService.__new__(queries.QueryService)
     service.cache, service.storage, service.raw, service.installation_id = None, None, None, "inst"
     with pytest.raises(queries.QueryError, match="does not accept"):
         service.dispatch("campaign", {"nope": 1})
     with pytest.raises(queries.QueryError, match="campaign_id is required"):
         service.campaign("")
-    assert service.dispatch("relationships")["status"] == "unsupported"
+    with pytest.raises(queries.QueryError, match="entity"):
+        service.dispatch("graph")

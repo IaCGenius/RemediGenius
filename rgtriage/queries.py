@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from . import campaigns, contracts, lifecycle
+from . import campaigns, contracts, lifecycle, relationships
 
-HANDLERS = ("current", "history", "timeline", "evidence", "campaign", "campaigns", "receipts")
-UNSUPPORTED = ("relationships", "graph")
+HANDLERS = ("current", "history", "timeline", "evidence", "campaign", "campaigns", "receipts",
+            "relationships", "graph")
+UNSUPPORTED = ()
 MAX_LIMIT = 500
+MAX_GRAPH_DEPTH = 2
 
 
 class QueryError(ValueError):
@@ -221,6 +223,88 @@ class QueryService:
                 "truncated": len(rows) > limit,
                 "steps": sorted({row.get("kind") for row in rows if row.get("status") in ("accepted", "duplicate")})}
 
+    def _assertion_rows(self) -> list:
+        return self.storage.scan_rows("relationships") if self.storage else []
+
+    @staticmethod
+    def _on_side(row: dict, side: str, value: str) -> bool:
+        if not value:
+            return True
+        return value in (str(row.get(f"{side}_key") or ""), str(row.get(f"{side}_identity") or ""))
+
+    def relationships(self, subject: str = "", object: str = "", predicate: str = "", status: str = "",
+                      as_of=None, limit: int | None = None) -> dict:
+        """Authoritative edges (or hypotheses, when asked) with their evidence and validity."""
+        limit = _limit(limit, 100)
+        when = _as_of(as_of)
+        every = self._assertion_rows()
+        rows = []
+        for row in every:
+            if not self._on_side(row, "subject", subject) or not self._on_side(row, "object", object):
+                continue
+            if predicate and row.get("predicate") != predicate:
+                continue
+            if status:
+                if row.get("status") != status:
+                    continue
+            elif row.get("status") == "retracted":
+                continue
+            if when is not None:
+                start, end = _at(row.get("valid_from")), _at(row.get("valid_to"))
+                if start and when < start:
+                    continue
+                if end and when >= end:
+                    continue
+            rows.append(row)
+        rows.sort(key=lambda row: _at(row.get("recorded_at")) or datetime.min.replace(tzinfo=timezone.utc),
+                  reverse=True)
+        newest = max((_at(row.get("recorded_at")) for row in every if _at(row.get("recorded_at"))), default=None)
+        return {"query": "relationships", "installation_id": self.installation_id, "as_of":
+                when.isoformat() if when else None, "durability": self._durability(), "count": len(rows),
+                "rows": [{**row, "authoritative": row.get("status") in relationships.AUTHORITATIVE}
+                         for row in rows[:limit]],
+                "truncated": len(rows) > limit,
+                # Graph freshness is reported on its own: it says nothing about whether AWS is healthy.
+                "graph": {"newest_assertion_at": newest.isoformat() if newest else None,
+                          "age_seconds": round((datetime.now(timezone.utc) - newest).total_seconds(), 3)
+                          if newest else None}}
+
+    def graph(self, entity: str = "", depth: int | None = 1, limit: int | None = None) -> dict:
+        """Bounded neighbourhood around one entity: depth is capped and the edge count is capped."""
+        if not entity:
+            raise QueryError("entity (a key or an identity) is required")
+        try:
+            depth = int(depth if depth is not None else 1)
+        except (TypeError, ValueError) as exc:
+            raise QueryError("depth must be an integer") from exc
+        if depth < 1:
+            raise QueryError("depth must be at least 1")
+        depth = min(depth, MAX_GRAPH_DEPTH)
+        limit = _limit(limit, 100)
+        rows = [row for row in self._assertion_rows() if row.get("status") != "retracted"]
+        nodes = {entity}
+        edges, seen = [], set()
+        frontier = {entity}
+        for _ in range(depth):
+            found = []
+            for row in rows:
+                if row.get("assertion_id") in seen:
+                    continue
+                if str(row.get("subject_key")) in frontier or str(row.get("object_key")) in frontier:
+                    found.append(row)
+            if not found:
+                break
+            for row in found:
+                seen.add(row.get("assertion_id"))
+                edges.append({**row, "authoritative": row.get("status") in relationships.AUTHORITATIVE})
+                nodes.update({str(row.get("subject_key")), str(row.get("object_key"))})
+            frontier = {str(row.get("subject_key")) for row in found} | {str(row.get("object_key")) for row in found}
+            if len(edges) >= limit:
+                break
+        return {"query": "graph", "installation_id": self.installation_id, "center": entity, "depth": depth,
+                "durability": self._durability(), "nodes": sorted(nodes), "edges": edges[:limit],
+                "count": len(edges[:limit]), "truncated": len(edges) > limit}
+
     def evidence(self, sha256: str) -> dict:
         """Resolve a raw evidence reference without returning the object bytes to the agent."""
         if not isinstance(sha256, str) or len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
@@ -253,6 +337,8 @@ class QueryService:
                    "campaign": {"campaign_id", "version", "after", "limit"},
                    "campaigns": {"status", "limit"},
                    "receipts": {"target_id", "campaign_id", "limit"},
+                   "relationships": {"subject", "object", "predicate", "status", "as_of", "limit"},
+                   "graph": {"entity", "depth", "limit"},
                    "evidence": {"sha256"}}[handler]
         unknown = set(params) - allowed
         if unknown:
