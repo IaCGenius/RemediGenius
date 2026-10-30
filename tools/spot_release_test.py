@@ -51,6 +51,8 @@ H="docker exec --user 10000:10000 remedigenius hermes"
 log=/var/log/cloud-init-output.log
 n=$(grep -cE "Traceback|^ERROR" $log); check "boot without errors" $([ "$n" = 0 ]; echo $?) "$n error lines"
 grep -q "RemediGenius-CE ready" $log; check "boot finished" $? "$(grep -o 'Up [0-9.]* seconds' $log | tail -1)"
+# The image is the point: a silent fallback to downloading would pass every other check and cost the boot time back.
+grep -q "baked image: release archive already verified" $log; check "boot used the baked release archive (no download)" $? "$(grep -o 'baked image: release archive already verified [0-9a-f]*' $log | head -1 | cut -c1-70)"
 s=$(systemctl is-active remedigenius-desk remedigenius-hermes remedigenius-validate remedigenius-scan.timer | tr '\n' ' ')
 check "services active" $(echo "$s" | grep -qv -e inactive -e failed; echo $?) "$s"
 v=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' /opt/rgtriage/src/rgtriage/__init__.py)
@@ -77,6 +79,18 @@ check "Iceberg warehouse exists in S3" $([ "$w" = "1" ]; echo $?) "$w"
 h=$($D history --limit 1 --json 2>&1)
 echo "$h" | grep -Eq '"snapshot_id": [0-9]+'; check "history reads a committed snapshot (not an empty store)" $? "$(echo "$h" | head -1 | cut -c1-120)"
 echo "$h" | grep -q '"outbox_events": 0'; check "the scan outbox is empty after the commit" $? "$(echo "$h" | grep -o '"outbox_events": [0-9]*' | head -1)"
+# --- the later-CE surfaces (CE-22/CE-23), through the same desk CLI the agent calls
+q=$($D campaign --json 2>&1 | head -c 300)
+echo "$q" | grep -q '"query": "campaigns"'; check "campaign query answers from the committed campaign tables" $? "$(echo "$q" | cut -c1-80)"
+tl=$($D history --timeline --limit 5 --json 2>&1)
+echo "$tl" | grep -q '"query": "timeline"'; check "finding timeline answers from committed history" $? "$(echo "$tl" | grep -o '"event_count": [0-9]*' | head -1)"
+gv=$($D campaign --graph no-such-entity --json 2>&1)
+echo "$gv" | grep -q '"query": "view.graph"'; check "bounded graph view answers and states its own completeness" $? "$(echo "$gv" | grep -o '"state": "[a-z_]*"' | head -1)"
+cr=$(setpriv --reuid=10000 --regid=10000 --clear-groups env PYTHONPATH=/opt/rgtriage/src RGTRIAGE_HOME=/data/rgtriage RGTRIAGE_DURABLE=1 RGTRIAGE_CONFIG=/data/rgconfig/triage.yaml HOME=/data/rgtriage/.home AWS_DEFAULT_REGION=__REGION__ /opt/rgtriage/venv/bin/python -c "
+from rgtriage import config, contracts, iceberg_store
+s = iceberg_store.IcebergStore.open(contracts.storage_profile(config.load(), config.home()))
+print(len(s.table('computation_receipts').schema().fields))" 2>&1 | tail -1)
+check "computation_receipts table exists with its 19 columns" $([ "$cr" = 19 ]; echo $?) "$cr"
 c=$($H -p default config get kanban.dispatch_in_gateway 2>&1 | tail -1)
 check "Kanban dispatcher off" $([ "$c" = "false" ]; echo $?) "$c"
 if [ -x /usr/local/bin/rgdesk ]; then

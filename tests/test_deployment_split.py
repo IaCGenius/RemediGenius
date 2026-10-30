@@ -21,6 +21,40 @@ def read(*parts):
     return (DEPLOY.joinpath(*parts)).read_text(encoding="utf-8")
 
 
+# ------------------------------------------------------------------ one version everywhere
+
+VERSION_FILES = (
+    ("pyproject.toml", r'^version = "([^"]+)"'),
+    ("profiles/remedigenius/distribution.yaml", r"^version:\s*\"?([0-9.]+)\"?\s*$"),
+    ("profiles/remedigenius/plugins/rg-triage/plugin.yaml", r"^version:\s*\"?([0-9.]+)\"?\s*$"),
+    ("profiles/remedigenius/dashboard-plugins/rg-knowledge/plugin.yaml", r"^version:\s*\"?([0-9.]+)\"?\s*$"),
+    ("profiles/remedigenius/dashboard-plugins/rg-github/plugin.yaml", r"^version:\s*\"?([0-9.]+)\"?\s*$"),
+    ("profiles/remedigenius/dashboard-plugins/rg-knowledge/dashboard/manifest.json", r'"version":\s*"([^"]+)"'),
+    ("profiles/remedigenius/dashboard-plugins/rg-github/dashboard/manifest.json", r'"version":\s*"([^"]+)"'),
+)
+
+
+def test_every_declared_version_is_the_package_version():
+    """A release bumps one number; a profile manifest left behind makes Hermes report the old plugin version."""
+    import re
+
+    from rgtriage import __version__
+
+    found = {}
+    for name, pattern in VERSION_FILES:
+        text = (ROOT / name).read_text(encoding="utf-8")
+        match = re.search(pattern, text, re.M)
+        assert match, f"{name} declares no version"
+        found[name] = match.group(1)
+    assert set(found.values()) == {__version__}, found
+
+
+def test_the_release_gate_asserts_the_baked_boot_path():
+    """A boot that silently falls back to downloading would pass every other check and lose the reason for the image."""
+    checks = (ROOT / "tools/spot_release_test.py").read_text(encoding="utf-8")
+    assert "baked image: release archive already verified" in checks
+
+
 # ------------------------------------------------------------------ the split
 
 def test_durable_infrastructure_is_its_own_root_without_compute():
