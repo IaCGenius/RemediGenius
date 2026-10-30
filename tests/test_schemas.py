@@ -69,7 +69,8 @@ def test_every_table_has_unique_field_ids_and_a_documented_partition():
     assert set(schemas.TABLES) == {
         "findings", "signals", "scan_runs", "coverage", "decisions", "fix_events", "verification_attempts",
         "github_ops", "current_findings", "current_fixes", "current_decisions", "current_operations",
-        "campaigns", "campaign_members", "deployment_receipts", "relationships"}
+        "campaigns", "campaign_members", "deployment_receipts", "relationships",
+        "target_verifications"}
 
 
 def test_local_catalog_creates_tables_writes_and_reads_a_finding(tmp_path):

@@ -29,6 +29,11 @@ separates durable infrastructure from disposable compute. Not yet validated on A
   never authorize closure or execution, retractions keep history, and an interrupted rebuild leaves the previous
   graph active. See [docs/GRAPH.md](docs/GRAPH.md).
 
+- **Target-bound verification (CE-18).** A proof now names the installation, account, region, resource generation,
+  artifact digest and rule version it is about, and fails closed on a mismatched account, a truncated read, stale
+  evidence or unaccepted clock skew. Provider resolution is a separate event, policy decides whether a targeted
+  check may close, and every attempt is stored with its verifier; see [docs/VERIFICATION.md](docs/VERIFICATION.md).
+
 **Changed**
 - `host.py --bake` prepares the image with the same code the instance runs; `/opt/rgtriage/.baked` records the version,
   the Hermes digest and the wheel pins. A boot refuses an image baked for a different digest, and re-installs wheels only
