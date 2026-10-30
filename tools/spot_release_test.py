@@ -298,12 +298,22 @@ def browser_checks(dashboard: str, login: dict, out: Path) -> list[tuple[str, bo
         page.on("console", lambda m: errors.append(m.text[:200]) if m.type == "error" else None)
         page.on("response", lambda r: failures.append(f"{r.status} {r.url.split('/', 3)[-1][:100]}")
                 if "/api/" in r.url and r.status >= 400 else None)
-        page.goto(f"{dashboard}/chat?profile=remedigenius", wait_until="networkidle")
+        page.goto(f"{dashboard}/login", wait_until="networkidle")
+        page.wait_for_selector("input[name=username]", timeout=60000)
+        # The form is React-controlled: a fill before hydration sets the DOM but not the state, and the POST sends
+        # empty credentials. Wait, sign in, and retry once if the form is still there (the page re-renders on failure).
+        page.wait_for_timeout(1500)
         page.fill("input[name=username]", login["username"])
         page.fill("input[name=password]", login["password"])
         page.click("button:has-text('SIGN IN')")
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(3000)
+        if page.locator("input[name=username]").count():
+            page.fill("input[name=username]", login["username"])
+            page.fill("input[name=password]", login["password"])
+            page.click("button:has-text('SIGN IN')")
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(3000)
         for _ in range(3):  # the chat page may still be navigating; a superseded navigation aborts
             with contextlib.suppress(Exception):
                 page.goto(f"{dashboard}/knowledge?profile=remedigenius", wait_until="domcontentloaded")
