@@ -505,6 +505,85 @@ def cmd_history(args):
              f"{row.get('observed_at', '')} raw {str(row.get('raw_sha256') or '')[:16]}")
 
 
+def cmd_campaign(args):
+    """Campaign membership, progress, the attested count and a bounded relationship neighbourhood."""
+    from . import cache as cache_module
+    from . import contracts, iceberg_store, queries, rawstore, views
+
+    profile = config.load()
+    storage_profile = contracts.storage_profile(profile, config.home())
+    region = os.environ.get("AWS_REGION") or (profile.get("regions") or ["us-east-1"])[0]
+    try:
+        storage = iceberg_store.IcebergStore.open(storage_profile, region=region)
+        storage.ensure_tables()
+    except Exception as exc:
+        sys.exit(f"Durable storage is not ready: {type(exc).__name__}: {exc}. See docs/STORAGE.md.")
+    cache = cache_module.Cache(timeout=2)
+    service = queries.QueryService(cache, storage, rawstore.from_config(profile, storage_profile, home=config.home()))
+    try:
+        if args.graph:
+            view = views.graph_view(service.dispatch("graph", {"entity": args.graph, "depth": args.depth,
+                                                              "limit": args.limit}))
+        elif args.summary and args.campaign_id:
+            result = service.dispatch("summary", {"campaign_id": args.campaign_id, "version": args.version,
+                                                  "record": args.record, "accounts": args.account or None})
+            view = {"query": "summary", "campaign_id": result["campaign_id"], "version": result["version"],
+                    "attested": result["attested"], "counts": result["counts"], "problems": result["problems"],
+                    "explain": result["explain"], "receipt_recorded": result["receipt_recorded"],
+                    "receipt_id": result["receipt"].get("receipt_id"), "snapshot_id": result["snapshot_id"]}
+        elif args.campaign_id:
+            page = service.dispatch("campaign", {"campaign_id": args.campaign_id, "version": args.version,
+                                                 "after": args.after, "limit": args.limit})
+            view = views.campaign_page(page)
+        else:
+            view = service.dispatch("campaigns", {"limit": args.limit})
+    except queries.QueryError as exc:
+        sys.exit(str(exc))
+    finally:
+        cache.close()
+    if args.json:
+        _json(view)
+        return
+    if view.get("query") == "campaigns":
+        if not view["rows"]:
+            _out("No committed campaigns. A candidate comes from proven lineage, not from the board preview.")
+            return
+        for row in view["rows"]:
+            _out(f"{row.get('campaign_id')} v{row.get('version')} {row.get('status')} · {row.get('member_count')} "
+                 f"target(s) · {str(row.get('title') or '')[:70]} · digest {str(row.get('membership_digest'))[:12]}")
+        return
+    if view.get("query") == "view.graph":
+        _out(f"Graph around {view.get('center')} · state {view['state']} · cutoff {view.get('cutoff') or '-'} · "
+             f"trusted actions {'allowed' if view['trusted_actions_allowed'] else 'BLOCKED (hypothesis in view)'}")
+        for node in view["nodes"]:
+            _out(f"  node {str(node.get('identity'))[:60]} ({node.get('kind')})")
+        for edge in view["edges"]:
+            _out(f"  {str(edge['subject'])[:12]} -[{edge['predicate']}]-> {str(edge['object'])[:12]} · {edge['label']}"
+                 f" · may_authorize {edge['may_authorize']}")
+        if view["truncated"]:
+            _out("  (bounded: more edges exist; raise --limit or lower --depth)")
+        return
+    if view.get("query") == "summary":
+        _out(f"Campaign {view['campaign_id']} v{view['version']} · {view['explain']}")
+        _out(f"Result: {view['counts']} · attested {view['attested']} · receipt {str(view.get('receipt_id'))[:12]}"
+             f" · snapshot {view['snapshot_id']}" + (" · recorded" if view["receipt_recorded"] else ""))
+        for problem in view["problems"]:
+            _out(f"  attestation problem: {problem}")
+        return
+    if view.get("state") in (views.STATE_UNAVAILABLE, views.STATE_DENIED):
+        _out(f"Campaign {view.get('campaign_id')}: {view.get('reason')}")
+        return
+    _out(f"Campaign {view['campaign_id']} v{view['version']} {view.get('status') or ''} · "
+         f"{view['member_count']} member(s) · digest {str(view['membership_digest'])[:12]}")
+    _out(f"Counts ({view['counts_source']}{'' if view['authoritative'] else ', NOT attested'}): {view['counts']}"
+         + (f" · {view['counts_note']}" if view['counts_note'] else ""))
+    _out(f"Showing {view['returned']} member(s)" + (f" after ordinal {view['next_cursor']}" if view['has_more'] else "")
+         + (f" · next cursor {view['next_cursor']}" if view['has_more'] else ""))
+    for member in view["members"]:
+        _out(f"  {member.get('ordinal')}. {str(member.get('state') or 'open'):<20} {member.get('target_id')} "
+             f"· finding {member.get('finding_key') or '-'} · evidence {str(member.get('evidence_sha256') or '-')[:12]}")
+
+
 def cmd_card(args):
     """A Kanban card for people: the change, exact AWS CLI from a live read, an IaC chat prompt, the verify read."""
     from . import cards
@@ -1194,6 +1273,17 @@ def main(argv=None):
     p.add_argument("--limit", type=int, default=50)
     p.add_argument("--evidence", help="resolve a raw evidence SHA-256 without returning its bytes")
     p.add_argument("--json", action="store_true"); p.set_defaults(func=cmd_history)
+    p = sub.add_parser("campaign", help="campaign membership, progress, attested counts and the relationship graph")
+    p.add_argument("campaign_id", nargs="?", help="omit to list campaigns")
+    p.add_argument("--version", type=int, help="campaign version (default: the latest committed one)")
+    p.add_argument("--after", type=int, default=0, help="pagination cursor: the last ordinal you saw")
+    p.add_argument("--limit", type=int, default=100)
+    p.add_argument("--summary", action="store_true", help="the attested computation, not the page-derived counts")
+    p.add_argument("--record", action="store_true", help="summary: append the receipt to computation_receipts")
+    p.add_argument("--account", action="append", help="summary: an approved account in scope (repeatable)")
+    p.add_argument("--graph", metavar="ENTITY", help="bounded neighbourhood around one entity key or identity")
+    p.add_argument("--depth", type=int, default=1, help="graph depth (capped at 2)")
+    p.add_argument("--json", action="store_true"); p.set_defaults(func=cmd_campaign)
     p = sub.add_parser("card", help="Kanban card text for one change: AWS CLI fix, IaC prompt, verify read")
     p.add_argument("ref", nargs="+"); p.add_argument("--offline", action="store_true", help="no live read for exact commands")
     p.add_argument("--text", dest="json", action="store_false", help="print markdown instead of JSON")

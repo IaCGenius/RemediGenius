@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from . import campaigns, contracts, lifecycle, relationships
+from . import attest, campaigns, contracts, lifecycle, relationships
 
 HANDLERS = ("current", "history", "timeline", "evidence", "campaign", "campaigns", "receipts",
-            "relationships", "graph", "verifications")
+            "relationships", "graph", "verifications", "summary")
 UNSUPPORTED = ()
 MAX_LIMIT = 500
 MAX_GRAPH_DEPTH = 2
@@ -204,10 +204,56 @@ class QueryService:
                      "progress": {"verified": sum(1 for row in rows if row.get("state") == "verified"),
                                   "applied_pending_verification": sum(1 for row in rows if row.get("state") == "applied"),
                                   "open": sum(1 for row in rows if row.get("state") == "open"),
+                                  # A proof for an undeployed target is its own bucket, exactly as in CE-21/CE-22.
+                                  "verified_not_applied": sum(1 for row in rows
+                                                              if row.get("state") == "verified_not_applied"),
                                   "membership_digest": record.get("membership_digest")},
                      "states_seen": sorted(state for state in states if state),
                      "installation_id": self.installation_id, "durability": self._durability()})
         return page
+
+    def summary(self, campaign_id: str = "", version: int | None = None, as_of=None, accounts=None,
+                record: bool = False) -> dict:
+        """The one attested computation: campaign counts, re-derived from retained rows before they are shown.
+
+        The receipt is always returned. `record=True` appends it to `computation_receipts` once (the id is
+        deterministic), including a failed attestation, so a refusal is retained as its own result.
+        """
+        if not campaign_id or not isinstance(campaign_id, str):
+            raise QueryError("campaign_id is required")
+        versions = [row for row in self._campaign_rows() if row.get("campaign_id") == campaign_id]
+        if not versions:
+            raise QueryError(f"no committed campaign with id {campaign_id}")
+        chosen = int(version) if version is not None else max(int(row.get("version") or 0) for row in versions)
+        if not any(int(row.get("version") or 0) == chosen for row in versions):
+            raise QueryError(f"campaign {campaign_id} has no version {chosen}")
+        when = _as_of(as_of)
+        snapshot_id = (self.storage.snapshot_at("campaign_members", when) if when
+                       else self.storage.last_snapshot_id("campaign_members"))
+        if snapshot_id is None:
+            raise QueryError("campaign membership has no committed snapshot to compute over")
+        rows = [row for row in self.storage.scan_rows("campaign_members", snapshot_id=snapshot_id)
+                if row.get("campaign_id") == campaign_id and int(row.get("version") or 0) == chosen]
+        evidence_set = contracts.payload_hash(sorted({str(row.get("evidence_sha256") or "") for row in rows}))
+        params = attest.params(campaign_id=campaign_id, version=chosen, installation_id=self.installation_id,
+                               as_of=when.isoformat() if when else "", evidence_set=evidence_set)
+        execution = attest.execute(rows, params=params, snapshot_id=snapshot_id)
+        verdict = attest.attest(execution, retained_rows=rows, accounts=accounts, snapshot_id=snapshot_id)
+        receipt = attest.receipt_row(execution, verdict, installation_id=self.installation_id)
+        recorded = False
+        if record:
+            existing = {str(row.get("receipt_id"))
+                        for row in self.storage.scan_rows("computation_receipts")}
+            if receipt["receipt_id"] not in existing:
+                self.storage.append_rows("computation_receipts", [receipt], batch_id=receipt["receipt_id"],
+                                         content_hash=receipt["output_digest"])
+                recorded = True
+        return {"query": "summary", "installation_id": self.installation_id, "campaign_id": campaign_id,
+                "version": chosen, "snapshot_id": snapshot_id, "attested": verdict["attested"],
+                "result": verdict["result"], "authoritative": verdict["authoritative"],
+                "counts": verdict["counts"], "problems": verdict["problems"], "reason": verdict["reason"],
+                "explain": attest.explain(receipt), "receipt": receipt, "receipt_recorded": recorded,
+                "durability": self._durability()}
 
     def receipts(self, target_id: str = "", campaign_id: str = "", limit: int | None = None) -> dict:
         """The receipt chain for one target or campaign, oldest first, with producer and evidence provenance."""
@@ -352,6 +398,7 @@ class QueryService:
                    "timeline": {"finding_key", "as_of", "limit"},
                    "campaign": {"campaign_id", "version", "after", "limit"},
                    "campaigns": {"status", "limit"},
+                   "summary": {"campaign_id", "version", "as_of", "accounts", "record"},
                    "receipts": {"target_id", "campaign_id", "limit"},
                    "relationships": {"subject", "object", "predicate", "status", "as_of", "limit"},
                    "graph": {"entity", "depth", "limit"},
