@@ -32,8 +32,9 @@ in chat, a self-contained page, and a dashboard tab — and every rendering says
 - The card, page and tab were exercised on the private stack: the card matches the digest, the page shows 1/4 accounts
   and strips score arithmetic, and **Refresh now** moved the snapshot from 11:52 to 13:09:45 UTC (11 P1, one new).
   A manual refresh took about 4 minutes against scheduled runs of about 45 seconds.
-- The release gate runs on a throwaway stack from this release's own Terraform; see
-  [docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md).
+- **56 of 56** Spot checks on a fresh stack built from this release's own Terraform, with the boot asserted to use
+  the baked archive: image `ami-0b6510b5add4cd83a`, archive `055841aa…`, cloud-init 208 s, 20 resources created and
+  destroyed. See [docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md).
 
 ## v0.6.0 — 2026-10-30
 

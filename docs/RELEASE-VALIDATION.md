@@ -1,5 +1,56 @@
 # Release validation — RemediGenius Community Edition
 
+## v0.7.0 (2026-10-30)
+
+Validated on the release branch `release/v0.7.0` on the maintainer's Windows workstation, and on one throwaway AWS
+Spot stack in `us-east-1`, destroyed at the end (20 resources, bucket included). Configuration: Hermes
+`nousresearch/hermes-agent:stable@sha256:444b4259…` (0.21.7), model `deepseek-v4.1-flash-1017`, OCSF 1.9.0, PyIceberg
+0.12.0, host image `ami-0b6510b5add4cd83a` baked from the release archive `055841aa…`.
+
+### Offline and local profile
+
+| Check | Result |
+| --- | --- |
+| `pytest tests` (Windows, Python 3.12; no live AWS) | **743 passed, 7 skipped** |
+| `tests/test_board.py` | 6 tests: counts, count vs bar, stale state, HTML escaping, no invented fix, snapshot/coverage |
+| On-disk local Iceberg profile, maintenance, crash/rebuild | passed |
+| `terraform validate` of `deploy/aws-single` | valid |
+
+### Private stack (not a gate)
+
+The card, page and tab were exercised against `rgce-private` before the gate:
+
+| Check | Result |
+| --- | --- |
+| Card in chat | matched the digest: 10 P1 · 18 P2 · 44 P3 · 22 P4, `1/4 accounts`, one next action |
+| Page | 1/4 accounts and 1/17 regions; score arithmetic (`(+15)`) stripped; static snapshot stamp |
+| Dashboard tab | `/board` served by `rg-board`, label **Dashboard**, no console errors |
+| **Refresh now** | snapshot moved **11:52 → 13:09:45 UTC**, 11 P1 (one new); the scan took about 4 minutes |
+| Scheduled scan | `remedigenius-scan.timer`, every 6 hours; the open tab polls `/status` every 60 seconds |
+
+### AWS Spot (fresh stack, destroyed after the run)
+
+| Check | Result |
+| --- | --- |
+| `terraform apply` from nothing | 20 resources; cloud-init finished at **207.80 s** |
+| **Baked boot path** | `baked image: release archive already verified 055841aa643dd2951e0447c9…` |
+| Host and boundary checks | **56 of 56 PASS**, 0 FAIL |
+| `rgtriage` version / plugins | 0.7.0; `rg-triage`, `rg-knowledge`, `rg-github` and the page all report 0.7.0 |
+| Dashboard tabs (Playwright) | Knowledge graph (39 concepts), GitHub setup, and **Dashboard serves the board in the iframe**; no browser errors or failed API calls |
+| First scan and storage | board produced; raw evidence once in S3; non-null committed snapshot; outbox 0; `computation_receipts` 19 columns |
+| Teardown | `terraform destroy` removed all 20 resources, bucket included |
+
+Defect found during this validation (test harness, not product): the gate's browser login filled the first
+`input[name=username]` on the page. On a fresh stack another provider form can own that element, so the basic form's
+POST carried empty credentials, returned `401 Invalid credentials`, and the Knowledge, GitHub and Dashboard checks all
+timed out on the login page. The harness now scopes the fill to
+`form.provider-form[data-provider=basic]` and retries once if the form reports an error. The same login works against
+the private dashboard, and the passing gate confirms it on a fresh stack.
+
+Not validated: the Docker workstation path with the new tab; the Dashboard's explicit `No board yet` state (the gate's
+first scan produced a board before the browser checks); a manual refresh concurrent with the scheduled scan; PDF/PNG
+exports (not built); a full campaign lifecycle; other regions or models; the three uncovered accounts.
+
 ## v0.6.0 (2026-10-30)
 
 Validated on the release branch `release/v0.6.0` on the maintainer's Windows workstation, and on throwaway AWS Spot

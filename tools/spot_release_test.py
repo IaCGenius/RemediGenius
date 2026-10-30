@@ -300,18 +300,20 @@ def browser_checks(dashboard: str, login: dict, out: Path) -> list[tuple[str, bo
                 if "/api/" in r.url and r.status >= 400 else None)
         page.goto(f"{dashboard}/login", wait_until="networkidle")
         page.wait_for_selector("input[name=username]", timeout=60000)
-        # The form is React-controlled: a fill before hydration sets the DOM but not the state, and the POST sends
-        # empty credentials. Wait, sign in, and retry once if the form is still there (the page re-renders on failure).
+        # The login page can render more than one provider form. Scope the fill to the basic one, or the POST carries
+        # empty credentials and every tab redirects back here.
         page.wait_for_timeout(1500)
-        page.fill("input[name=username]", login["username"])
-        page.fill("input[name=password]", login["password"])
-        page.click("button:has-text('SIGN IN')")
+        form = page.locator("form.provider-form[data-provider=basic]")
+        form.locator("input[name=username]").fill(login["username"])
+        form.locator("input[name=password]").fill(login["password"])
+        form.locator("button[type=submit]").click()
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(3000)
-        if page.locator("input[name=username]").count():
-            page.fill("input[name=username]", login["username"])
-            page.fill("input[name=password]", login["password"])
-            page.click("button:has-text('SIGN IN')")
+        if page.locator("form.provider-form[data-provider=basic] .form-error").count() and \
+                page.locator("form.provider-form[data-provider=basic] .form-error").inner_text().strip():
+            form.locator("input[name=username]").fill(login["username"])
+            form.locator("input[name=password]").fill(login["password"])
+            form.locator("button[type=submit]").click()
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(3000)
         for _ in range(3):  # the chat page may still be navigating; a superseded navigation aborts
