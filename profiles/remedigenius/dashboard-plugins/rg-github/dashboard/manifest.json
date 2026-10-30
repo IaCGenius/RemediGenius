@@ -3,7 +3,7 @@
   "label": "GitHub",
   "description": "Connect a GitHub repository so fixes can be proposed as pull requests into your development branch. People review and merge.",
   "icon": "GitBranch",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "tab": {
     "path": "/github",
     "position": "after:knowledge"

@@ -1,11 +1,12 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
-## Unreleased
+## v0.6.0 — 2026-10-30
 
-**Faster Spot replacement: a baked host image and a deployment split.** The first boot spent about 300 seconds installing
-what never changes. A release image now carries the runtime and the pinned Hermes image, and the maintainer's stack
-separates durable infrastructure from disposable compute. Not yet validated on AWS; the record will be added to
-[docs/RELEASE-VALIDATION.md](docs/RELEASE-VALIDATION.md) when it is.
+**A baked host image, a deployment split, and evidence-backed remediation.** The first boot spent about 300 seconds
+installing what never changes; a release image now carries the runtime and the pinned Hermes image, and the maintainer's
+stack separates durable infrastructure from disposable compute. On top of that storage layer, remediation is now a
+chain of facts: lineage, campaigns, receipts, proofs and attested counts, each one refusing to claim more than its
+evidence supports.
 
 **New**
 - **`deploy/ami`** builds one host image per release with EC2 Image Builder: docker, the pinned wheel set in

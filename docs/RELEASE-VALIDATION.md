@@ -1,5 +1,71 @@
 # Release validation — RemediGenius Community Edition
 
+## v0.6.0 (2026-10-30)
+
+Validated on the release branch `release/v0.6.0` on the maintainer's Windows workstation, and on throwaway AWS Spot
+stacks in one real AWS account, us-east-1. Every stack was deleted at the end of its run, bucket included. The account is
+a member of an organization with three other accounts; they remain uncovered. Configuration: Hermes
+`nousresearch/hermes-agent:stable@sha256:444b4259…` (0.21.7), model `deepseek-v4.1-flash`, OCSF 1.9.0, PyIceberg 0.12.0,
+and a host image baked per release (`deploy/ami`, `ami-0445cfd93d63d8dd8` for `0.6.0`).
+
+### Offline and local profile
+
+| Check | Result |
+| --- | --- |
+| `pytest tests` (Windows, Python 3.12; no live AWS) | **736 passed, 7 skipped** |
+| On-disk local Iceberg profile (create, write, read, reconnect, schema evolution) | passed |
+| Local maintenance (compaction, snapshot expiry, orphan cleanup) and commits during maintenance | passed |
+| Crash/rebuild (`test_storage_live.py`): delete the cache, rebuild from current-state tables; uncommitted scan needs a rerun; commit without acknowledgement not duplicated; unreachable store blocked | passed |
+| CE-16…CE-23 reducers (membership, receipts, verification, relationships, lineage, rollout, attestation, views) | passed, including the 1,000-target fixture at 930 verified / 20 awaiting verification / 50 open, and every attestation failure mode |
+| CE-02…CE-09 lifecycle, collection and durable-path regressions | passed |
+| `tools/demo.py` | synthetic board + IaC match, no AWS or model |
+| `terraform validate` of `deploy/aws-single` | valid |
+
+### AWS Spot (fresh stack, destroyed after the run)
+
+Two runs. The first (`rgce-v060-gate`, stack destroyed) reported **53 of 54 checks** with one failure; the second
+(`rgce-v060-gate2`, stack destroyed) reported **54 of 54 PASS, 0 FAIL** after the fix below.
+
+| Check | Result |
+| --- | --- |
+| `terraform apply` from nothing | 20 resources; cloud-init finished at 240 s (`Up 239.75 seconds`) |
+| **Baked boot path** | the cloud-init log carries `baked image: release archive already verified 8d450f99…` — the image's archive was used, not downloaded |
+| Host and boundary checks (`tools/spot_release_test.py`) | **54 of 54 PASS**, 0 FAIL |
+| rgtriage version / core plugins / skills | 0.6.0; `rg-triage`, `rg-knowledge` and `rg-github` all report 0.6.0; five skills load |
+| First scan and board | board produced for the stack; report names the account and coverage |
+| Raw evidence and Iceberg facts | one `raw/` object for the check; `warehouse/` present; `history` returned a **non-null snapshot** and **outbox 0** |
+| Later-CE surfaces on the real stack (new checks) | `campaign` query answered from the committed tables; `history --timeline` returned 5 events; the bounded graph view answered with its own state; **`computation_receipts` exists with its 19 columns** |
+| Dashboard (Playwright, Chrome) | Knowledge tab renders 39 concepts; GitHub tab renders and offers Connect GitHub; no browser errors or failed API calls |
+| Agent | "hi" answered from the live board (11 P1 issues, two GuardDuty S3 P1s named); recorded, not judged |
+| Boundaries | no WebUI/API exposure, GitHub key isolated, operator token gate, validation user cannot read the key or metadata, Kanban off, card filed for people |
+| Teardown | `terraform destroy` removed all 20 resources, bucket included |
+
+Defects found and fixed during this validation:
+
+1. **Profile and plugin manifests shipped 0.5.0.** `rg-triage`, `rg-knowledge` and `rg-github` reported `0.5.0` at boot
+   because `plugin.yaml`, the dashboard `manifest.json` files and `profiles/remedigenius/distribution.yaml` were not
+   bumped with the package. Fixed by bumping them and adding
+   `test_every_declared_version_is_the_package_version`, which fails when any declared version differs from
+   `rgtriage.__version__`.
+2. **The gate could not tell which first-boot path ran.** The gate now requires the baked-archive line in the
+   cloud-init log, so a silent fallback to downloading is a failure instead of a slower pass. This is what the
+   "baked boot path" row above asserts.
+
+Boot time, stated precisely: 240 s is **cloud-init's own counter** at "RemediGenius-CE ready" on the baked image. It is
+not comparable to the 137 s figure measured earlier for "boot to desk socket"; this release did not re-measure that
+boundary the same way, and the two numbers should not be quoted interchangeably.
+
+Not validated: a real S3 or Glue outage during a live scan or decision (local fault tests only, no AWS fault injection);
+Spot replacement and rebuild from S3 (local on-disk rebuild tests only); a full campaign lifecycle on AWS (see below);
+real GitHub publish/merge/reconcile; the full OCSF schema beyond the pinned CE subset; other regions or models; the three
+uncovered accounts; AWS cost of raw retention.
+
+**The campaign path is plumbing-proven, not lifecycle-proven.** The gate shows that the campaign tables, the campaign
+query, the timeline, the graph view and the attested-count table work on a real stack. Nothing yet calls
+`rollout.derive_campaign` from a scan, so no campaign was created, approved, deployed or reconciled on AWS; that logic is
+covered by the local fixtures above (including the 1,000-target scenario) and by `docs/CAMPAIGNS.md`. Treat "campaigns
+work" as "the reducer and the storage work", not "a campaign was run in production".
+
 ## v0.5.0 (2026-10-29)
 
 Validated on the release branch on the maintainer's Windows workstation, and on throwaway AWS Spot stacks in one real
