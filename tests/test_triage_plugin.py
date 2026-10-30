@@ -62,6 +62,21 @@ def test_tool_builds_cli_arguments(plugin, monkeypatch):
     assert "Unknown action" in plugin.handle({"action": "delete_everything"})
 
 
+def test_campaign_action_builds_membership_summary_and_graph_calls(plugin, monkeypatch):
+    calls = []
+    monkeypatch.setattr(plugin, "_run", lambda args, timeout=300: calls.append(args) or "ok")
+    plugin.handle({"action": "campaign"})
+    plugin.handle({"action": "campaign", "campaign_id": "camp-1", "after": 100, "limit": 50})
+    plugin.handle({"action": "campaign", "campaign_id": "camp-1", "summary": True, "record": True,
+                   "accounts": ["111122223333"]})
+    plugin.handle({"action": "campaign", "graph": "abc", "depth": 2, "limit": 20})
+    assert calls[0] == ["campaign", "--limit", "100"]
+    assert calls[1] == ["campaign", "camp-1", "--after", "100", "--limit", "50"]
+    assert calls[2] == ["campaign", "camp-1", "--summary", "--record", "--account", "111122223333", "--limit", "100"]
+    assert calls[3] == ["campaign", "--graph", "abc", "--depth", "2", "--limit", "20"]
+    assert "campaign" in plugin.SCHEMA["parameters"]["properties"]["action"]["enum"]
+
+
 def test_first_turn_briefing_injects_board(plugin, tmp_path, monkeypatch):
     (tmp_path / "latest.json").write_text(json.dumps({"scanned_at": "2099-01-01T00:00:00Z"}))
     monkeypatch.setattr(plugin, "_age_hours", lambda scan: 1.0)

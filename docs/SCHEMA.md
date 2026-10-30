@@ -67,6 +67,7 @@ record was not retained, mapping fails closed instead of re-mapping it lossily.
 | `deployment_receipts` | PR, merge, build, deploy and verification receipts from existing CI/CD, with producer, payload digest and outcome | — |
 | `relationships` | typed, scoped edges with validity, evidence or derivation, and append-only history | — |
 | `target_verifications` | every proof attempt bound to target generation, artifact digest, rule version and verifier | — |
+| `computation_receipts` | one row per approved computation: code and contract digest, pinned input snapshot, output and attestation verdict | — |
 
 `campaign_members` is the authoritative scope: the board preview is bounded on purpose, while decisions and approved
 actions read the frozen membership digest. A target discovered after approval starts a new campaign version and needs a

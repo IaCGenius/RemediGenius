@@ -319,6 +319,23 @@ def target_verifications() -> Schema:
         _f(21, "observed_at", TimestamptzType(), True), _f(22, "received_at", TimestamptzType(), True))
 
 
+def computation_receipts() -> Schema:
+    """One row per run of an approved computation: bindings, pinned inputs, output and the attestation verdict."""
+    return Schema(
+        _f(1, "receipt_id", StringType(), True), _f(2, "computation", StringType(), True),
+        _f(3, "computation_version", StringType(), True), _f(4, "contract_digest", StringType(), True),
+        _f(5, "code_digest", StringType(), True), _f(6, "knowledge_version", StringType()),
+        _f(7, "installation_id", StringType()), _f(8, "campaign_id", StringType()),
+        _f(9, "campaign_version", LongType()), _f(10, "params", StringType(), doc="JSON typed parameters"),
+        _f(11, "snapshot_id", LongType(), True, "Pinned input snapshot"),
+        _f(12, "output", StringType(), doc="JSON structured output"),
+        _f(13, "output_digest", StringType(), True), _f(14, "attested", BooleanType(), True),
+        _f(15, "result", StringType(), True, "authoritative or failed_attestation"),
+        _f(16, "problems", StringType(), doc="JSON reasons the attestation failed"),
+        _f(17, "counts", StringType(), doc="JSON counts as computed, authoritative only when attested"),
+        _f(18, "executed_at", TimestamptzType()), _f(19, "recorded_at", TimestamptzType(), True))
+
+
 TABLES = {
     "findings": findings,
     "signals": signals,
@@ -337,6 +354,7 @@ TABLES = {
     "deployment_receipts": deployment_receipts,
     "relationships": relationships,
     "target_verifications": target_verifications,
+    "computation_receipts": computation_receipts,
 }
 TABLE_DOCS = {
     "findings": "OCSF 1.9.0 findings, one row per observation; authority for what AWS reported",
@@ -356,6 +374,7 @@ TABLE_DOCS = {
     "deployment_receipts": "PR, merge, build, deploy and verification receipts from existing CI/CD, kept as separate facts",
     "relationships": "Typed, scoped, time-aware edges with evidence or an approved derivation",
     "target_verifications": "Every proof attempt bound to its target generation, artifact, rule version and verifier",
+    "computation_receipts": "One row per approved computation run: code and contract digest, pinned input snapshot, output and attestation verdict",
 }
 PARTITION_COLUMNS = {
     "findings": ("account_id", "region", "class_uid", "event_day"),

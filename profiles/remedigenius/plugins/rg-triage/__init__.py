@@ -223,7 +223,7 @@ def _card_status() -> str:
 # ------------------------------------------------------------------ tool
 
 ACTIONS = ("digest", "scan", "list", "show", "fix", "decide", "aws", "validate", "doctor", "onboarding", "playbook", "report",
-           "knowledge", "remember", "fixes", "card", "cards", "github", "history")
+           "knowledge", "remember", "fixes", "card", "cards", "github", "history", "campaign")
 GITHUB_OPS = ("status", "publish", "pr_status", "refresh")
 KNOWLEDGE_VIEWS = ("overview", "search", "show", "for", "gaps", "review", "validate")
 
@@ -303,6 +303,26 @@ def handle(params: dict, **_kwargs) -> str:
                 if p.get(key):
                     args += [f"--{key.replace('_', '-')}", str(p[key])]
             args += ["--limit", str(p.get("limit", 20))]
+    elif action == "campaign":
+        # Membership and progress are read from the frozen membership, never from the bounded board preview. The counts
+        # in summary come from the one approved computation, and are only authoritative when its receipt attested.
+        if p.get("graph"):
+            args = ["campaign", "--graph", str(p["graph"]), "--depth", str(p.get("depth", 1)),
+                    "--limit", str(p.get("limit", 100))]
+        else:
+            if p.get("campaign_id"):
+                args.append(str(p["campaign_id"]))
+            if p.get("summary"):
+                args.append("--summary")
+            if p.get("record"):
+                args.append("--record")
+            for account in p.get("accounts") or []:
+                args += ["--account", str(account)]
+            if p.get("version"):
+                args += ["--version", str(int(p["version"]))]
+            if p.get("after"):
+                args += ["--after", str(int(p["after"]))]
+            args += ["--limit", str(p.get("limit", 100))]
     elif action == "github":
         # Structured, narrow GitHub access. The desk holds the credentials and enforces repository, branch and PR-base policy;
         # connecting, configuring and disconnecting are operator commands on the host, not available here.
@@ -380,6 +400,11 @@ SCHEMA = {
         "branch and opens or updates ONE PR into the configured development branch, with title/evidence/change/effect/risk/rollback; "
         "needs the user's approval; it never merges or approves, a human does), op=pr_status (number or branch: reviews, checks). "
         "If GitHub is not connected, tell the user to use the GitHub tab in the console; you cannot connect it. "
+        "campaign = one campaign's frozen membership and per-target progress, or the bounded relationship graph: "
+        "campaign_id (omit to list), version, after (pagination cursor), limit, summary=true for the ONE attested count "
+        "computation (verified / awaiting verification / open), graph=<entity key or identity> with depth for its "
+        "neighbourhood. Counts from a page are not attested; only summary may be quoted as a computed count, and an edge "
+        "labelled hypothesis may never justify closing a finding or a trusted action. "
         "Never changes AWS resources. Code changes only ever leave as a reviewed pull request."),
     "parameters": {
         "type": "object",
@@ -429,6 +454,14 @@ SCHEMA = {
             "rollback": {"type": "string", "description": "github publish: how to roll back"},
             "number": {"type": "integer", "description": "github pr_status: PR number"},
             "branch": {"type": "string", "description": "github pr_status: feature branch name"},
+            "campaign_id": {"type": "string", "description": "campaign: id from action=campaign without one; a candidate comes from proven lineage"},
+            "version": {"type": "integer", "minimum": 1, "description": "campaign: membership version (default: latest committed)"},
+            "after": {"type": "integer", "minimum": 0, "description": "campaign: pagination cursor, the last ordinal seen"},
+            "summary": {"type": "boolean", "description": "campaign: run the attested count computation instead of the page"},
+            "record": {"type": "boolean", "description": "campaign summary: append the receipt to computation_receipts"},
+            "accounts": {"type": "array", "items": {"type": "string"}, "description": "campaign summary: the approved accounts in scope"},
+            "graph": {"type": "string", "description": "campaign: entity key or identity to explore (bounded neighbourhood)"},
+            "depth": {"type": "integer", "minimum": 1, "maximum": 2, "description": "campaign graph: depth, capped at 2"},
         },
         "required": ["action"],
         "additionalProperties": False,

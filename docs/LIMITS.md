@@ -28,6 +28,10 @@ reaches your model provider, for every change you make to your cloud, and for AW
   the desk's own combination rules, labelled as such. See [AWS-CAPABILITIES.md](AWS-CAPABILITIES.md).
 - **Fix tracking is evidence-based, not deployment.** A fix record closes when its proof-of-done read passes and the
   AWS finding is gone; the desk never applies changes and cannot see your CI/CD.
+- **Campaigns are plans, not orchestrators.** A shared-cause campaign names one image digest and a frozen membership and
+  reconciles what your CI/CD reports; it deploys nothing, and a campaign-level patch or tag update closes no member.
+  Counts are authoritative only from an attested computation over a pinned snapshot; a missing or failed receipt means
+  there is no count to quote.
 - **Evidence has known gaps.** Service control and resource control policy texts are readable only from the management
   or a delegated administrator account; from a member account the IAM simulator's verdict is the evidence. Network
   reachability is assembled from security groups, routes, NACLs and load balancers (Reachability Analyzer is not run).

@@ -39,6 +39,27 @@ separates durable infrastructure from disposable compute. Not yet validated on A
   actually run. `context.image.base` no longer holds the runtime platform: a base image is only claimed when its
   digest was observed. Lineage becomes `derived` graph edges; see [docs/LINEAGE.md](docs/LINEAGE.md).
 
+- **Shared-cause campaigns and partial rollout (CE-21).** A candidate campaign is derived from proven lineage: a
+  workload joins only when its runtime image digest is the campaign image, and every exclusion carries a readable
+  reason (another digest, a tag, the application layer, a name-only match, an uninspected account). The approved plan
+  names one immutable artifact, the frozen membership, its steps, stop conditions and the per-target proof. A campaign
+  patch or tag update closes nothing; a rollback reopens the target without erasing history; autoscaling onto an old
+  artifact is rejected; a proof without a deployment is counted separately. See [docs/CAMPAIGNS.md](docs/CAMPAIGNS.md).
+
+- **Attested campaign counts (CE-22).** `campaign_verification_summary` is one reviewed computation executed over a
+  pinned input snapshot, with the code digest, contract digest, typed parameters, knowledge version and output bound
+  into a receipt in `computation_receipts`. Re-deriving from the retained rows fails closed on changed code or contract,
+  another membership version, an incomplete evidence set, an out-of-scope account or a modified output, and a failed
+  attestation is kept as its own result. Only an attested receipt may be quoted as a computed count; see
+  [docs/ATTESTATION.md](docs/ATTESTATION.md).
+
+- **Timeline, campaign and graph views (CE-23).** Observed, applied, verified and ingested times are separate fields, a
+  late ingestion is labelled, membership is paged by ordinal over the full table rather than the board preview, and a
+  graph edge is labelled `observed`, `derived` or `hypothesis`. Counts are authoritative only from an attested receipt.
+  Stale or partial answers report their cutoff and say they are not current operational state, and a hypothesis blocks
+  trusted actions. New `rgtriage campaign` command and an `action=campaign` surface for the agent; see
+  [docs/VIEWS.md](docs/VIEWS.md).
+
 **Changed**
 - `host.py --bake` prepares the image with the same code the instance runs; `/opt/rgtriage/.baked` records the version,
   the Hermes digest and the wheel pins. A boot refuses an image baked for a different digest, and re-installs wheels only
