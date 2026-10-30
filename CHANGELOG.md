@@ -34,6 +34,11 @@ separates durable infrastructure from disposable compute. Not yet validated on A
   evidence or unaccepted clock skew. Provider resolution is a separate event, policy decides whether a targeted
   check may close, and every attempt is stored with its verifier; see [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
+- **Container and workload lineage (CE-20).** Images are identified by digest (tags are labels), packages carry the
+  layer they were installed in (`base`, `application`, `unknown`), and workload revisions name the image they
+  actually run. `context.image.base` no longer holds the runtime platform: a base image is only claimed when its
+  digest was observed. Lineage becomes `derived` graph edges; see [docs/LINEAGE.md](docs/LINEAGE.md).
+
 **Changed**
 - `host.py --bake` prepares the image with the same code the instance runs; `/opt/rgtriage/.baked` records the version,
   the Hermes digest and the wheel pins. A boot refuses an image baked for a different digest, and re-installs wheels only
