@@ -275,6 +275,22 @@ def campaign_members() -> Schema:
         _f(13, "added_at", TimestamptzType(), True))
 
 
+def deployment_receipts() -> Schema:
+    """Receipts from existing CI/CD: separate facts per kind, with the producer and evidence that vouched for them."""
+    return Schema(
+        _f(1, "receipt_id", StringType(), True), _f(2, "identity", StringType(), True),
+        _f(3, "kind", StringType(), True), _f(4, "producer", StringType(), True),
+        _f(5, "external_id", StringType(), True), _f(6, "status", StringType(), True), _f(7, "reason", StringType()),
+        _f(8, "plan_digest", StringType()), _f(9, "proposal", StringType()), _f(10, "campaign_id", StringType()),
+        _f(11, "campaign_version", LongType()), _f(12, "target_id", StringType()),
+        _f(13, "target_generation", StringType()), _f(14, "account_id", StringType()), _f(15, "repo", StringType()),
+        _f(16, "commit", StringType()), _f(17, "artifact_digest", StringType()),
+        _f(18, "deployment_revision", StringType()), _f(19, "actor", StringType()),
+        _f(20, "payload_digest", StringType(), True), _f(21, "evidence_sha256", StringType()),
+        _f(22, "observed_at", TimestamptzType(), True), _f(23, "received_at", TimestamptzType(), True),
+        _f(24, "payload", StringType(), doc="Canonical receipt payload as the producer sent it"))
+
+
 TABLES = {
     "findings": findings,
     "signals": signals,
@@ -290,6 +306,7 @@ TABLES = {
     "current_operations": current_operations,
     "campaigns": campaigns,
     "campaign_members": campaign_members,
+    "deployment_receipts": deployment_receipts,
 }
 TABLE_DOCS = {
     "findings": "OCSF 1.9.0 findings, one row per observation; authority for what AWS reported",
@@ -306,6 +323,7 @@ TABLE_DOCS = {
     "current_operations": "Open GitHub operations for recovery",
     "campaigns": "Campaign versions: scope digest, member count and the approval that froze them",
     "campaign_members": "Complete campaign membership per version; ordinal is the pagination cursor",
+    "deployment_receipts": "PR, merge, build, deploy and verification receipts from existing CI/CD, kept as separate facts",
 }
 PARTITION_COLUMNS = {
     "findings": ("account_id", "region", "class_uid", "event_day"),
