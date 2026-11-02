@@ -97,6 +97,9 @@ def normalize(data: dict) -> dict:
     data.setdefault("environment_tag_keys", ["env", "environment", "Environment", "stage"])
     data.setdefault("iac_paths", [])
     data.setdefault("sources", list(ALL_SOURCES))
+    investigation = data.setdefault("aws_investigation", {})
+    if not isinstance(investigation, dict) or investigation.get("transport", "direct") not in {"direct", "managed_mcp"}:
+        raise ValueError("aws_investigation.transport must be direct or managed_mcp")
     if "securityhub" in data["sources"] and "securityhub-exposure" not in data["sources"]:
         data["sources"].insert(data["sources"].index("securityhub") + 1, "securityhub-exposure")  # added in 0.3
     data.setdefault("max_findings_per_source", 500)

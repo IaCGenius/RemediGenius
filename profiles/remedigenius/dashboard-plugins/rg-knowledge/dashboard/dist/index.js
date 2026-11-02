@@ -10,7 +10,7 @@
   var useState = SDK.hooks.useState, useEffect = SDK.hooks.useEffect, useMemo = SDK.hooks.useMemo,
       useRef = SDK.hooks.useRef, useCallback = SDK.hooks.useCallback;
   var API = "/api/plugins/rg-knowledge";
-  var TABS = ["Overview", "Browse", "Review", "Add", "Import", "Graph", "Improve"];
+  var TABS = ["Overview", "Sources", "Browse", "Review", "Add", "Import", "Graph", "Improve"];
   var TYPE_COLORS = {
     "Application": "#2f7fd8", "Account": "#7c5cd6", "Team": "#1f9d74", "Risk Exception": "#d0453a",
     "Security Goal": "#d98a1c", "Policy": "#3d8c99", "Runbook": "#5f8f2f", "Architecture": "#8a6d3b",
@@ -508,11 +508,73 @@
         msg && msg.path ? h(Button, { kind: "ghost", onClick: function () { setValues({}); setMsg(null); } }, "Add another") : null));
   }
 
+  // ---------------------------------------------------------------- source connections (owned by Hermes)
+  function Sources(props) {
+    var _s = useState(null), servers = _s[0], setServers = _s[1];
+    var _e = useState(null), error = _e[0], setError = _e[1];
+    var _t = useState({}), tests = _t[0], setTests = _t[1];
+    function testConnection(name) {
+      setTests(function (old) { var next = Object.assign({}, old); next[name] = { busy: true }; return next; });
+      SDK.fetchJSON("/api/mcp/servers/" + encodeURIComponent(name) + "/test?profile=remedigenius", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+        .then(function (r) { setTests(function (old) { var next = Object.assign({}, old); next[name] = { ok: r.ok, count: (r.tools || []).length, error: r.error }; return next; }); })
+        .catch(function (e) { setTests(function (old) { var next = Object.assign({}, old); next[name] = { ok: false, error: errText(e) }; return next; }); });
+    }
+    var workflows = {
+      "aws-knowledge": "Explain AWS controls with citations; retrieve relevant AWS-authored skills on demand when that tool is selected.",
+      "terraform-registry": "Look up provider-version-specific resource arguments before proposing and validating a Terraform fix.",
+      "deepwiki": "Navigate public project documentation, including Prowler checks; verify exact behavior against upstream sources."
+    };
+    useEffect(function () {
+      SDK.fetchJSON("/api/mcp/servers?profile=remedigenius").then(function (r) { setServers(r.servers || []); })
+        .catch(function (e) { setError(errText(e)); });
+    }, []);
+    return h("div", { className: "rgk-stack rgk-narrow" },
+      h("section", { className: "rgk-card" },
+        h("h3", null, "Connect your existing knowledge"),
+          h("p", null, "Connect the capability you need: AWS guidance, Terraform resource documentation, or your own policies and runbooks. The desk's skills select relevant tools and use their results in explanations, proposals and reviewed knowledge."),
+        h("a", { className: "rgk-btn", href: "/mcp?profile=remedigenius" }, "Manage connections in Hermes"),
+          h("p", { className: "rgk-muted" }, "Select read tools and complete the provider's sign-in there. After changing connections, start a fresh chat and try a real question. Enabled means configured; it does not prove sign-in or document access works.")),
+      h("section", { className: "rgk-card" },
+        h("h3", null, "Try a useful workflow"),
+        h("p", null, "Ask in chat; rg-capabilities routes the request to available tools. Missing capabilities lead to onboarding, not invented results."),
+        h("ul", null,
+          h("li", null, "Explain how S3 account and bucket Block Public Access settings interact, with AWS citations."),
+          h("li", null, "Show the Terraform arguments for S3 Block Public Access using the connected Registry documentation. Do not deploy anything."),
+          h("li", null, "Find AWS's IAM guidance for safely using ForAllValues in a policy, and explain the missing-key case."),
+          h("li", null, "Turn this selected runbook into cited OKF drafts for review.")),
+        h("p", { className: "rgk-muted" }, "AWS Knowledge and DeepWiki need no account. Public Terraform Registry tools need a local MCP runtime, but no HCP account. Private documents need provider sign-in. Account observations still use the desk's scoped AWS reads.")),
+      h("section", { className: "rgk-card" },
+        h("h3", null, "Connections in this profile"),
+        error ? h(Notice, { tone: "error", text: error }) : null,
+        servers === null && !error ? h("p", null, "Loading connections…") : null,
+        servers && !servers.length ? h("p", null, "No connections configured. Open the Hermes catalog to add one.") : null,
+        servers && servers.map(function (s) {
+            var checked = tests[s.name];
+          return h("div", { key: s.name, className: "rgk-card" },
+            h("strong", null, s.name), " ", h(Badge, { tone: s.enabled ? "info" : "muted" }, s.enabled ? "Enabled" : "Disabled"),
+              h("p", null, workflows[s.name] || "Read selected source material, preserve its citation, and draft organization knowledge for review."),
+              h("p", { className: "rgk-muted" }, s.auth === "oauth" ? "Provider sign-in required. Verify access in Hermes." : "Verify a document read before using this source."),
+              h(Button, { disabled: !s.enabled || (checked && checked.busy), onClick: function () { testConnection(s.name); } }, checked && checked.busy ? "Testing…" : "Test connection"),
+              checked && !checked.busy ? h("p", { className: "rgk-muted" }, checked.ok ? "Connected: " + checked.count + " tools discovered. Complete a real request in chat to verify usefulness." : "Connection failed: " + (checked.error || "No successful handshake.")) : null);
+        })),
+      h("section", { className: "rgk-card" },
+        h("h3", null, "Turn documents into reviewed knowledge"),
+        h("ol", null,
+          h("li", null, "Read a selected document through a configured connection, or export and import it."),
+          h("li", null, "Preserve its original source link and revision on a Reference."),
+          h("li", null, "Draft Applications, Teams, Policies and Runbooks with citations to that Reference."),
+          h("li", null, "Review linked Teams before Applications, and approve only the facts you accept.")),
+        h("p", { className: "rgk-muted" }, "Imports are snapshots. Changes at the source are not synchronized automatically. S3 documents need a separately scoped document connector or existing knowledge base; the desk's AWS audit access is not document access."),
+        h(Button, { onClick: function () { props.go("Import"); } }, "Import a document")));
+  }
+
   // ---------------------------------------------------------------- import
   function Import(props) {
     var _c = useState(null), conv = _c[0], setConv = _c[1];
     var _f = useState(null), file = _f[0], setFile = _f[1];
     var _t = useState(""), title = _t[0], setTitle = _t[1];
+    var _su = useState(""), sourceUri = _su[0], setSourceUri = _su[1];
+    var _sr = useState(""), sourceRevision = _sr[0], setSourceRevision = _sr[1];
     var _r = useState(null), result = _r[0], setResult = _r[1];
     var _m = useState(null), msg = _m[0], setMsg = _m[1];
     var _b = useState(false), busy = _b[0], setBusy = _b[1];
@@ -534,7 +596,7 @@
       var reader = new FileReader();
       reader.onload = function () {
         var data = String(reader.result).split(",")[1] || "";
-        post("/import", { name: file.name, data: data, title: title, reviewer: props.reviewer }).then(function (r) {
+        post("/import", { name: file.name, data: data, title: title, source_uri: sourceUri, source_revision: sourceRevision, reviewer: props.reviewer }).then(function (r) {
           setBusy(false); setResult(r); if (r.estimate) setEst(Object.assign({ path: r.path }, r.estimate)); props.changed(null);
         }).catch(function (e) { setBusy(false); setMsg({ tone: "error", text: errText(e) }); });
       };
@@ -565,7 +627,12 @@
           h("label", { className: "rgk-field" }, h("span", { className: "rgk-label" }, "File (up to 15 MB)"),
             h("input", { type: "file", accept: ".pdf,.docx,.pptx,.xlsx,.md,.markdown,.txt,.csv,.zip", onChange: function (e) { setFile(e.target.files[0] || null); } })),
           h("label", { className: "rgk-field" }, h("span", { className: "rgk-label" }, "Title (optional)"),
-            h("input", { className: "rgk-input", value: title, onChange: function (e) { setTitle(e.target.value); } }))),
+            h("input", { className: "rgk-input", value: title, onChange: function (e) { setTitle(e.target.value); } })),
+          h("label", { className: "rgk-field" }, h("span", { className: "rgk-label" }, "Original source link (optional)"),
+            h("input", { className: "rgk-input", value: sourceUri, placeholder: "https://… or s3://… — canonical link, no access tokens", onChange: function (e) { setSourceUri(e.target.value); } })),
+          h("label", { className: "rgk-field" }, h("span", { className: "rgk-label" }, "Source revision (optional)"),
+            h("input", { className: "rgk-input", value: sourceRevision, placeholder: "Page version, commit, or object version if known", onChange: function (e) { setSourceRevision(e.target.value); } })),
+          h("p", { className: "rgk-muted" }, "The link is a citation; it does not fetch or sync content. Changed content or a different revision creates a separate unreviewed Reference. Approved knowledge is not overwritten.")),
         h("div", { className: "rgk-row" }, h(Button, { kind: "primary", disabled: busy || !file, onClick: upload }, busy && !est ? "Importing…" : "Import")),
         result && result.path ? h(Notice, { tone: "ok", text: (result.existing ? "Already imported (same file) as " : "Imported as ") + result.path + " (" + (result.characters || 0).toLocaleString() + " characters" + (result.truncated ? ", truncated" : "") + ")." }) : null,
         result && result.queued ? h(Notice, { tone: "ok", text: result.note + ". Open Review to approve." }) : null),
@@ -892,6 +959,7 @@
       })),
       err ? h(Notice, { tone: "error", text: "The knowledge service is not available: " + err }) : null,
       tab === "Overview" ? h(Overview, { status: status, version: version, go: go, open: open }) : null,
+      tab === "Sources" ? h(Sources, { go: go }) : null,
       tab === "Browse" ? h(Browse, { selected: selected, open: open, reviewer: who, version: version, changed: changed }) : null,
       tab === "Review" ? h(Review, { reviewer: who, version: version, changed: changed, open: open }) : null,
       tab === "Add" ? h(Add, { kind: addKind, reviewer: who, version: version, changed: changed, open: open }) : null,

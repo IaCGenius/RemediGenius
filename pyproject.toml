@@ -13,6 +13,7 @@ dependencies = ["PyYAML>=6,<7", "boto3>=1.42,<2", "pyiceberg[sql-sqlite,pyarrow]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10", "jsonschema>=4,<5"]
+aws-mcp = ["mcp-proxy-for-aws==1.7.0"]
 
 [project.scripts]
 rgtriage = "rgtriage.cli:main"

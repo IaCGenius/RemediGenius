@@ -23,6 +23,10 @@ answer that (rg-triage) and offer the fix.
 3. Verify the finding is still true before writing code: the decisive read from the evidence guide on the
    `Guidance:` line (pass `account`). If live configuration no longer matches the finding, say so and do not write a
    fix for a problem that is not there. For IAM fixes, base the change on the policy document you read, not its name.
+   For Terraform argument or provider-version uncertainty, load `rg-capabilities` and use the connected HashiCorp
+   Registry search/details tools against the repository's provider version. Retrieve the resource document before
+   choosing arguments. Use AWS Knowledge for service semantics and API verification fields. These are guidance,
+   not proof of resource ownership, replacement behavior in this plan, or successful local validation.
 4. Write the change in the repo's own style: same module, naming, provider generation
    (e.g. split `aws_s3_bucket_*` resources for AWS provider v4+), variables over hard-coding.
    Prefer the smallest change that fixes the control. Present:
@@ -90,3 +94,6 @@ fix does not drift back.
 These are fixed by adding baseline resources. Suggest the file that already holds account-wide
 resources (the tool lists files that configure the aws provider) or a new `security-baseline.tf`.
 In AWS Organizations, recommend the delegated-admin/org-wide setting over per-account resources.
+
+For IAM condition semantics, load `rg-triage` reference `references/iam-policy-condition-pitfalls.md`.
+Test missing keys and tag-name/value distinctions; simulation is not proof of a live action.

@@ -152,6 +152,8 @@ def test_the_agent_container_still_gets_its_dashboard_and_no_api_server(host, tm
     monkeypatch.setattr(host, "Path", fake_path)
     host.hermes_env({"webui": True}, "model-key")      # the old setting is ignored: there is no WebUI to enable
     env = (run_dir / "hermes.env").read_text()
+    # A TUI override suppresses native discovery of enabled profile MCP servers.
+    assert "HERMES_TUI_TOOLSETS=" not in env
     assert "HERMES_DASHBOARD=1" in env and "HERMES_DASHBOARD_PORT=9120" in env and "MODEL_API_KEY=model-key" in env
     assert "API_SERVER" not in env and "WEBUI" not in env and not (run_dir / "webui.env").exists()
     assert not (tmp_path / "hermes" / ".remedigenius-api-key").exists()
@@ -338,3 +340,40 @@ def test_glue_permission_is_scoped_to_the_installation_database():
     assert 'Action = ["glue:CreateDatabase"]' not in iam  # not an allow anymore
     assert "glue:CreateDatabase" in iam and "glue:StartJobRun" in iam  # explicit deny
     assert 'Effect = "Deny"' in iam
+
+
+def test_mcp_bootstrap_restores_defaults_without_losing_operator_state(host, tmp_path, monkeypatch):
+    import contextlib
+    import io
+    import sys
+    import types
+    import yaml
+    profile = tmp_path / "triage.yaml"
+    profile.write_text(yaml.safe_dump({"accounts": [{"owner": "operator"}]}))
+    monkeypatch.setattr(host, "CONFIG", tmp_path)
+    monkeypatch.setattr(host.os, "chown", lambda *a: None, raising=False)
+    installers = []
+    def execute(*args, **kw):
+        monkeypatch.setattr(sys, "argv", ["-c", str(profile)])
+        monkeypatch.setattr(sys, "stdin", io.StringIO(kw["input"]))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            exec(compile(args[2], "bootstrap-config", "exec"), {})
+        return types.SimpleNamespace(stdout=out.getvalue())
+    monkeypatch.setattr(host, "run", execute)
+    monkeypatch.setattr(host.subprocess, "run", lambda args, **kw: (installers.append(args) or types.SimpleNamespace(returncode=0)))
+    cfg = {"analytics_role_arn": "test-role", "analytics_workgroup": "test-workgroup", "glue_database": "test-db", "region": "us-east-1"}
+    host.configure_mcp_defaults(cfg)
+    result = yaml.safe_load(profile.read_text())
+    assert result["aws_investigation"]["transport"] == "managed_mcp"
+    assert result["athena_analytics"]["enabled"] is True
+    assert result["athena_analytics"]["python"] == "/opt/rgtriage/athena-venv/bin/python"
+    assert result["accounts"][0]["owner"] == "operator"
+    assert len(installers) == 2
+    result["aws_investigation"]["transport"] = "direct"
+    result["athena_analytics"]["enabled"] = False
+    profile.write_text(yaml.safe_dump(result))
+    host.configure_mcp_defaults(cfg)
+    restored = yaml.safe_load(profile.read_text())
+    assert restored["aws_investigation"]["transport"] == "direct"
+    assert restored["athena_analytics"]["enabled"] is False

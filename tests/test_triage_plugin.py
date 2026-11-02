@@ -17,6 +17,21 @@ def plugin(tmp_path, monkeypatch):
     return module
 
 
+@pytest.mark.parametrize("message", ["Explain S3 Block Public Access with Terraform.",
+                                      "Connect my Confluence runbook.",
+                                      "Investigate this finding in my AWS account."])
+def test_focused_first_turn_does_not_inject_or_refresh_board(plugin, monkeypatch, message):
+    def unexpected():
+        raise AssertionError("Focused requests must obtain scoped evidence through tools")
+    monkeypatch.setattr(plugin, "_board_context", unexpected)
+    assert plugin.on_pre_llm_call(is_first_turn=True, user_message=message) is None
+
+
+def test_greeting_still_gets_startup_board(plugin, monkeypatch):
+    monkeypatch.setattr(plugin, "_board_context", lambda: "Current board")
+    assert plugin.on_pre_llm_call(is_first_turn=True, user_message="Hello!") == {"context": "Current board"}
+
+
 def test_writes_only_allowed_under_proposals(plugin, tmp_path):
     inside = tmp_path / "proposals" / "abc.patch"
     assert plugin.on_pre_tool_call(tool_name="write_file", args={"path": str(inside)}) is None
@@ -117,5 +132,5 @@ def test_register_wires_tool_hooks_and_command(plugin):
 
     ctx = Ctx()
     plugin.register(ctx)
-    assert ctx.tools == ["rg_triage"] and sorted(ctx.commands) == ["rate", "triage"]
+    assert ctx.tools == ["rg_triage", "rg_analytics"] and sorted(ctx.commands) == ["rate", "triage"]
     assert set(ctx.hooks) == {"pre_llm_call", "pre_tool_call", "post_tool_call", "on_skill_lifecycle", "post_api_request", "post_llm_call"}

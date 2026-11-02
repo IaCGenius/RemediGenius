@@ -1,6 +1,6 @@
 ---
 name: rg-knowledge
-description: Use the desk's knowledge base (Open Knowledge Format) - who owns what, how critical it is, accepted risks, policies, runbooks, evidence guides per security domain - cite it in answers, find gaps, and draft new knowledge for a person to review. Knowledge is context; current AWS state still comes from live reads.
+description: Use the desk's knowledge base (Open Knowledge Format) - ownership, criticality, accepted risks, policies, runbooks and evidence guides. Read and cite concepts, find gaps, and digest documents from configured Hermes integrations into drafts for human review. Use when the user points to organization knowledge in Confluence, Jira, Drive, S3 or another connected source. Knowledge is context; current AWS state still comes from live reads.
 license: Apache-2.0
 ---
 # Knowledge (OKF bundle)
@@ -74,3 +74,37 @@ What the user told you, in their words, with the date.
 People import PDF, Word, PowerPoint, Excel, Markdown or text files in the Knowledge tab (Import). Each becomes a
 Reference concept (`references/`). The tab can draft concepts from a reference with the configured model (it shows the
 token estimate first). You can also read a reference with `view=show` and draft concepts from it yourself.
+
+## 5. Connected sources through existing Hermes integrations
+When the user points to Confluence, Jira, Drive, S3 or another knowledge source, reuse an already configured
+Hermes MCP or skill. Do not invent a tool, install a connector, write a provider integration, ask for credentials in
+chat, or claim a connection works because its tools are listed. If no suitable read tool is available, explain the
+missing connection and offer the existing document Import flow. Connection setup belongs to the operator in Hermes.
+
+1. Establish the requested scope: the named page, document, issue, folder or explicit collection. A page URL does not
+   authorize crawling the whole workspace. Start with the named document; ask before expanding beyond the requested
+   scope. Use only configured read tools. Never change the source, its permissions or its sharing settings.
+2. Retrieve actual content and source metadata. Search snippets, issue titles and retrieval passages are partial
+   evidence, not the complete document or collection. Preserve the canonical source URL or URI, provider object id,
+   revision when returned, retrieval time and whether the result is partial. Never invent a version or completeness.
+   Never store bearer tokens, signed download URLs or credentials in a concept; use a durable source link instead.
+3. Search existing OKF concepts before drafting. For each source, write a Reference draft under
+   `proposals/knowledge/references/`. Use `status: draft`, `generated.by: remedigenius-agent`, and a `sources` entry
+   with `id: original`, `resource: <canonical source URI>` and `title`. Record provider, object id, revision and
+   retrieval time under `remedigenius.source`; mark partial content explicitly in the body. Keep useful source
+   excerpts and their headings. Describe these as agent-captured excerpts, not a verified copy of the source.
+4. Draft only facts supported by the retrieved text: Application, Account, Team, Policy, Runbook, Architecture or
+   Note. Link each to its Reference draft using the intended bundle path and include the relevant quote. Do not
+   infer account ids, resource tags, criticality or owners. Missing facts become questions. A document mentioning
+   an exception is not the user's acceptance of risk: keep the explicit acceptance and expiry rule in section 3.
+5. If a source conflicts with reviewed knowledge, present the conflict and a proposed replacement separately.
+   Never overwrite the reviewed concept or carry its `verified` field into a new draft. If nothing changed, do not
+   create another draft. Say when you could not compare revisions or confirm freshness.
+6. Report what was read, what was unavailable or partial, which drafts were created, and their proposed effects.
+   Tell the operator to review the Reference first, then its dependent concepts, in the Knowledge tab. Resolve the
+   final Reference path after approval before approving dependent links. No source connection or draft changes
+   priorities by itself. Do not claim scheduled synchronization or access-revocation handling: those are not built.
+
+AWS Knowledge MCP supplies current public documentation, not observations of the user's AWS account. Continue to
+use `rg_triage action=aws` for live account evidence. Bedrock Knowledge Base retrieval can supply cited passages
+from S3-backed sources; it does not prove that every object in an S3 prefix was read.

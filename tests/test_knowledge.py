@@ -375,14 +375,26 @@ def test_ai_drafts_are_valid_okf_drafts_without_review(tab):
     text = tab._draft_text({"type": "Application", "title": "Payments: card API", "description": "Takes \"card\" payments.",
                             "body": "Runs in prod.", "evidence": "the payments team owns it", "criticality": "mission_critical",
                             "match_tags": {"app": "payments"}, "owner_team": "Payments Team"},
-                           "references/runbook.md", "custom/deepseek-v4.1-flash")
+                           "references/runbook.md", "custom/deepseek-v4.1-flash",
+                           {"payments": ["/teams/payments-team.md"]})
     meta, body = okf.parse(text)
     assert meta["status"] == "draft" and "verified" not in meta and meta["generated"]["by"] == "custom/deepseek-v4.1-flash"
     assert meta["remedigenius"] == {"criticality": "mission_critical", "match_tags": {"app": "payments"}, "owner": "/teams/payments-team.md"}
     assert meta["sources"][0]["resource"] == "/references/runbook.md" and "[^doc]" in body
+    assert "[Source document](/references/runbook.md)" in body
+    assert "[the named team](/teams/payments-team.md)" in body
     assert tab._is_concept("---\ntype: Note\n---\nx") and not tab._is_concept("# just markdown")
     with pytest.raises(tab.HTTPException):
         tab._inside(Path("/etc/passwd"), Path("/opt/data/proposals/knowledge"))
     assert tab._actor("alex") == "human:alex"
     with pytest.raises(tab.HTTPException):
         tab._actor("alex; rm -rf /")
+
+
+def test_draft_owner_requires_unique_team(tab):
+    concept = {"type": "Application", "title": "Lab", "description": "Lab", "body": "Lab",
+               "owner_team": "Operations Team"}
+    for teams in ({}, {"operations": ["/teams/ops-a.md", "/teams/ops-b.md"]}):
+        meta, body = okf.parse(tab._draft_text(concept, "references/lab.md", "lab-model", teams))
+        assert meta["remedigenius"] == {"owner_name": "Operations Team"}
+        assert "Owned by" not in body

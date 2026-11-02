@@ -376,10 +376,14 @@ def import_document(body: dict):
     if suffix == ".pdf" and not data.startswith(b"%PDF-"):
         raise HTTPException(415, "this is not a PDF file")
     if suffix == ".zip":
+        if body.get("source_uri") or body.get("source_revision"):
+            raise HTTPException(400, "source fields apply to document References; OKF bundles carry their own sources")
         return _import_bundle_zip(data)
     if suffix in TEXT_TYPES:
         text = data.decode("utf-8", errors="replace")
         if suffix in (".md", ".markdown") and _is_concept(text):
+            if body.get("source_uri") or body.get("source_revision"):
+                raise HTTPException(400, "this OKF concept carries its own sources; clear the document source fields")
             return {"queued": [_queue_concept(text, name)], "note": "OKF concept: added to the review queue"}
     sha = hashlib.sha256(data).hexdigest()
     files = _paths()["files"]
@@ -403,7 +407,9 @@ def import_document(body: dict):
     title = str(body.get("title") or "")[:120]
     result = _with_inbox(text, ".md", lambda f: ["knowledge-edit", "import", "--file", f, "--name", name, "--by", actor,
                                                  "--sha256", sha, "--converter", converter_name]
-                         + (["--title", title] if title else []))
+                         + (["--title", title] if title else [])
+                         + (["--source-uri", str(body["source_uri"])] if body.get("source_uri") else [])
+                         + (["--source-revision", str(body["source_revision"])] if body.get("source_revision") else []))
     result["estimate"] = _estimate(result.get("characters", len(text)))
     return result
 
@@ -500,10 +506,14 @@ FOLDERS = {"Application": "applications", "Account": "accounts", "Team": "teams"
 
 
 def _slug(text: str) -> str:
-    return (re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "concept")[:60]
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:60].strip("-") or "concept"
 
 
-def _draft_text(c: dict, reference: str, model: str) -> str:
+def _team_key(name: str) -> str:
+    return re.sub(r"\s+team$", "", " ".join(str(name).lower().split()))
+
+
+def _draft_text(c: dict, reference: str, model: str, team_paths: dict | None = None) -> str:
     ext = {}
     if c.get("criticality"):
         ext["criticality"] = c["criticality"]
@@ -513,7 +523,11 @@ def _draft_text(c: dict, reference: str, model: str) -> str:
         if c.get(key):
             ext[key] = str(c[key])
     if c.get("owner_team"):
-        ext["owner"] = f"/teams/{_slug(c['owner_team'])}.md"
+        matches = sorted(set((team_paths or {}).get(_team_key(c["owner_team"]), [])))
+        if len(matches) == 1:
+            ext["owner"] = matches[0]
+        else:
+            ext["owner_name"] = str(c["owner_team"])  # context, not an invented graph edge
     meta = {"type": c["type"], "title": c["title"][:120], "description": c["description"][:300], "status": "draft",
             "sources": [{"id": "doc", "resource": f"/{reference}", "title": reference}],
             "generated": {"by": model, "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}}
@@ -522,6 +536,11 @@ def _draft_text(c: dict, reference: str, model: str) -> str:
     front = "".join(f"{k}: {json.dumps(v, ensure_ascii=False)}\n" for k, v in meta.items())  # JSON values are valid YAML
     evidence = c.get("evidence", "").strip().replace("\n", " ")[:400]
     body = c["body"].strip() + (f"\n\n> {evidence}[^doc]\n\n[^doc]: {reference}" if evidence else "")
+    body += f"\n\n[Source document](/{reference})."
+    if ext.get("owner"):
+        body += f"\n\nOwned by [the named team]({ext['owner']})."
+    elif ext.get("owner_name"):
+        body += "\n\nOwner name is recorded in the settings; link it to a unique Team concept during review."
     return f"---\n{front}---\n\n{body}\n"
 
 
@@ -552,6 +571,13 @@ def ai_draft(body: dict):
     model = f"{result.get('provider') or 'model'}/{result.get('model') or 'unknown'}".replace(" ", "-")
     review_dir = p["review"]
     drafts = []
+    team_paths = {}
+    for team in _desk_json(["knowledge", "list", "--type", "Team", "--json"]):
+        if team.get("status") != "deprecated":
+            team_paths.setdefault(_team_key(team["title"]), []).append("/" + team["path"])
+    for team in concepts:
+        if team.get("type") == "Team" and team.get("title"):
+            team_paths.setdefault(_team_key(team["title"]), []).append(f"/teams/{_slug(team['title'])}.md")
     for c in concepts:
         if c.get("type") not in FOLDERS or not c.get("title"):
             continue
@@ -560,7 +586,7 @@ def ai_draft(body: dict):
         target = folder / f"{_slug(c['title'])}.md"
         if target.exists():
             target = folder / f"{_slug(c['title'])}-{uuid.uuid4().hex[:6]}.md"
-        target.write_text(_draft_text(c, item["path"], model), encoding="utf-8")
+        target.write_text(_draft_text(c, item["path"], model, team_paths), encoding="utf-8")
         drafts.append({"file": str(target), "type": c["type"], "title": c["title"]})
     return {"drafts": drafts, "usage": result.get("usage"), "model": model,
             "note": "" if drafts else (result.get("text") or "The model found no concepts in this document.")[:500]}

@@ -239,6 +239,8 @@ locals {
     scan_interval_hours = var.scan_interval_hours, watch_deliver = var.watch_deliver,
     container_memory_mb = var.container_memory_mb,
     glue_database       = aws_glue_catalog_database.ce.name,
+    analytics_role_arn  = aws_iam_role.analytics.arn,
+    analytics_workgroup = aws_athena_workgroup.analytics.name,
     warehouse           = "s3://${aws_s3_bucket.data.id}/warehouse",
     raw_retention_days  = var.raw_retention_days,
     image               = "nousresearch/hermes-agent:stable@sha256:444b42594e7f467425872fc35e077a227d377f0fe0726bc818706d62175fad8b"

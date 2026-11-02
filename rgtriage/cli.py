@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import webbrowser
 from datetime import datetime, timezone
@@ -80,6 +81,8 @@ def cmd_doctor(args):
     profile = config.load()
     profile["max_findings_per_source"] = 1
     _out(f"Triage profile: {config.config_path()}  (state: {config.home()})")
+    transport = profile.get("aws_investigation", {}).get("transport", "direct")
+    _out(f"AWS investigation transport: {transport} (configuration only; verify with an AWS read). Collection: direct SDK.")
     for account in profile["accounts"]:
         try:
             session = aws.session_for(account)
@@ -473,6 +476,14 @@ def cmd_history(args):
     raw = rawstore.from_config(profile, storage_profile, home=config.home())
     service = queries.QueryService(cache, storage, raw)
     try:
+        if getattr(args, "analytics_report", None):
+            from . import athena_analytics
+            if args.current or args.timeline or args.evidence or args.finding or args.as_of:
+                sys.exit("Analytics reports cannot be mixed with point-in-time, current or finding-history modes")
+            try:
+                return _json(athena_analytics.run(profile, service, args.analytics_report, args.days, args.account, args.region))
+            except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
+                sys.exit(f"Analytics unavailable: {exc}")
         if args.evidence:
             result = service.dispatch("evidence", {"sha256": args.evidence})
         elif args.timeline:
@@ -729,8 +740,20 @@ def cmd_aws(args):
         return _out(evidence_header(args.service, op, params, account, region, observed, result if isinstance(result, dict) else None,
                                     truncated, recorded=True) + "\n" + text[:args.max_chars])
     try:
-        client = aws.client(aws.session_for(account, region), args.service, region)
-        result = getattr(client, op)(**params)
+        investigation = profile.get("aws_investigation", {})
+        managed = investigation.get("transport", "direct") == "managed_mcp"
+        if managed and not account.get("role_arn"):
+            sys.exit("Managed AWS MCP requires an explicit audit role_arn; ambient credentials are not used for MCP")
+        session = aws.session_for(account, region)
+        client = aws.client(session, args.service, region)
+        if managed:
+            from . import aws_mcp
+            try:
+                result = aws_mcp.read(session, client, op, params, region, investigation)
+            except (aws_mcp.ManagedMCPError, ValueError) as exc:
+                sys.exit(str(exc))
+        else:
+            result = getattr(client, op)(**params)
     except AttributeError:
         sys.exit(f"{args.service} has no operation {op}")
     except (ClientError, BotoCoreError, aws.WriteBlocked) as exc:
@@ -740,7 +763,12 @@ def cmd_aws(args):
     truncated = len(text) > args.max_chars
     if truncated:
         text = text[:args.max_chars] + f"\n... truncated ({len(text)} chars; narrow the query or raise --max-chars)"
-    _out(evidence_header(args.service, op, params, account, region, observed, result, truncated) + "\n" + text)
+    header = evidence_header(args.service, op, params, account, region, observed, result, truncated)
+    if managed:
+        # The vendor auto-paginates with a cap. Do not infer exhaustive coverage even when no token is returned.
+        header = header.replace(" · complete ·", " · completeness unverified (MCP pagination cap) ·")
+        header += " · transport managed AWS MCP"
+    _out(header + "\n" + text)
 
 
 def cmd_validate(args):
@@ -1138,7 +1166,8 @@ def cmd_knowledge_edit(args):
             sys.exit("import needs --file (converted markdown) and --name (original file name)")
         text = knowledge.inbox_file(args.file).read_text(encoding="utf-8", errors="replace")
         result = knowledge.import_reference(text, args.name, actor, sha256=args.sha256 or "", converter=args.converter or "",
-                                            title=args.title or "", b=b)
+                                            title=args.title or "", b=b, source_uri=args.source_uri or "",
+                                            source_revision=args.source_revision or "")
     else:
         sys.exit(f"unknown action {args.action}")
     if args.action != "import":
@@ -1290,6 +1319,8 @@ def main(argv=None):
     p = sub.add_parser("fixes", help="fix records from decision to verified closure"); p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_fixes)
     p = sub.add_parser("history", help="current facts and committed history from durable storage")
+    p.add_argument("--analytics-report", choices=["trend", "coverage", "verification", "scan_coverage"])
+    p.add_argument("--days", type=int, default=30, help="analytics report window: 1–90 days")
     p.add_argument("--current", action="store_true", help="current state instead of history")
     p.add_argument("--timeline", action="store_true", help="finding episodes with applied and verified time")
     p.add_argument("--finding", help="one finding key")
@@ -1382,6 +1413,8 @@ def main(argv=None):
     p.add_argument("--replace", action="store_true", help="save: overwrite an existing concept")
     p.add_argument("--reason"); p.add_argument("--name", help="import: original file name")
     p.add_argument("--sha256"); p.add_argument("--converter"); p.add_argument("--title")
+    p.add_argument("--source-uri", help="import: canonical source https:// or s3:// URI (no credentials or query)")
+    p.add_argument("--source-revision", help="import: provider revision/version, if known")
     p.set_defaults(func=cmd_knowledge_edit)
     p = sub.add_parser("improve", help="offline improvement: evaluation, grading, gate, traces, consolidation (no model calls)")
     p.add_argument("action", choices=["suite", "tasks", "exec", "grade-run", "gate", "lint", "hint", "traces", "failures",

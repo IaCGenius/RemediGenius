@@ -1,7 +1,19 @@
 # Permissions and credential boundaries — RemediGenius Community Edition
 
-The rule in every deployment: **only the desk service holds AWS credentials, and every AWS call it makes is a read.**
-The Hermes agent never holds AWS credentials.
+The rule in the isolated EC2 deployment: **AWS credentials stay on the desk/host side; target-account
+investigation is read-only.** Storage commits, checkpoint writes and Athena query execution are separate,
+scoped operational permissions. The Hermes container never holds AWS credentials.
+
+Default managed AWS MCP investigation also runs inside the desk, using the selected explicit audit role.
+The agent still supplies only structured service/operation/parameters; CE enforces its read guard and SDK
+validation before constructing a fixed remote API call. No arbitrary scripts, presigned-URL tools, new IAM
+grants to the target-account audit role or credential mounts are introduced. See [AWS connections](AWS-CONNECTIONS.md)
+for limits and validation.
+
+Default Athena analytics uses a distinct role assumed by the host. It permits query execution/results/cancellation
+only in the deployment's workgroup, Glue metadata reads in its database, warehouse reads, and writes only to
+`analytics-results/`. The workgroup forces encryption and a 100 MiB scan cap per query. It cannot write the
+warehouse or read raw evidence/checkpoints. Fixed report SQL is compiled by the desk; the model cannot submit SQL.
 
 ## Read-only enforcement (all deployments)
 

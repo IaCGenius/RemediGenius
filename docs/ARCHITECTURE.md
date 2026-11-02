@@ -8,8 +8,15 @@ RemediGenius Community Edition (RemediGenius-CE) splits the work in two:
   question that matters, and writing the code change.
 
 No custom agent runtime: Hermes provides chat, the dashboard, skills, memory, schedules and messaging. RemediGenius-CE
-adds one Python package, one profile (SOUL, five skills, one plugin), one dashboard tab (Knowledge) and two deployment
-paths. Organization knowledge is one Open Knowledge Format bundle ([KNOWLEDGE.md](KNOWLEDGE.md)).
+adds the desk package, a profile with task-specific skills and plugins, and dashboard workflows.
+Organization knowledge is one Open Knowledge Format bundle ([KNOWLEDGE.md](KNOWLEDGE.md)).
+
+The standard EC2 deployment enables managed AWS MCP investigation and Athena analytics by default.
+The desk retains credentials and the read guard. Current findings still use deterministic collection;
+historical aggregate questions use fixed Athena reports through an isolated Data Processing MCP runtime.
+The analytics role can read the warehouse and write query results, not change findings. Native Hermes
+discovery loads relevant vendor documentation tools on demand. See the interactive
+[MCP architecture diagram](diagrams/mcp-release.html) and [connection model](AWS-CONNECTIONS.md).
 
 ```mermaid
 flowchart TB
@@ -40,6 +47,7 @@ flowchart TB
 | --- | --- |
 | `rg_triage` tool | `digest`, `scan`, `list`, `show`, `fix`, `aws` (one read-only call or policy evaluation, prefixed with an Evidence line: account, region, time, complete or partial), `validate`, `decide`, `doctor`, `onboarding`, `playbook`, `report`, `knowledge` (read-only views), `history` (current facts or committed history with the manifest and evidence id) |
 | Session-start hook | puts the current board in front of the agent on the first turn; starts a background refresh when the scan is stale |
+| `rg_analytics` tool | Deferred trend, coverage, verification and scan-coverage reports; bounded windows, fixed SQL, snapshot provenance and query scan statistics |
 | Guards | blocks file writes outside the proposals folder; blocks reads of credential stores, keys, `.env` and Terraform state; routes every `decide` through Hermes's approval prompt |
 | `/triage` | the board without a model call (interactive chat and gateways) |
 | Skills | chosen by what the user wants: `rg-triage` (briefing, priorities, decisions, explaining and verifying findings or any configuration question), `rg-investigate` (suspicious activity: actors, timelines, compromise), `rg-iac-fix` (fixes, when asked), `rg-onboard` (accounts, access, sources), `rg-knowledge` (read, cite and draft knowledge). SOUL holds one evidence method for all of them; six evidence guides in the knowledge bundle say which reads decide each kind of question |
@@ -47,7 +55,8 @@ flowchart TB
 | Knowledge tab | Hermes dashboard plugin `rg-knowledge`: overview and gaps, browse, review queue, Add form, document import with optional AI drafting, graph. Its backend holds no AWS credentials and changes the bundle only through the desk's `knowledge-edit` command |
 
 The Hermes toolsets enabled are `skills`, `clarify`, `file` (repository reading plus writes to proposals) and
-`rg_triage`. There is no terminal toolset, so the agent cannot run shell commands.
+`rg_triage`, with native deferred discovery for approved MCP capabilities and `rg_analytics`.
+There is no terminal toolset, so the agent cannot run shell commands.
 
 ## Collection and volume
 

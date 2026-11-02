@@ -10,6 +10,12 @@ It is the operator's file; you explain and propose edits, the operator saves the
 proposed copy under the proposals folder for them to move).
 
 ## 1. Check what works
+For managed AWS MCP transport and connection failures, read `rg-capabilities/references/aws-connection.md`.
+The desk can reuse the configured audit role without exposing credentials or general script tools to the agent.
+For documentation, Terraform guidance and document-source connections, load `rg-capabilities`. Start with the
+capability needed for the user's task; use Knowledge → Sources and native Hermes onboarding, then prove one real
+read in a fresh chat. Those connections do not extend the AWS account coverage described below.
+
 `rg_triage action=doctor` → identity per account, and per source/region: `ok`, `not_enabled`,
 `denied`, `error`, plus recommendations. Explain blind spots in plain terms:
 - Security Hub off → no posture checks (CIS/FSBP). GuardDuty off → no threat detection.

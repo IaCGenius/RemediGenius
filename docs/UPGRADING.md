@@ -1,5 +1,19 @@
 # Upgrading RemediGenius Community Edition
 
+## Next MCP release (from v0.7.0)
+
+Apply the new standard `deploy/aws-single` Terraform with the reviewed candidate archive, checkpoint the
+existing profile, then replace the instance. The deployment adds a scoped analytics role and Athena workgroup;
+bootstrap installs pinned runtimes and supplies missing managed-MCP/enabled-analytics settings. Explicit
+`aws_investigation.transport: direct` and `athena_analytics.enabled: false` choices are retained.
+No Iceberg schema migration is introduced. After replacement, check a guarded AWS read and all four reports,
+plus saved chats/knowledge and committed storage health. See [recovery](RECOVERY.md).
+
+If earlier experiments created resources with the same analytics names, inspect and import the matching
+resources into this stack's Terraform state before applying; do not create competing resources or overwrite
+another stack. Normal v0.7.0 installations do not have those experimental resources. The existing lab's
+upgrade/replacement was validated; full new-stack and baked-AMI validation remain separate gates.
+
 ## To v0.5.0 (from v0.4.x)
 
 v0.5.0 is a **fresh-install release**. The desk's facts moved from JSON files and whole-home archives to S3 raw
