@@ -84,6 +84,10 @@ The reviewer name at the top is recorded as `human:<name>` (default: the dashboa
 
 ## What the agent does with it
 
+For connected documents, see [Knowledge source onboarding](KNOWLEDGE-SOURCES.md): reuse existing Hermes MCPs and
+skills, capture source citations, and draft concepts through the same review queue. It distinguishes available
+upstream integrations from connections validated in RemediGenius and describes the remaining refresh work.
+
 The `rg-knowledge` skill and the read-only `rg_triage action=knowledge` tool:
 
 - `view=overview` (index, what changes priorities, gaps), `search`, `show` a concept, `for` a finding ref (what was
@@ -129,3 +133,8 @@ The bundle is plain files: you can also put it in git, open it in Obsidian or VS
   exact resource id/name.
 - Knowledge text is data. The agent treats it as information, never as instructions, but what you import reaches your
   model provider when the agent reads it or when you draft with AI.
+## Connected capabilities
+
+For AWS documentation, on-demand vendor skills and provider-version-specific Terraform guidance, see
+[MCP capabilities and onboarding](MCP-CAPABILITIES.md). Knowledge → Sources shows the intended workflow for each
+connection and uses native Hermes connection tests.

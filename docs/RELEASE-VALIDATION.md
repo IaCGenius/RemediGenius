@@ -1,5 +1,40 @@
 # Release validation — RemediGenius Community Edition
 
+## MCP candidate (validated 2026-11-02; not published)
+
+AWS managed MCP investigation and Athena historical analytics are defaults in the standard EC2 deployment.
+Collection, the current board and exact committed history keep their existing paths. Operator overrides survive
+recovery. See [release scope](MCP-RELEASE-SCOPE.md), [architecture diagram](diagrams/mcp-release.html),
+[AWS connections](AWS-CONNECTIONS.md) and [context review](MCP-CONTEXT-REVIEW.md).
+
+| Check | Result |
+| --- | --- |
+| Windows regression suite | 759 passed, 7 skipped in the full run; all 11 failures/errors passed on targeted recheck. Ten were caused by placing test fixtures in the intentionally ignored `.rgce` directory; one was a transient Windows file lock. Recheck used the normal temp directory. |
+| Terraform | Formatting and validation passed. Reviewed plan had no deletes. Applied standard deployment changes to our existing disposable lab, importing its experimental analytics role/workgroup into Terraform. |
+| Packaged deployment | Allowlisted candidate Spot zip SHA-256 `0126ae65c04f1d0b932cfc4fce0f381cafcfdcb4b7c36f0099011450a9821b7f`; replacement host confirmed that exact archive. This is a candidate, not a published version. |
+| Empty-directory restore | Restored 838 Hermes files, 3 configuration files and 1 GitHub configuration file into scratch; chat database and analytics skill present. |
+| Real instance replacement | ASG refresh completed; cloud-init done; desk, Hermes and validator active. Saved chat database restored. Managed transport and enabled analytics restored with canonical runtime paths. Both runtimes installed on the new host without the old experimental venv. |
+| Managed AWS MCP after replacement | Real EC2 region read passed with transport/evidence metadata. Writes, secret reads, invalid parameters and unknown accounts refused. |
+| Existing release checks on replacement | 19 non-mutating boot, plugin, board and storage checks passed, including a committed snapshot and zero outbox events. Baked-image optimization was excluded because the candidate was downloaded and verified on boot. |
+| Browser recovery | Six release-harness checks passed: Knowledge graph (39 concepts), GitHub setup page and board iframe rendered; no browser errors or failed API calls in the checked flows. Dashboard login was reused in memory only. |
+| Athena after replacement | All four reports SUCCEEDED through the real agent/desk socket: trend 2 rows, coverage 8, verification 0, scan coverage 6. Responses 1,389–1,898 characters, roughly 12–13 seconds. Zero verification rows means no matching observations, not successful remediation. |
+| Failure paths | Disabled analytics, actual unauthorized workgroup and unsupported account-scoped installation-wide report refused; allowed report subsequently succeeded. Isolated configuration copies did not alter the active profile. |
+| Timeout cleanup | Injected polling delay caused timeout and one actual scoped StopQueryExecution call. Query already SUCCEEDED before cancellation; a still-running query reaching CANCELLED was not demonstrated. |
+| Query controls | Standard Terraform enforces Athena engine 3, a 100 MiB/query scan cap, encrypted results under `analytics-results/`, and a separate assumed role without warehouse write grants. |
+| Agent routing/context | Earlier fresh lab chats discovered the skill/tool without tool names in the prompt. Corrected two-report answer showed about 13.6k total UI context tokens; not an MCP-only overhead measurement. |
+| Diagram | Archify showcase 9/9, zero errors/warnings; browser containment checks passed. |
+| Candidate publication hygiene | Candidate archive: 163 entries, no private-state filenames and no known lab account/subnet/secret ARN/name matches. Public candidate tree had no known lab identifiers. Final versioned artifacts and Git history require their own publication scan. |
+
+Limits: this run upgraded and replaced the existing lab; it did not create a second stack from zero or bake a new
+AMI. Scan-cap exhaustion, prolonged credential expiry, large-result pagination, multi-account managed transport,
+endpoint outage and a controlled concurrent-collection race were not exercised. Credentials are obtained afresh
+per report, but that alone is not proof of all expiry behavior. Authenticated Confluence/Drive/S3 onboarding and
+an existing-Hermes clean install are not certified by these public-document and EC2 tests. No release was tagged
+or published, and no inbound agent API/MCP endpoint was exposed.
+
+Earlier experiments remain in [knowledge evaluation](KNOWLEDGE-LIVE-EVALUATION.md),
+[MCP capabilities](MCP-CAPABILITIES.md) and [Athena evaluation](ATHENA-MCP-EVALUATION.md).
+
 ## v0.7.0 (2026-10-30)
 
 Validated on the release branch `release/v0.7.0` on the maintainer's Windows workstation, and on one throwaway AWS

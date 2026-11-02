@@ -257,6 +257,41 @@ def write_desk_profile(cfg):
     print(f'triage.yaml: {result.strip()}')
 
 
+def configure_mcp_defaults(cfg):
+    """Provision standard AWS paths after restoring operator state; retain explicit overrides."""
+    settings = {
+        'role_arn': cfg['analytics_role_arn'], 'workgroup': cfg['analytics_workgroup'],
+        'database': cfg['glue_database'], 'region': cfg['region'],
+        'python': '/opt/rgtriage/athena-venv/bin/python',
+    }
+    script = '''
+import json, pathlib, shutil, os, sys, yaml
+p=pathlib.Path(sys.argv[1]); data=yaml.safe_load(p.read_text()); settings=json.load(sys.stdin)
+data.setdefault('aws_investigation', {}).setdefault('transport', 'managed_mcp')
+analytics=data.setdefault('athena_analytics', {})
+analytics.setdefault('enabled', True)
+analytics.update(settings)
+tmp=p.with_suffix('.mcp.tmp'); shutil.copy2(p,tmp)
+st=p.stat(); os.chown(tmp,st.st_uid,st.st_gid)
+tmp.write_text(yaml.safe_dump(data,sort_keys=False)); os.replace(tmp,p)
+print(data['aws_investigation']['transport'])
+'''
+    transport = run(str(VENV / 'bin/python'), '-c', script, str(CONFIG / 'triage.yaml'),
+                    input=json.dumps(settings), capture_output=True).stdout.strip()
+    installers = ['install-athena-runtime.sh']
+    if transport == 'managed_mcp':
+        installers.append('install-aws-investigation.sh')
+    for installer in installers:
+        try:
+            result = subprocess.run(['bash', str(SOURCE / 'deploy/aws-single' / installer)],
+                                    timeout=180, capture_output=True, text=True)
+            available = result.returncode == 0
+        except subprocess.TimeoutExpired:
+            available = False
+        if not available:
+            print(f'{installer}: runtime unavailable; collection starts, affected queries fail closed. Rerun installer to repair.')
+
+
 def network():
     """Hermes container egress: HTTPS to the internet only; no instance metadata, no private ranges."""
     if subprocess.run(['docker', 'network', 'inspect', CONTAINER], capture_output=True).returncode:
@@ -527,7 +562,7 @@ def hermes_env(cfg, model_key):
               'HERMES_DASHBOARD_BASIC_AUTH_USERNAME': login['username'],
               'HERMES_DASHBOARD_BASIC_AUTH_PASSWORD': login['password'],
               'HERMES_DASHBOARD_BASIC_AUTH_SECRET': login['secret'],
-              'AWS_EC2_METADATA_DISABLED': 'true', 'HERMES_TUI_TOOLSETS': 'skills,clarify,file,rg_triage'}
+              'AWS_EC2_METADATA_DISABLED': 'true'}
     if model_key:
         values['MODEL_API_KEY'] = model_key
     if any('\n' in v or '\r' in v for v in values.values()):
@@ -582,6 +617,13 @@ ENABLE_PROFILE_PLUGIN = '''
 from pathlib import Path
 from ruamel.yaml import YAML
 yaml, path = YAML(), Path('/opt/data/profiles/%s/config.yaml')
+# Keep the launch/default profile restricted too. The old process-wide TUI override also
+# suppressed every configured MCP; native profile tool selection includes enabled MCPs.
+root_path = Path('/opt/data/config.yaml')
+root_data = yaml.load(root_path.read_text())
+root_data.setdefault('platform_toolsets', {})['cli'] = ['skills', 'clarify', 'file', 'rg_triage']
+with root_path.open('w') as f:
+    yaml.dump(root_data, f)
 data = yaml.load(path.read_text())
 enabled = data.setdefault('plugins', {}).setdefault('enabled', [])
 changed = False
@@ -654,6 +696,7 @@ def main():
     retire_webui()
     write_operator_token()
     write_desk_profile(cfg)
+    configure_mcp_defaults(cfg)
     network()
     model_key = ''
     if cfg.get('model_secret'):

@@ -5,6 +5,12 @@ license: Apache-2.0
 ---
 # Security queue triage
 
+For counts over time, cross-scan coverage or recorded verification aggregates, load `rg-analytics` and use its
+bounded Athena reports. Current queue, individual finding history and point-in-time evidence keep their existing tools.
+
+For AWS connection/transport questions, load `rg-capabilities` and its AWS connection reference. An unverified
+completeness warning does not establish truncation: respect API defaults/filters (DescribeRegions defaults to enabled regions).
+
 Use for "what needs attention", "show findings", "what's new", "why is this P1", morning/daily
 briefings, recording decisions, and **"is this finding real / what does it mean / who can access X / can X do Y"**,
 with or without a finding. Hand off: suspicious activity → `rg-investigate`; "fix it" → `rg-iac-fix`; owners and
@@ -92,3 +98,6 @@ command. It files the card in triage with no assignee: cards are a to-do list fo
 on them. Show the user the card id and the fix block. `action=cards` lists the desk's cards and their fix status;
 cards get a comment when a fix record moves (decided, pr, deployed, verified). A card does not record a decision:
 offer `decide status=fixing` (owner, PR, proof) separately.
+
+For IAM condition semantics, load `rg-triage` reference `references/iam-policy-condition-pitfalls.md`.
+Test missing keys and tag-name/value distinctions; simulation is not proof of a live action.

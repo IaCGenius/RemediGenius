@@ -16,6 +16,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SPOT_PARTS = ["rgtriage", "profiles/remedigenius", "deploy/aws-single/host.py", "deploy/aws-single/member-read-role.yaml",
+              "deploy/aws-single/install-aws-investigation.sh", "deploy/aws-single/install-terraform-guidance.sh",
+              "deploy/aws-single/aws-mcp-constraints.txt",
+              "deploy/aws-single/install-athena-runtime.sh", "deploy/aws-single/athena-mcp-constraints.txt",
               "LICENSE", "NOTICE"]
 SKIP = {"__pycache__", ".terraform", ".pytest_cache"}
 

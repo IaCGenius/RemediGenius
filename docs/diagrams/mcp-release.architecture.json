@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "RemediGenius CE \u2014 proposed MCP release",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "viewBox": [
+      1260,
+      640
+    ]
+  },
+  "components": [
+    {
+      "id": "chat",
+      "type": "frontend",
+      "label": "Your Hermes chat",
+      "sublabel": "Existing profile + dashboard",
+      "pos": [
+        40,
+        280
+      ],
+      "size": [
+        245,
+        82
+      ]
+    },
+    {
+      "id": "routing",
+      "type": "backend",
+      "label": "Task-aware skills",
+      "sublabel": "NEW: choose the right evidence",
+      "pos": [
+        330,
+        280
+      ],
+      "size": [
+        245,
+        82
+      ]
+    },
+    {
+      "id": "public",
+      "type": "external",
+      "label": "Public knowledge MCPs",
+      "sublabel": "AWS \u2022 Terraform \u2022 DeepWiki",
+      "pos": [
+        330,
+        60
+      ],
+      "size": [
+        245,
+        82
+      ]
+    },
+    {
+      "id": "desk",
+      "type": "security",
+      "label": "Guarded CE desk",
+      "sublabel": "Existing read / proposal boundary",
+      "pos": [
+        650,
+        280
+      ],
+      "size": [
+        245,
+        82
+      ]
+    },
+    {
+      "id": "aws",
+      "type": "cloud",
+      "label": "AWS account reads",
+      "sublabel": "DEFAULT: managed AWS MCP",
+      "pos": [
+        970,
+        80
+      ],
+      "size": [
+        245,
+        82
+      ]
+    },
+    {
+      "id": "athena",
+      "type": "backend",
+      "label": "Athena report worker",
+      "sublabel": "DEFAULT: historical reports",
+      "pos": [
+        970,
+        280
+      ],
+      "size": [
+        245,
+        82
+      ]
+    },
+    {
+      "id": "iceberg",
+      "type": "database",
+      "label": "S3 + Iceberg history",
+      "sublabel": "Existing durable security evidence",
+      "pos": [
+        970,
+        500
+      ],
+      "size": [
+        245,
+        82
+      ]
+    },
+    {
+      "id": "okf",
+      "type": "database",
+      "label": "Reviewed OKF",
+      "sublabel": "NEW: provenance + draft review",
+      "pos": [
+        330,
+        500
+      ],
+      "size": [
+        245,
+        82
+      ]
+    },
+    {
+      "id": "docs",
+      "type": "external",
+      "label": "Your documents",
+      "sublabel": "Files + opt-in vendor connectors",
+      "pos": [
+        40,
+        500
+      ],
+      "size": [
+        245,
+        82
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "chat",
+      "to": "routing"
+    },
+    {
+      "from": "routing",
+      "to": "public",
+      "label": "discover"
+    },
+    {
+      "from": "routing",
+      "to": "desk",
+      "label": "scoped tools"
+    },
+    {
+      "from": "desk",
+      "to": "aws",
+      "label": "audit role"
+    },
+    {
+      "from": "desk",
+      "to": "athena",
+      "label": "report",
+      "labelDy": 25
+    },
+    {
+      "from": "athena",
+      "to": "iceberg",
+      "label": "read snapshots",
+      "labelDy": 45
+    },
+    {
+      "from": "docs",
+      "to": "okf",
+      "label": "review"
+    },
+    {
+      "from": "routing",
+      "to": "okf",
+      "label": "retrieve",
+      "labelDy": 45
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Better answers",
+      "items": [
+        "Vendor guidance + your approved runbooks",
+        "Existing fix validation and human approval retained"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Controlled context",
+      "items": [
+        "Discover tools and skills only when needed",
+        "Athena returns small reports, not raw history"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Release status",
+      "items": [
+        "AWS MCP + Athena enabled by deployment",
+        "Recovery and packaged-release gates required"
+      ]
+    }
+  ]
+}

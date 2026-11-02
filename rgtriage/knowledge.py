@@ -19,6 +19,7 @@ import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
+from urllib.parse import urlsplit
 
 from . import __version__, config, okf, playbooks
 
@@ -478,13 +479,32 @@ def compose(kind: str, fields: dict, actor: str) -> tuple[dict, str]:
 
 
 def import_reference(markdown: str, original_name: str, actor: str, sha256: str = "", converter: str = "",
-                     title: str = "", b: okf.Bundle | None = None) -> dict:
+                     title: str = "", b: okf.Bundle | None = None, source_uri: str = "",
+                     source_revision: str = "") -> dict:
     """Converted document text becomes a Reference concept (source material, not reviewed knowledge)."""
     b = b or bundle()
     check_actor(actor)
+    source_uri = source_uri.strip()
+    source_revision = source_revision.strip()
+    if source_uri:
+        try:
+            uri = urlsplit(source_uri)
+            valid = (len(source_uri) <= 2048 and uri.scheme in ("https", "s3") and uri.hostname
+                     and not uri.username and not uri.password and not uri.query and not uri.fragment
+                     and not any(c.isspace() or ord(c) < 32 for c in source_uri))
+        except ValueError:
+            valid = False
+        if not valid:
+            raise okf.OKFError("source must be a canonical https:// or s3:// URI without credentials, query or fragment")
+    if source_revision and not source_uri:
+        raise okf.OKFError("source revision needs a source URI")
+    if len(source_revision) > 200 or any(ord(c) < 32 for c in source_revision):
+        raise okf.OKFError("source revision must be a single line of at most 200 characters")
     if sha256:
         for c in b.concepts():
-            if c.type == "Reference" and _ext(c).get("original_sha256") == sha256:
+            if (c.type == "Reference" and _ext(c).get("original_sha256") == sha256
+                    and _ext(c).get("source_uri", "") == source_uri
+                    and _ext(c).get("source_revision", "") == source_revision):
                 return {"path": c.path, "characters": len(c.body), "truncated": bool(_ext(c).get("truncated")), "existing": True}
     name = PurePosixPath(original_name.replace("\\", "/")).name[:180] or "document"
     limit = okf.MAX_CONCEPT_BYTES - 20_000
@@ -494,10 +514,11 @@ def import_reference(markdown: str, original_name: str, actor: str, sha256: str 
         text = text.encode("utf-8")[:limit].decode("utf-8", "ignore") + "\n\n[truncated: the document is longer than this reference keeps]"
     title = (title or PurePosixPath(name).stem.replace("_", " ").replace("-", " ")).strip()[:120]
     meta = {"type": "Reference", "title": title, "description": f"Imported from {name}",
-            "sources": [{"id": "original", "resource": f"file:{name}", "title": name}],
+            "sources": [{"id": "original", "resource": source_uri or f"file:{name}", "title": name}],
             "generated": {"by": converter or "rgtriage/import", "at": okf.now_iso()},
             "remedigenius": {"original_name": name, **({"original_sha256": sha256} if sha256 else {}),
-                             "imported_by": actor, "truncated": truncated}}
+                             "imported_by": actor, "truncated": truncated,
+                             **({"source_uri": source_uri, "source_revision": source_revision} if source_uri else {})}}
     rel = f"references/{okf.slug(title)}.md"
     n = 2
     while b.path_of(rel).exists():

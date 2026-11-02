@@ -31,6 +31,20 @@ No action is needed. The boot log prints `recovery: {...}` with the state and co
 A missing catalog, wrong installation, schema mismatch or unreachable storage leaves `state: blocked` with a reason.
 It never looks like a healthy empty installation.
 
+## MCP runtimes after replacement (next release)
+
+Standard EC2 bootstrap restores the profile, supplies the Terraform-managed analytics role/workgroup,
+and reinstalls pinned AWS MCP and Athena dependencies outside the checkpointed Hermes home.
+Missing settings receive managed AWS MCP and enabled analytics defaults; explicit direct/disabled
+operator choices survive. Runtime installation failure leaves collection running and affected reports
+unavailable, never a successful empty result. Repair using the shipped
+`deploy/aws-single/install-aws-investigation.sh` or `install-athena-runtime.sh` on the host, then retry.
+
+Verify both a guarded AWS read and all four analytics reports after recovery, not just service health.
+The November candidate passed this check after replacing the live lab instance; see
+[release validation](RELEASE-VALIDATION.md). Query results are disposable in `analytics-results/`;
+the Iceberg warehouse remains the evidence authority.
+
 ## S3 or Glue outage
 
 - **During a scan:** raw pages wait in the bounded local buffer (`storage.buffer_limit_mb`, default 256 MB). The board

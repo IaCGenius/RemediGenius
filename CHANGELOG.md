@@ -1,5 +1,20 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
+## Unreleased — MCP release candidate
+
+- Reuse native Hermes connections for AWS Knowledge and vendor skills, Terraform Registry, DeepWiki and
+  document-source onboarding, with task-specific routing and reviewed OKF ingestion.
+- Make managed AWS MCP the default EC2 investigation path behind the existing desk guard and explicit audit roles.
+- Add bounded Athena/Data Processing MCP historical reports through the deferred `rg_analytics` tool and
+  on-demand skill. Preserve current queue behavior and committed-batch history for individual/as-of evidence.
+- Measure context in real chat and correct coverage interpretation: collection checks are not days, repeated
+  observations are not distinct issues, and failed analytics is unavailable rather than zero.
+
+Running-lab validation and remaining release gates: [context review](docs/MCP-CONTEXT-REVIEW.md),
+[Athena evaluation](docs/ATHENA-MCP-EVALUATION.md), and [release validation](docs/RELEASE-VALIDATION.md).
+Default provisioning, packaged instance replacement and report recovery passed on the existing Spot lab;
+this entry is not a published release. The architecture diagram and native Hermes API/MCP options are documented.
+
 ## v0.7.0 — 2026-10-30
 
 **A board that lives in the chat, a page for the meeting, and a Dashboard that can refresh itself.** v0.6.0 made the

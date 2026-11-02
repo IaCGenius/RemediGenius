@@ -164,6 +164,12 @@ ENABLE_PROFILE_PLUGIN = r'''
 from pathlib import Path
 from ruamel.yaml import YAML
 yaml, path = YAML(), Path("/opt/data/profiles/remedigenius/config.yaml")
+# Native profile selection retains restricted built-ins while including enabled MCPs.
+root_path = Path("/opt/data/config.yaml")
+root_data = yaml.load(root_path.read_text())
+root_data.setdefault("platform_toolsets", {})["cli"] = ["skills", "clarify", "file", "rg_triage"]
+with root_path.open("w") as f:
+    yaml.dump(root_data, f)
 data = yaml.load(path.read_text())
 enabled = data.setdefault("plugins", {}).setdefault("enabled", [])
 if "rg-knowledge" not in enabled:
@@ -260,7 +266,7 @@ def start_hermes(args):
     docker("rm", "-f", HERMES, check=False, capture=True)
     env = {"HERMES_DASHBOARD": "1", "HERMES_DASHBOARD_PORT": "9120", "HERMES_DASHBOARD_BASIC_AUTH_USERNAME": login["username"],
            "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD": login["password"], "HERMES_DASHBOARD_BASIC_AUTH_SECRET": login["secret"],
-           "AWS_EC2_METADATA_DISABLED": "true", "HERMES_TUI_TOOLSETS": "skills,clarify,file,rg_triage"}
+           "AWS_EC2_METADATA_DISABLED": "true"}
     flags = sum((["-e", f"{k}={v}"] for k, v in env.items()), [])
     if os.environ.get("REMEDIGENIUS_MODEL_KEY"):
         os.environ["MODEL_API_KEY"] = os.environ["REMEDIGENIUS_MODEL_KEY"]
