@@ -8,6 +8,7 @@
 - Checkpoint the approved OKF bundle separately from the rebuildable desk cache. Existing installations need a
   knowledge checkpoint before replacement; see [upgrade instructions](docs/UPGRADING.md).
 - Strengthen the Spot gate with real managed AWS and four Athena report calls.
+- Allow Athena workgroup cleanup when the operator explicitly selects `delete_data_on_destroy` for a disposable stack.
 
 - Reuse native Hermes connections for AWS Knowledge and vendor skills, Terraform Registry, DeepWiki and
   document-source onboarding, with task-specific routing and reviewed OKF ingestion.

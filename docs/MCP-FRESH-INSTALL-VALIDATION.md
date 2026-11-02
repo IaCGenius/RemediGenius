@@ -31,6 +31,10 @@ desk cache. Existing live installations must checkpoint this home before replace
 cannot recreate approved concepts they never contained; original imports/drafts may support manual recovery,
 but must not silently be reclassified as human-reviewed.
 
+Teardown exposed a fourth issue: Athena refuses to remove a nonempty workgroup by default. The workgroup's
+`force_destroy` now follows `delete_data_on_destroy`, matching the deployment's explicit disposable-data
+choice. Normal deployments retain the conservative default; recursive cleanup is not enabled unconditionally.
+
 ## Feature evidence
 
 - Four real Athena reports succeeded from the fresh warehouse: trend, coverage, verification and scan
@@ -63,6 +67,17 @@ AWS region read and all four successful Athena reports. The recovered Knowledge 
 including the synthetic Reference and reviewed Team. Public AWS skill, Prowler and Terraform Registry reads
 also passed again after automatic recovery. No model credential or authenticated document-source credential
 was printed or added to the public artifacts.
+
+## Teardown
+
+The new stack was destroyed: Terraform reported zero managed resources, the test ASG and Athena workgroup
+were absent, and EC2 reads found no nonterminated instances for either test lab. The earlier lab remains
+at desired capacity zero with its existing S3 state retained. No unrelated maintainer stack was changed.
+
+The first destroy required explicit recursive removal of the disposable Athena workgroup's query history;
+the final Terraform module now ties that setting to `delete_data_on_destroy`. Provider schema inspection,
+formatting and Terraform validation passed. This flag was not tested by provisioning another stack after
+cleanup; the equivalent recursive AWS delete succeeded on the test workgroup.
 
 Authenticated vendor document connectors still require customer sign-in and representative content;
 this run does not certify them. Long-duration credential expiry, scan-cap exhaustion and large-result
