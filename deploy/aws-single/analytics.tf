@@ -1,6 +1,7 @@
 # Standard historical analytics path. The agent never receives this role's credentials.
 resource "aws_athena_workgroup" "analytics" {
-  name = "${var.name}-analytics"
+  name          = "${var.name}-analytics"
+  force_destroy = var.delete_data_on_destroy
   configuration {
     enforce_workgroup_configuration    = true
     publish_cloudwatch_metrics_enabled = true

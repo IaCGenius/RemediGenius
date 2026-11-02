@@ -21,7 +21,8 @@ No action is needed. The boot log prints `recovery: {...}` with the state and co
 
 ## Replacement Spot instance (empty disk)
 
-1. The host restores the Hermes home, the small configuration home (`triage.yaml`) and the GitHub configuration.
+1. The host restores the Hermes home, the small configuration home (`triage.yaml`), GitHub configuration and
+   the separate `knowledge` home containing approved OKF concepts and imported References.
 2. The desk adopts the configured installation ID and namespace, verifies that the Glue database and tables belong to
    it, and starts a new recovery epoch.
 3. It rebuilds current views from `current_*` tables, then replays events newer than those tables' watermark when the

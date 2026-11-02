@@ -74,6 +74,8 @@ echo "$b" | grep -qiE "P[1-4]|no open findings"; check "first scan produced a bo
 bucket=$(python3 -c "import json; print(json.load(open('/opt/remedigenius/config.json'))['bucket'])" 2>/dev/null)
 r=$(aws s3api list-objects-v2 --bucket "$bucket" --prefix raw/ --max-keys 1 --query 'KeyCount' --output text 2>&1)
 check "raw evidence exists once in S3" $([ "$r" = "1" ]; echo $?) "$r"
+m=$($D aws ec2 describe_regions --region __REGION__ 2>&1)
+check "default managed AWS MCP returns account evidence" $(echo "$m" | grep -q 'transport managed AWS MCP' && echo "$m" | grep -q '"Regions"'; echo $?) "guarded describe_regions response"
 w=$(aws s3api list-objects-v2 --bucket "$bucket" --prefix warehouse/ --max-keys 1 --query 'KeyCount' --output text 2>&1)
 check "Iceberg warehouse exists in S3" $([ "$w" = "1" ]; echo $?) "$w"
 # The first scan can still be committing when the board is already readable. Wait for the snapshot and an empty
@@ -85,6 +87,11 @@ for i in $(seq 1 36); do
 done
 echo "$h" | grep -Eq '"snapshot_id": [0-9]+'; check "history reads a committed snapshot (not an empty store)" $? "$(echo "$h" | head -1 | cut -c1-120)"
 echo "$h" | grep -q '"outbox_events": 0'; check "the scan outbox is empty after the commit" $? "$(echo "$h" | grep -o '"outbox_events": [0-9]*' | head -1)"
+for report in trend coverage verification scan_coverage; do
+  a=$($D history --analytics-report "$report" --days 7 2>&1)
+  echo "$a" | python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["status"] == "SUCCEEDED" and isinstance(r["rows"],list)' >/dev/null 2>&1
+  check "default Athena report $report succeeds" $? "real report; an unavailable or malformed response fails"
+done
 # --- the later-CE surfaces (CE-22/CE-23), through the same desk CLI the agent calls
 q=$($D campaign --json 2>&1 | head -c 300)
 echo "$q" | grep -q '"query": "campaigns"'; check "campaign query answers from the committed campaign tables" $? "$(echo "$q" | cut -c1-80)"

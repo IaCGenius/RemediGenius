@@ -2,6 +2,16 @@
 
 ## Next MCP release (from v0.7.0)
 
+Before replacing an existing v0.7.0 or early MCP candidate instance, checkpoint its approved knowledge
+explicitly on that host (replace the bucket placeholder):
+
+```sh
+sudo rgdesk durable checkpoint --url 's3://<deployment-bucket>/state' --home knowledge=/data/rgtriage/knowledge
+```
+
+Require a successful saved/unchanged result before replacement. The older three-home checkpoint does not
+contain the approved bundle; copies of imported originals or drafts do not preserve its review decisions.
+
 Apply the new standard `deploy/aws-single` Terraform with the reviewed candidate archive, checkpoint the
 existing profile, then replace the instance. The deployment adds a scoped analytics role and Athena workgroup;
 bootstrap installs pinned runtimes and supplies missing managed-MCP/enabled-analytics settings. Explicit

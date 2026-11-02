@@ -1,5 +1,10 @@
 # Release validation — RemediGenius Community Edition
 
+Follow-up testing of the merged candidate on a stack created from zero caught a default AWS MCP dependency
+conflict that the existing gate missed. See [fresh-install validation](MCP-FRESH-INSTALL-VALIDATION.md)
+for the corrective bootstrap changes and stronger feature checks. The earlier replacement-only pass below
+must not be read as proof that the original merged candidate passed clean installation.
+
 ## MCP candidate (validated 2026-11-02; not published)
 
 AWS managed MCP investigation and Athena historical analytics are defaults in the standard EC2 deployment.

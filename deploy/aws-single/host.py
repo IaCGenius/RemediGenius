@@ -1,10 +1,10 @@
 """RemediGenius Community Edition (RemediGenius-CE) — Spot host bootstrap.
 
 The instance is disposable: S3 holds the durable state. At boot this script restores the
-Hermes home and the desk state from S3 (only into empty folders), starts the desk service
+Hermes, configuration, GitHub and reviewed knowledge homes from S3 (only into empty folders), starts the desk service
 (the only component with AWS credentials, reading through the read-only audit role), and
 runs Hermes in the pinned container with the `remedigenius` profile and no AWS credentials.
-The desk service checkpoints both homes to S3 every 2 minutes, after scans and decisions,
+The desk service checkpoints these homes to S3 every 2 minutes, after scans and decisions,
 on shutdown, and as soon as AWS announces a Spot interruption.
 """
 import argparse
@@ -25,6 +25,7 @@ SOURCE = ROOT / 'source'
 UID = 10000                               # Hermes container user; also the desk service user
 HERMES_HOME = Path('/data/hermes')
 DESK = Path('/data/rgtriage')
+KNOWLEDGE = DESK / 'knowledge'
 CONFIG = Path('/data/rgconfig')          # triage.yaml only; facts and cache are rebuilt from S3/Iceberg
 VUID = 10002                              # validation service user: runs Terraform, tflint and cfn-lint; no access to the GitHub key
 VALIDATE_HOME = Path('/var/lib/rgvalidate')
@@ -91,8 +92,14 @@ def install_runtime():
     # A baked image already has the pinned wheels. Re-install only when this release pins a different set,
     # so a newer release on an older image still gets the packages its own host.py asks for.
     marker = baked_marker()
-    if marker is None or marker.get('packages') != PACKAGES:
-        run(str(VENV / 'bin/pip'), 'install', '--quiet', '--disable-pip-version-check', *PACKAGES)
+    constraints = SOURCE / 'deploy/aws-single/aws-mcp-constraints.txt'
+    constraints_sha = hashlib.sha256(constraints.read_bytes()).hexdigest()
+    if (marker is None or marker.get('packages') != PACKAGES
+            or marker.get('runtime_constraints_sha256') != constraints_sha):
+        # Resolve the desk and its managed-MCP extension against the same snapshot. Installing
+        # unconstrained transitive desk dependencies first can make the later frozen install conflict.
+        run(str(VENV / 'bin/pip'), 'install', '--quiet', '--disable-pip-version-check',
+            '-c', str(constraints), *PACKAGES)
     if CODE.exists():
         shutil.rmtree(CODE)
     shutil.copytree(SOURCE / 'rgtriage', CODE / 'rgtriage', ignore=shutil.ignore_patterns('__pycache__'))
@@ -116,6 +123,8 @@ def bake(image: str, version: str) -> None:
         'image': image,
         'source_sha256': hashlib.sha256(archive.read_bytes()).hexdigest() if archive.exists() else '',
         'packages': PACKAGES,
+        'runtime_constraints_sha256': hashlib.sha256(
+            (SOURCE / 'deploy/aws-single/aws-mcp-constraints.txt').read_bytes()).hexdigest(),
     }, indent=1) + '\n')
     BAKED.chmod(0o444)
     print(f"baked {version or 'unknown version'}: {image}")
@@ -164,12 +173,13 @@ def desk(*args, user=None, **kw):
 
 def restore_state(cfg):
     """Durable copy first: an empty disk (new Spot instance) is filled from the latest S3 checkpoints."""
-    for path in (HERMES_HOME, DESK, CONFIG, GITHUB):
+    for path in (HERMES_HOME, DESK, CONFIG, GITHUB, KNOWLEDGE):
         path.mkdir(parents=True, exist_ok=True)
     result = desk('durable', 'restore', '--url', durable_url(cfg), '--home', f'hermes={HERMES_HOME}',
-                  '--home', f'config={CONFIG}', '--home', f'github={GITHUB}', '--owner', f'{UID}:{UID}', capture_output=True)
+                  '--home', f'config={CONFIG}', '--home', f'github={GITHUB}',
+                  '--home', f'knowledge={KNOWLEDGE}', '--owner', f'{UID}:{UID}', capture_output=True)
     print(result.stdout.strip())
-    for path in (HERMES_HOME, DESK, CONFIG, GITHUB, HERMES_HOME / 'proposals', DESK / '.home', DESK / '.lineage', IAC, HERMES_HOME / 'work'):
+    for path in (HERMES_HOME, DESK, CONFIG, GITHUB, KNOWLEDGE, HERMES_HOME / 'proposals', DESK / '.home', DESK / '.lineage', IAC, HERMES_HOME / 'work'):
         path.mkdir(parents=True, exist_ok=True)
         os.chown(path, UID, UID)
     GITHUB.chmod(0o700)  # only the desk user; the folder is not mounted into the Hermes container
@@ -290,6 +300,34 @@ print(data['aws_investigation']['transport'])
             available = False
         if not available:
             print(f'{installer}: runtime unavailable; collection starts, affected queries fail closed. Rerun installer to repair.')
+
+
+def restore_terraform_guidance():
+    """Reinstall the selected public runtime: installs/ is deliberately not checkpointed."""
+    profile = HERMES_HOME / 'profiles' / PROFILE / 'config.yaml'
+    script = '''
+import json,sys,yaml
+c=yaml.safe_load(open(sys.argv[1])) or {}
+print(json.dumps((c.get('mcp_servers') or {}).get('terraform-registry') or {}))
+'''
+    server = json.loads(run(str(VENV / 'bin/python'), '-c', script, str(profile),
+                            capture_output=True).stdout)
+    if not terraform_guidance_selected(server):
+        return
+    try:
+        result = subprocess.run(['bash', str(SOURCE / 'deploy/aws-single/install-terraform-guidance.sh')],
+                                timeout=180, capture_output=True, text=True)
+        available = result.returncode == 0
+    except subprocess.TimeoutExpired:
+        available = False
+    if not available:
+        print('Terraform guidance runtime unavailable; rerun install-terraform-guidance.sh to repair.')
+
+
+def terraform_guidance_selected(server):
+    return (isinstance(server, dict) and server.get('enabled', True) is not False
+            and server.get('command') == '/usr/bin/env'
+            and '/opt/data/installs/terraform-mcp/1.4.1/terraform-mcp-server' in (server.get('args') or []))
 
 
 def network():
@@ -470,7 +508,7 @@ def units(cfg: dict) -> dict:
               f'ReadWritePaths={DESK.as_posix()} {CONFIG.as_posix()} {GITHUB.as_posix()} {IAC.as_posix()}\n')
     python = (VENV / 'bin/python').as_posix()
     homes = (f'--home hermes={HERMES_HOME.as_posix()} --home config={CONFIG.as_posix()} '
-             f'--home github={GITHUB.as_posix()}')
+             f'--home github={GITHUB.as_posix()} --home knowledge={KNOWLEDGE.as_posix()}')
     store = durable_url(cfg)
     memory = int(cfg.get('container_memory_mb', 6144))
     mounts = ' '.join(CONTAINER_MOUNTS)
@@ -738,6 +776,7 @@ def main():
         subprocess.run(['docker', 'exec', CONTAINER, 'hermes', 'profile', 'install', '/opt/remedigenius-package',
                         '--name', PROFILE, '--yes'], check=True)
     sync_profile(SOURCE, HERMES_HOME)
+    restore_terraform_guidance()
     seed_model_key()
     enable_knowledge_tab()
     in_container('hermes', 'profile', 'use', PROFILE)

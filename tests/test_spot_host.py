@@ -342,6 +342,16 @@ def test_glue_permission_is_scoped_to_the_installation_database():
     assert 'Effect = "Deny"' in iam
 
 
+def test_reviewed_knowledge_is_checkpointed_separately_from_rebuildable_cache(host):
+    unit = host.units(CFG)['remedigenius-desk.service']
+    for line in unit.splitlines():
+        if line.startswith(('ExecStart=', 'ExecStopPost=')):
+            assert '--home knowledge=/data/rgtriage/knowledge' in line
+            assert '--home desk=' not in line
+    import inspect
+    assert "f'knowledge={KNOWLEDGE}'" in inspect.getsource(host.restore_state)
+
+
 def test_mcp_bootstrap_restores_defaults_without_losing_operator_state(host, tmp_path, monkeypatch):
     import contextlib
     import io
