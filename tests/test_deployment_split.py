@@ -173,6 +173,7 @@ def test_first_boot_skips_the_download_when_the_image_already_has_the_verified_a
 def test_bake_writes_a_marker_the_boot_can_read(host, tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(host, "ROOT", tmp_path)
+    monkeypatch.setattr(host, "SOURCE", ROOT)
     monkeypatch.setattr(host, "BAKED", tmp_path / ".baked")
     monkeypatch.setattr(host, "install_runtime", lambda: calls.append("runtime"))
     monkeypatch.setattr(host, "run", lambda *a, **k: calls.append(" ".join(a)))
@@ -182,6 +183,8 @@ def test_bake_writes_a_marker_the_boot_can_read(host, tmp_path, monkeypatch):
     assert marker["version"] == "0.6.0" and marker["image"].endswith("@sha256:abc")
     assert marker["packages"] == host.PACKAGES
     assert marker["source_sha256"] == __import__("hashlib").sha256(b"zip").hexdigest()
+    assert marker["runtime_constraints_sha256"] == __import__("hashlib").sha256(
+        (ROOT / "deploy/aws-single/aws-mcp-constraints.txt").read_bytes()).hexdigest()
     assert "docker pull nousresearch/hermes-agent@sha256:abc" in calls and "runtime" in calls
 
 
@@ -200,7 +203,8 @@ def test_a_baked_image_skips_the_wheel_install_unless_this_release_pins_differen
     baked = tmp_path / "marker.json"
     monkeypatch.setattr(host, "BAKED", baked)
 
-    baked.write_text(json.dumps({"packages": host.PACKAGES}))
+    baked.write_text(json.dumps({"packages": host.PACKAGES, "runtime_constraints_sha256":
+        __import__("hashlib").sha256((ROOT / "deploy/aws-single/aws-mcp-constraints.txt").read_bytes()).hexdigest()}))
     host.install_runtime()
     assert not [c for c in calls if "pip" in c], calls
 
