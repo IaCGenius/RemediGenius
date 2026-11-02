@@ -76,8 +76,10 @@ HCP workspace/run mutation tools are not exposed. Local Terraform validation sta
 validates a scratch copy without applying. This is an upstream MCP installation, not extracted/reimplemented
 Registry API code. AWS's old Terraform MCP is deprecated in favor of HashiCorp's official implementation.
 
-The installer is optional and has not been wired into every fresh CE deployment or released archive. Its
-existing-connection rerun passed on the lab; a separate fresh-stack release gate remains required.
+The installer is included in the candidate archive and remains an explicit onboarding choice. After the
+shipped connection is enabled, bootstrap restores its runtime after replacement because `installs/` is
+excluded from checkpoints. Disabled and custom connections are preserved. See
+[fresh-install validation](MCP-FRESH-INSTALL-VALIDATION.md).
 
 ## Catalog review: useful next, but not all enabled
 

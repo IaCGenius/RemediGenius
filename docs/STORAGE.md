@@ -16,11 +16,11 @@ made history an archive rather than data. v0.5.0 makes object storage the system
 | Iceberg on S3 | OCSF finding tables; CE tables for scan runs, coverage, decisions, fix events, verification attempts, GitHub operations and signals; current-state tables | system of record for facts |
 | Local SQLite | current views, in-progress collection pages, commit outbox | cache; rebuildable, never the only copy |
 | Hermes home checkpoint | conversations, Kanban, skills, profile, GitHub configuration | unchanged from v0.4.0 |
-| OKF bundle | reviewed organizational knowledge | unchanged from v0.4.0 |
+| OKF bundle | reviewed organizational knowledge | separate `knowledge` checkpoint on EC2; not part of the rebuildable desk cache |
 
 This repository ships no external database, no Spark or always-on query service, no retained EBS volume and no
 distributed scheduler. PyIceberg runs in the desk process, and history is read in-process with Arrow.
-Athena is optional for operators.
+Athena is the standard EC2 path for bounded historical reports. Collection and storage commits do not depend on it.
 
 ## Who may write what
 

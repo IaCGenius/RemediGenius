@@ -12,7 +12,8 @@ its own. Self-hosting the application does not make inference local: that depend
 | Fixed historical report SQL and aggregates | Athena workgroup; private `analytics-results/` objects | Historical analytics; 100 MiB per-query scan cutoff, not a cumulative budget |
 | Every collected AWS response page (findings, configuration, alarms) | your S3 bucket under `raw/` (Spot) or the durable folder (workstation) | during every scan, before a fact derived from it is committed |
 | Findings and desk facts (OCSF findings, scans, coverage, decisions, fix and GitHub events) | Apache Iceberg tables in the same bucket or local warehouse | one commit per completed scan, and one per human decision or GitHub operation |
-| Conversations, decisions, knowledge, settings, model key | the Hermes home checkpoint in your S3 bucket (Spot) or a local folder (workstation) | every 2 minutes |
+| Conversations, imported originals, drafts, settings and model key | Hermes/configuration checkpoints in your S3 bucket (Spot) or a local folder (workstation) | every 2 minutes |
+| Approved OKF concepts and source References | Separate `knowledge` checkpoint of `/data/rgtriage/knowledge` in your private S3 bucket (Spot) | every 2 minutes and at orderly shutdown/Spot notice; uncheckpointed changes can be lost |
 | Pull request lookups (optional, only if you configure a token) | GitHub | fix tracking |
 | Repository reads and pull requests (optional, only if you connect GitHub: [docs/GITHUB.md](GITHUB.md)) | GitHub (`api.github.com`, from the desk, never the agent) | repository files of the connected repo, the proposed change and a sanitized PR description |
 

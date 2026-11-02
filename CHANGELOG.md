@@ -2,6 +2,13 @@
 
 ## Unreleased — MCP release candidate
 
+- Fix fresh-host AWS MCP installation by resolving the desk and extension against one tested dependency snapshot;
+  invalidate older baked runtime markers when that snapshot changes.
+- Restore the enabled shipped Terraform Registry runtime after replacement, while preserving custom/disabled connections.
+- Checkpoint the approved OKF bundle separately from the rebuildable desk cache. Existing installations need a
+  knowledge checkpoint before replacement; see [upgrade instructions](docs/UPGRADING.md).
+- Strengthen the Spot gate with real managed AWS and four Athena report calls.
+
 - Reuse native Hermes connections for AWS Knowledge and vendor skills, Terraform Registry, DeepWiki and
   document-source onboarding, with task-specific routing and reviewed OKF ingestion.
 - Make managed AWS MCP the default EC2 investigation path behind the existing desk guard and explicit audit roles.
