@@ -1,5 +1,25 @@
 # Release validation — RemediGenius Community Edition
 
+## v0.8.0 release preparation (2026-11-02)
+
+The merged MCP feature commit `e7deeb0d3ddcb1aa9d28ad71913577e8fcc8cdda` was deployed from zero on plain
+Amazon Linux 2023 with no copied lab profile or warehouse. All **54 host checks and six browser checks** passed.
+Real browser workflows then verified managed AWS account reads, Athena skill routing with query/snapshot evidence,
+native AWS Knowledge and DeepWiki onboarding and content retrieval, PDF conversion/import, source URL/revision,
+AI draft review/approval and a chat answer citing the approved Team and its Reference. No page errors were recorded.
+
+The disposable stack was destroyed by Terraform with zero managed resources remaining; independent AWS reads
+confirmed the test ASG, EC2 instance and Athena workgroup were absent. This validates the conditional Athena cleanup
+fix through a real create/query/destroy cycle without manual workgroup deletion.
+
+The v0.8.0 preparation changes version declarations and release documentation only; the live-tested feature build
+still identified itself as 0.7.0. These results do not claim a byte-identical final-version deployment or a new baked
+AMI. Packaged cold recovery of approved knowledge and the Terraform Registry runtime was tested in the preceding
+run with the same feature archive. See [detailed fresh-install evidence](MCP-FRESH-INSTALL-VALIDATION.md).
+
+Authenticated document providers, an existing-Hermes clean install, large-result pagination and prolonged credential
+expiry remain unverified. Raw screenshots, logs, credentials, account inventories and state are private, not shipped.
+
 Follow-up testing of the merged candidate on a stack created from zero caught a default AWS MCP dependency
 conflict that the existing gate missed. See [fresh-install validation](MCP-FRESH-INSTALL-VALIDATION.md)
 for the corrective bootstrap changes and stronger feature checks. The earlier replacement-only pass below
