@@ -116,6 +116,19 @@ def test_the_community_stack_still_works_without_an_image_and_uses_one_when_give
     assert 'resource "aws_s3_bucket" "data"' in single and 'resource "aws_autoscaling_group" "host"' in single
 
 
+def test_split_stack_supplies_the_analytics_role_and_workgroup_the_boot_reads():
+    """v0.8.0's host.py reads both keys unconditionally; a split stack without them dies on first boot."""
+    static = read("aws-static", "main.tf")
+    private = read("aws-private", "main.tf")
+    for owned in ('resource "aws_athena_workgroup" "analytics"',
+                  'resource "aws_iam_role" "analytics"',
+                  'resource "aws_iam_role_policy" "analytics_assume"',
+                  'output "analytics_role_arn"', 'output "analytics_workgroup"'):
+        assert owned in static, owned
+    assert "analytics_role_arn  = data.terraform_remote_state.static.outputs.analytics_role_arn" in private
+    assert "analytics_workgroup = data.terraform_remote_state.static.outputs.analytics_workgroup" in private
+
+
 def test_every_root_declares_its_own_state_key_and_the_shared_backend_stays_a_template():
     for root, key in (("aws-static", "aws-static/terraform.tfstate"), ("aws-private", "aws-private/terraform.tfstate"),
                       ("ami", "aws-ami/terraform.tfstate")):

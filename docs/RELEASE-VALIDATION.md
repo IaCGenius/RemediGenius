@@ -1,5 +1,20 @@
 # Release validation — RemediGenius Community Edition
 
+## v0.8.1 split-stack fix (2026-11-02)
+
+The v0.8.0 boot failed on the maintainer split stack with `KeyError: 'analytics_role_arn'`: `deploy/aws-static` did
+not create the analytics role/workgroup that `host.py` reads unconditionally, and `deploy/aws-private` did not pass
+them. The failure was reproduced on a real Spot first boot from a v0.8.0 baked image and a v0.8.0 release archive.
+
+After the fix, `deploy/aws-static` was applied (4 resources added, 0 changed, 0 destroyed) and the disposable compute
+root was replaced. On the replacement instance, `cloud-init` finished with status `done`, the desk, validator and
+Hermes services were active, the pinned Hermes container was running, and the dashboard answered HTTP 200 through an
+SSM tunnel. The baked marker and archive hash confirmed v0.8.0 content; the version declarations are now 0.8.1.
+
+The one-apply community install (`deploy/aws-single`) is not changed by this release. Offline validation: **773 passed,
+7 skipped**; `terraform validate` passed for both modified roots. This does not certify a new baked AMI or a fresh
+one-apply deployment of v0.8.1.
+
 ## v0.8.0 release preparation (2026-11-02)
 
 The merged MCP feature commit `e7deeb0d3ddcb1aa9d28ad71913577e8fcc8cdda` was deployed from zero on plain
