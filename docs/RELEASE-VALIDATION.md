@@ -139,8 +139,8 @@ Three runs, each on its own stack and image, all destroyed (20 resources, bucket
 
 | Run | Result |
 | --- | --- |
-| `rgce-v060-gate` | **53 of 54** — the plugin manifests shipped `0.5.0` (defect 1) |
-| `rgce-v060-gate2` | **54 of 54** on image `ami-0445cfd93d63d8dd8`, archive `8d450f99…`, but that archive was not reproducible from the commit (defect 3), so this run is superseded |
+| `example-release-check-1` | **53 of 54** — the plugin manifests shipped `0.5.0` (defect 1) |
+| `example-release-check-2` | **54 of 54** on image `ami-0445cfd93d63d8dd8`, archive `8d450f99…`, but that archive was not reproducible from the commit (defect 3), so this run is superseded |
 | `example-release-check` | **54 of 54 PASS, 0 FAIL** on image `ami-0dc48c08564e17790`, archive `4aea9037…` — **the run this release rests on** |
 
 | Check | Result |
@@ -218,7 +218,7 @@ model `deepseek-v4.1-flash`, OCSF 1.9.0, PyIceberg 0.12.0.
 | --- | --- |
 | `terraform apply` from nothing | 20 resources; boot finished in 298 s |
 | Host and boundary checks (`tools/spot_release_test.py`) | **49 of 49 PASS**, 0 FAIL |
-| Tightened IAM revalidation (`rgce-storage-quick`, 228889e) | **45 of 45 PASS** with browser/chat skipped; raw, warehouse, snapshot and outbox checks included; stack destroyed |
+| Tightened IAM revalidation (`example-storage-check`, 228889e) | **45 of 45 PASS** with browser/chat skipped; raw, warehouse, snapshot and outbox checks included; stack destroyed |
 | Publication revalidation (`example-publication-check`, `c9d1a90`, the merged commit carrying the tag) | **49 of 49 PASS**, 0 FAIL; boot 341 s, 11 minutes end to end; the same checks as the full run, stack destroyed |
 | rgtriage version / services / core plugins / skills | 0.5.0; desk, Hermes, validation and scan timer active; core plugins at 0.5.0 |
 | First scan and board | board produced; report names the account and coverage |
@@ -236,7 +236,7 @@ Analyzer pages contain Python datetimes; a resource `details` dict was written i
 
 After the first full run, the Glue grant was tightened: `CreateDatabase` was removed and explicit denies were added for
 database deletion, crawlers, jobs, development endpoints, security configurations and catalog resource policies. A
-second fresh stack (`rgce-storage-quick`, commit `228889e`) passed all 45 host/storage/boundary checks with browser and
+second fresh stack (`example-storage-check`, commit `228889e`) passed all 45 host/storage/boundary checks with browser and
 chat skipped; it also committed a non-null history snapshot with an empty outbox and was destroyed. The full 49-check
 run (commit `fb1392d`) remains the source for the browser and chat evidence.
 
