@@ -74,7 +74,7 @@ Freshness has two sources:
    iframe when the snapshot changes.
 
 The button can sit in "Scanning all sources…" for minutes because the scan is AWS-bound (measured ~4 minutes on
-`rgce-private` against scheduled runs of ~45 seconds). It is not a page reload.
+`example-private-stack` against scheduled runs of ~45 seconds). It is not a page reload.
 
 ## Limits
 

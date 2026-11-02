@@ -78,7 +78,7 @@ Spot stack in `us-east-1`, destroyed at the end (20 resources, bucket included).
 
 ### Private stack (not a gate)
 
-The card, page and tab were exercised against `rgce-private` before the gate:
+The card, page and tab were exercised against `example-private-stack` before the gate:
 
 | Check | Result |
 | --- | --- |
@@ -141,7 +141,7 @@ Three runs, each on its own stack and image, all destroyed (20 resources, bucket
 | --- | --- |
 | `rgce-v060-gate` | **53 of 54** — the plugin manifests shipped `0.5.0` (defect 1) |
 | `rgce-v060-gate2` | **54 of 54** on image `ami-0445cfd93d63d8dd8`, archive `8d450f99…`, but that archive was not reproducible from the commit (defect 3), so this run is superseded |
-| `rgce-v060-gate3` | **54 of 54 PASS, 0 FAIL** on image `ami-0dc48c08564e17790`, archive `4aea9037…` — **the run this release rests on** |
+| `example-release-check` | **54 of 54 PASS, 0 FAIL** on image `ami-0dc48c08564e17790`, archive `4aea9037…` — **the run this release rests on** |
 
 | Check | Result |
 | --- | --- |
@@ -219,7 +219,7 @@ model `deepseek-v4.1-flash`, OCSF 1.9.0, PyIceberg 0.12.0.
 | `terraform apply` from nothing | 20 resources; boot finished in 298 s |
 | Host and boundary checks (`tools/spot_release_test.py`) | **49 of 49 PASS**, 0 FAIL |
 | Tightened IAM revalidation (`rgce-storage-quick`, 228889e) | **45 of 45 PASS** with browser/chat skipped; raw, warehouse, snapshot and outbox checks included; stack destroyed |
-| Publication revalidation (`rgce-release-v050-final`, `c9d1a90`, the merged commit carrying the tag) | **49 of 49 PASS**, 0 FAIL; boot 341 s, 11 minutes end to end; the same checks as the full run, stack destroyed |
+| Publication revalidation (`example-publication-check`, `c9d1a90`, the merged commit carrying the tag) | **49 of 49 PASS**, 0 FAIL; boot 341 s, 11 minutes end to end; the same checks as the full run, stack destroyed |
 | rgtriage version / services / core plugins / skills | 0.5.0; desk, Hermes, validation and scan timer active; core plugins at 0.5.0 |
 | First scan and board | board produced; report names the account and coverage |
 | Raw evidence | object under `raw/` in the stack bucket, exactly one for the check |
@@ -241,7 +241,7 @@ chat skipped; it also committed a non-null history snapshot with an empty outbox
 run (commit `fb1392d`) remains the source for the browser and chat evidence.
 
 Before publication, the merged release commit `c9d1a90` was checked once more from its own build: a third fresh stack
-(`rgce-release-v050-final`) passed **49 of 49** checks with browser and chat included, booted in 341 s, committed a
+(`example-publication-check`) passed **49 of 49** checks with browser and chat included, booted in 341 s, committed a
 non-null history snapshot with an empty outbox, and was destroyed (20 resources, bucket included). The v0.5.0 release
 assets were built from that same commit; their checksums are in the release's `SHA256SUMS`.
 
