@@ -51,6 +51,20 @@ flowchart LR
   D -- checkpoints --> S[(Durable storage<br/>S3 or local folder)]
 ```
 
+## New in v0.8.0: the MCP release
+
+Standard EC2 deployments use **managed AWS MCP for guarded account investigation** and **Athena MCP for bounded
+historical reports** by default. Collection and the current board retain their deterministic paths. MCP does not
+grant the agent AWS write authority.
+
+Connect AWS Knowledge and DeepWiki through the native Hermes catalog, or install the shipped Terraform Registry
+runtime for provider documentation. Task-specific skills discover the tools they need. Import organization documents,
+retain source links/revisions, review AI drafts, and ask questions that cite approved OKF concepts.
+
+See the [architecture diagram](docs/diagrams/mcp-release.html), [connection guide](docs/KNOWLEDGE-SOURCES.md),
+[upgrade steps](docs/UPGRADING.md) and [validation limits](docs/RELEASE-VALIDATION.md). Authenticated private-document
+connectors require provider sign-in and are not universally certified by the public-source tests.
+
 ## Start
 
 | Path | For | Guide |

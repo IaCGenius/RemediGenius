@@ -1,6 +1,6 @@
 # Upgrading RemediGenius Community Edition
 
-## Next MCP release (from v0.7.0)
+## To v0.8.0 (from v0.7.0)
 
 Before replacing an existing v0.7.0 or early MCP candidate instance, checkpoint its approved knowledge
 explicitly on that host (replace the bucket placeholder):
@@ -12,7 +12,7 @@ sudo rgdesk durable checkpoint --url 's3://<deployment-bucket>/state' --home kno
 Require a successful saved/unchanged result before replacement. The older three-home checkpoint does not
 contain the approved bundle; copies of imported originals or drafts do not preserve its review decisions.
 
-Apply the new standard `deploy/aws-single` Terraform with the reviewed candidate archive, checkpoint the
+Apply the new standard `deploy/aws-single` Terraform with the v0.8.0 release archive, checkpoint the
 existing profile, then replace the instance. The deployment adds a scoped analytics role and Athena workgroup;
 bootstrap installs pinned runtimes and supplies missing managed-MCP/enabled-analytics settings. Explicit
 `aws_investigation.transport: direct` and `athena_analytics.enabled: false` choices are retained.
@@ -22,7 +22,8 @@ plus saved chats/knowledge and committed storage health. See [recovery](RECOVERY
 If earlier experiments created resources with the same analytics names, inspect and import the matching
 resources into this stack's Terraform state before applying; do not create competing resources or overwrite
 another stack. Normal v0.7.0 installations do not have those experimental resources. The existing lab's
-upgrade/replacement was validated; full new-stack and baked-AMI validation remain separate gates.
+upgrade/replacement and a clean new stack were validated. No new v0.8.0 baked AMI is certified; use
+plain Amazon Linux bootstrap or build and validate an image for the exact release archive.
 
 ## To v0.5.0 (from v0.4.x)
 

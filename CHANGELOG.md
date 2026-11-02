@@ -1,6 +1,8 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
-## Unreleased — MCP release candidate
+## v0.8.0 — 2026-11-02
+
+**The MCP release: scoped AWS investigation, historical analytics and reusable knowledge connections.**
 
 - Fix fresh-host AWS MCP installation by resolving the desk and extension against one tested dependency snapshot;
   invalidate older baked runtime markers when that snapshot changes.
@@ -18,10 +20,13 @@
 - Measure context in real chat and correct coverage interpretation: collection checks are not days, repeated
   observations are not distinct issues, and failed analytics is unavailable rather than zero.
 
-Running-lab validation and remaining release gates: [context review](docs/MCP-CONTEXT-REVIEW.md),
+Validation and documented limits: [context review](docs/MCP-CONTEXT-REVIEW.md),
 [Athena evaluation](docs/ATHENA-MCP-EVALUATION.md), and [release validation](docs/RELEASE-VALIDATION.md).
-Default provisioning, packaged instance replacement and report recovery passed on the existing Spot lab;
-this entry is not a published release. The architecture diagram and native Hermes API/MCP options are documented.
+Clean provisioning on plain Amazon Linux, packaged instance replacement and report recovery passed.
+The merged feature build passed 60 host/browser checks, followed by real UI chat, native connector onboarding,
+PDF import, AI drafting, human approval and cited OKF retrieval. Disposable Terraform teardown also passed.
+Authenticated vendor document sources and a new baked AMI are not certified. The architecture diagram and
+native Hermes API/MCP options are documented.
 
 ## v0.7.0 — 2026-10-30
 

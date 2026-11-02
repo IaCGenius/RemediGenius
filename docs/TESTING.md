@@ -24,7 +24,7 @@ terraform -chdir=deploy/ami apply -var-file=<private tfvars>.json -auto-approve
 
 # 3. gate a throwaway stack with the image id in the settings file
 python tools/spot_release_test.py v0.6.0 \
-  --settings .rgce/spot-test-settings-gate.json --local dist/v0.6.0 --name rgce-v060-gate3
+  --settings .rgce/spot-test-settings-gate.json --local dist/v0.6.0 --name example-release-check
 ```
 
 The settings file is Terraform variables for `deploy/aws-single`; `ami_id` makes the run exercise the baked path. Use a
