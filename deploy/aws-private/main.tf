@@ -207,6 +207,8 @@ locals {
     scan_interval_hours = var.scan_interval_hours, watch_deliver = var.watch_deliver,
     container_memory_mb = var.container_memory_mb,
     glue_database       = data.terraform_remote_state.static.outputs.glue_database,
+    analytics_role_arn  = data.terraform_remote_state.static.outputs.analytics_role_arn,
+    analytics_workgroup = data.terraform_remote_state.static.outputs.analytics_workgroup,
     warehouse           = data.terraform_remote_state.static.outputs.warehouse,
     image               = "nousresearch/hermes-agent:stable@sha256:444b42594e7f467425872fc35e077a227d377f0fe0726bc818706d62175fad8b"
   }

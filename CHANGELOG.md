@@ -1,5 +1,17 @@
 # Changelog — RemediGenius Community Edition (RemediGenius-CE)
 
+## v0.8.1 — 2026-11-02
+
+**Fix: the split Terraform stack boots v0.8.x again.**
+
+- `deploy/aws-static` now owns the analytics role and Athena workgroup, and `deploy/aws-private` passes their ARN and
+  name into the boot config. A Spot launched from the split stack no longer stops at
+  `KeyError: 'analytics_role_arn'` and the MCP/analytics defaults configure normally.
+- The one-apply community install (`deploy/aws-single`) is unchanged; it already created these resources.
+
+Validation: the failure was reproduced on a real Spot first boot and the fix verified after instance replacement.
+The community one-apply path is not changed by this release.
+
 ## v0.8.0 — 2026-11-02
 
 **The MCP release: scoped AWS investigation, historical analytics and reusable knowledge connections.**
